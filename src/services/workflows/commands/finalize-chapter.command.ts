@@ -620,7 +620,9 @@ export class RunFinalizePostProcessCommand extends BaseWorkflowCommand<PostProce
           ? { ...stepCallbacks, appendText: () => undefined }
           : stepCallbacks,
         {
-          ...(output === 'structured-data' ? { responseFormat: { type: 'json_object' } } : {}),
+          ...(output === 'structured-data'
+            ? { responseFormat: { type: 'json_object' } }
+            : { submitTool: 'submit_text' as const }),
           purpose: 'post-process',
           reasoningStage: 'review',
         },

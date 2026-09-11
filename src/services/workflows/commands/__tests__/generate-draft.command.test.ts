@@ -854,6 +854,10 @@ describe('GenerateDraftCommand generation runtime boundary', () => {
       'draft-lease-a',
       'draft-lease-a',
     ])
+    expect(completeWithLease.mock.calls.map(([request]) => request.submitTool)).toEqual([
+      'submit_draft',
+      'submit_draft',
+    ])
     expect(completeWithLease.mock.calls.map(([request]) => request.plan.maxOutputTokens)).toEqual([
       8192,
       8192,
@@ -2115,6 +2119,7 @@ describe('GenerateDraftCommand generation runtime boundary', () => {
     const promptChars = physicalRequest.messages.reduce((sum, message) => sum + message.content.length, 0)
     expect(promptChars).toBeGreaterThan(30_000)
     expect(completeWithLease.mock.calls[0]?.[0].plan.maxOutputTokens).toBe(8192)
+    expect(completeWithLease.mock.calls[0]?.[0].submitTool).toBe('submit_draft')
   })
 
   it('accepts exactly 80% of the target without requesting a continuation', async () => {

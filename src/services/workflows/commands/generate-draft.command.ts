@@ -610,6 +610,7 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
               purpose: 'chapter-draft',
               reasoningStage: 'drafting',
               output: 'visible-text',
+              submitTool: 'submit_draft',
               messages: [
                 { role: 'system', content: promptBuilder.getSystemRole() },
                 { role: 'user', content: prompt },
@@ -935,6 +936,7 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
             : 'chapter-draft-continuation',
           reasoningStage: 'drafting',
           output: 'visible-text',
+          submitTool: 'submit_draft',
           messages: [
             { role: 'system', content: params.systemRole },
             { role: 'user', content: continuationPrompt },

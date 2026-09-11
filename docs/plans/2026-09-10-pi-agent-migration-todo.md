@@ -169,10 +169,10 @@
 - [x] **不挂读取工具**：`streamSingleShot` 只接受一个 submit 工具；上下文继续由 command 预先组装
 - [ ] 提交工具的 schema 与现有输出合同一一对应（字段、必填、上限），由 schema 取代提示词里的 JSON 说明——核心 `submit_*` 已落地（`electron/pi/submit-tools.ts`），各 command 替换时再按上限收紧
 - [ ] 12 个工作流命令逐个替换 LLM 调用层（产物结构可按工具调用重定，但产出能力不得缺失）：
-  - [ ] `generate-draft`（起草）
+  - [x] `generate-draft`（起草）
   - [x] `review-chapter`（审稿）
   - [x] `refine-draft` / `refine-from-review`（修稿）
-  - [ ] `finalize-chapter` + 定稿后处理（章节要点）
+  - [ ] `finalize-chapter` + 定稿后处理（章节要点）——要点已走 `submit_text`；角色卡仍 `json_object`
   - [ ] `architecture`（情节大纲）
   - [x] `directory`（章节蓝图）
   - [x] `analyze-style`（文风分析）
