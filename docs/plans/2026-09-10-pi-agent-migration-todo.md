@@ -63,6 +63,8 @@
 
 ## 已拍板
 
+- **engines 升 `>=22.19.0`**（Pi 硬要求）；CI 已用 Node 22.23.1，无需改 workflow
+- **AWS Bedrock 硬依赖**（pi-ai 声明式依赖 `@aws-sdk/client-bedrock-runtime`）：**接受，不裁剪**，随依赖进包
 - **正文展示方式**（P4）：**全量工具调用，含正文**；正文作为 `submit_*` 工具参数返回，**生成完一次性显示，不保持流式、不做增量 JSON 解析**（Agent 面板对话文本仍为流式）
 - **调用层分工（运输统一，循环不滥用）**：
   - **一次性**（起草、单次审稿交卷、修稿、定稿后处理、架构/蓝图、单字段、导入、规划资料、角色表修复、剧情树、叙事线索候选、编辑器选区 AI）：只用 **pi-ai 一次流式调用**，强制 `submit_*` 或可见文本；**禁止**为切书好杀而 `new Agent()`
@@ -108,7 +110,7 @@
 - [x] 通读 pi-ai（一次流式 + tools）与 pi-agent-core（仅多轮）：Agent 类、事件流、`beforeToolCall`/`afterToolCall`/`transformContext`/`shouldStopAfterTurn`、`toolExecution: parallel`（写工具须 sequential）——已通读 README/类型 + 两 PoC 实测；关键：Agent 唯一必需项是 `streamFn`；`await prompt()` 已阻塞到 idle；工具返回 `{content,details}`、失败 throw
 - [x] 验证 pi-ai 对 OpenAI-compatible / Gemini 的原生工具调用支持与流式增量格式——Gemini 原生 OK；**工具参数一次性整包下发**（单个 `toolcall_delta` = 完整 JSON，无增量 partial）；文本与工具事件会 interleave（Gemini 3 附带空 text part）
 - [x] 验证 pnpm 安装兼容性（Pi 是 npm monorepo，注意锁文件与依赖审查）——已装 pi-ai/pi-agent-core 0.85.1；**坑**：项目锁定的 pnpm 11.11.0 在本仓库 `resolved… downloaded 0, added 0` 处无限卡死（CPU 冻结、无 TCP），`packageManager` 已升 11.21.0（约 15s 完成，lockfileVersion 仍 9.0，见 commit 59079cc）
-- [x] **版本要求核查**：Pi 各包 `engines: node >=22.19.0`；Electron 41 主进程 = Node 24.18.0 ✓；但项目 `engines: node >=20` 是缺口（Node 20 本地/CI 会跑不动 Pi）→ 需决定是否把 engines 提到 >=22.19.0
+- [x] **版本要求核查**：Pi 各包 `engines: node >=22.19.0`；Electron 41 主进程 = Node 24.18.0 ✓；项目 `engines` 已升 `>=22.19.0`（CI 各 workflow 本就固定 node 22.23.1，无额外改动）
 - [ ] **MCP 配置兼容核查**：`~/.vela/mcp_config.json` 在官方 SDK 下是否仍兼容（stdio/SSE 两类传输）
 - [x] **打包适配验证**：**external + 静态 ESM import，不打包、不切格式**。实测 `dist-electron/main.js` 是 **ESM 而非 CJS**（18 处 `import`/`export`、0 处 `require`；better-sqlite3 走 `createRequire(import.meta.url)`，见 `electron/database.ts`）——`vite.config.ts` 里 `format:'cjs'` 是**失效配置**（Rolldown 因 `"type":"module"` 实际输出 ESM）。故 Pi 包直接静态 `import` + 加进 `rollupOptions.external`；全量 bundle 仍不可取（4.2MB 且 Bedrock SDK 用 `import(变量)` 逃逸打包器、运行时报 ERR_MODULE_NOT_FOUND）
 - [ ] **Agent 运行位置验证**：渲染进程（现状，SQLite 不可达）vs 主进程（SQLite 直连）
