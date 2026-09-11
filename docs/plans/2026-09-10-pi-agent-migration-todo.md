@@ -58,7 +58,7 @@
 - [x] OpenAI 的 `finish_reason: tool_calls` / `function_call` 映射为 `stop`；已删除 `requireCompleteAgentResponse`
 - [ ] 删除全局 `generating` / `activeAbortController` / `pendingConfirmations` 单例；`@` 预填正文改为提示模型原生调工具
 - [x] 删除 `runAgentLoop`、手写 observation、Agent 整轮 `output: 'visible-text'`（`agent-engine.ts` 已删）
-- [ ] 助手 LLM 运输交给 pi-ai：删除自研 OpenAI/Gemini SSE 解析、`LLMFactory`、`<think>` 包标签；保留 models.json / 租约 / 推理策略适配（`llm:generate-stream` 已全部走 pi-ai，缺省 `submit_text`；`llm:generate` / 测连仍走 LLMFactory）
+- [ ] 助手 LLM 运输交给 pi-ai：删除自研 OpenAI/Gemini SSE 解析、`LLMFactory`、`<think>` 包标签；保留 models.json / 租约 / 推理策略适配（`llm:generate` / `generate-stream` / 测连已走 pi-ai；LLMFactory 仅剩自研 SSE 实现与单测）
 - [ ] **不要**把项目 `leaseId`、模型执行租约、写工具确认、workflow claims、恢复候选、自研 MCP、工作流 `parseJSON`、`generation-harness` 预算、领域工具语义、写作 Skill、React UI 当作本条遗产删除
 
 ## 已拍板

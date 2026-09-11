@@ -143,9 +143,11 @@ describe('llm connection test', () => {
       error: undefined,
     })
 
-    expect(mocks.generate).toHaveBeenCalledWith(
+    expect(mocks.streamSingleShot).toHaveBeenCalledWith(
       genericModel,
-      [{ role: 'user', content: 'Say "hello" and nothing else.' }],
+      '',
+      'Say "hello" and nothing else.',
+      expect.objectContaining({ name: 'submit_text' }),
       expect.objectContaining({ temperature: 1 }),
     )
   })
@@ -156,9 +158,11 @@ describe('llm connection test', () => {
       error: undefined,
     })
 
-    expect(mocks.generate).toHaveBeenCalledWith(
+    expect(mocks.streamSingleShot).toHaveBeenCalledWith(
       fixedTemperatureKimiModel,
-      [{ role: 'user', content: 'Say "hello" and nothing else.' }],
+      '',
+      'Say "hello" and nothing else.',
+      expect.objectContaining({ name: 'submit_text' }),
       expect.objectContaining({ temperature: undefined }),
     )
   })
@@ -169,12 +173,14 @@ describe('llm connection test', () => {
       error: undefined,
     })
 
-    expect(mocks.generate).toHaveBeenCalledWith(
+    expect(mocks.streamSingleShot).toHaveBeenCalledWith(
       deepSeekModel,
-      [{ role: 'user', content: 'Say "hello" and nothing else.' }],
+      '',
+      'Say "hello" and nothing else.',
+      expect.objectContaining({ name: 'submit_text' }),
       expect.objectContaining({ maxTokens: expect.any(Number) }),
     )
-    const options = mocks.generate.mock.calls[0]?.[2] as { maxTokens: number }
+    const options = mocks.streamSingleShot.mock.calls[0]?.[4] as { maxTokens: number }
     expect(options.maxTokens).toBeGreaterThanOrEqual(256)
   })
 
@@ -210,14 +216,14 @@ describe('llm generation parameter policy controller integration', () => {
     })
     await connectionHandler()({}, xaiReasoningModel, 'deep-planning')
 
-    expect(mocks.generate.mock.calls[0]?.[2]).toMatchObject({
-      reasoning: { adapter: 'openai-reasoning-effort', reasoningEffort: 'medium' },
-    })
-    expect(mocks.streamSingleShot).toHaveBeenCalledOnce()
+    expect(mocks.generate).not.toHaveBeenCalled()
     expect(mocks.generateStream).not.toHaveBeenCalled()
-    expect(mocks.generate.mock.calls.at(-1)?.[2]).toMatchObject({
-      reasoning: { adapter: 'openai-reasoning-effort', reasoningEffort: 'medium' },
-    })
+    expect(mocks.streamSingleShot).toHaveBeenCalledTimes(3)
+    for (const call of mocks.streamSingleShot.mock.calls) {
+      expect(call[4]).toMatchObject({
+        samplingParams: { reasoning_effort: 'medium' },
+      })
+    }
     await handler('llm:cancel')({}, 'xai-stream')
   })
 
@@ -238,17 +244,16 @@ describe('llm generation parameter policy controller integration', () => {
     })
     await connectionHandler()({}, legacyDeepSeekV4Model, 'auto')
 
-    expect(mocks.generate.mock.calls[0]?.[2]).toMatchObject({
-      reasoning: { adapter: 'deepseek-v4-thinking', thinking: 'disabled' },
-    })
-    expect(mocks.streamSingleShot).toHaveBeenCalledOnce()
+    expect(mocks.generate).not.toHaveBeenCalled()
     expect(mocks.generateStream).not.toHaveBeenCalled()
-    expect(mocks.generate.mock.calls.at(-1)?.[2]).toMatchObject({
-      reasoning: {
-        adapter: 'deepseek-v4-thinking',
-        thinking: 'enabled',
-        reasoningEffort: 'low',
-      },
+    expect(mocks.streamSingleShot.mock.calls[0]?.[4]).toMatchObject({
+      samplingParams: { thinking: { type: 'disabled' } },
+    })
+    expect(mocks.streamSingleShot.mock.calls[1]?.[4]).toMatchObject({
+      samplingParams: { thinking: { type: 'enabled' }, reasoning_effort: 'low' },
+    })
+    expect(mocks.streamSingleShot.mock.calls[2]?.[4]).toMatchObject({
+      samplingParams: { thinking: { type: 'enabled' }, reasoning_effort: 'low' },
     })
     await handler('llm:cancel')({}, 'deepseek-v4-stream')
   })
@@ -264,14 +269,16 @@ describe('llm generation parameter policy controller integration', () => {
       responseFormat: { type: 'json_object' },
     })
 
-    expect(mocks.generate).toHaveBeenCalledWith(
+    expect(mocks.streamSingleShot).toHaveBeenCalledWith(
       genericModel,
-      [{ role: 'user', content: 'write' }],
-      {
+      '',
+      'write',
+      expect.objectContaining({ name: 'submit_text' }),
+      expect.objectContaining({
         temperature: 1,
         maxTokens: 512,
-        responseFormat: { type: 'json_object' },
-      },
+        samplingParams: { response_format: { type: 'json_object' } },
+      }),
     )
 
     mocks.streamSingleShot.mockClear()
@@ -317,12 +324,14 @@ describe('llm generation parameter policy controller integration', () => {
       messages: [{ role: 'user', content: 'write' }],
       maxTokens: 512,
     })
-    expect(mocks.generate).toHaveBeenLastCalledWith(
+    expect(mocks.streamSingleShot).toHaveBeenLastCalledWith(
       fixedTemperatureKimiModel,
-      [{ role: 'user', content: 'write' }],
-      expect.objectContaining({ temperature: undefined }),
+      '',
+      'write',
+      expect.objectContaining({ name: 'submit_text' }),
+      expect.objectContaining({ temperature: undefined, maxTokens: 512 }),
     )
-    expect(mocks.generate.mock.calls.at(-1)?.[2]).not.toHaveProperty('thinking')
+    expect(mocks.streamSingleShot.mock.calls.at(-1)?.[4]).not.toHaveProperty('thinking')
 
     mocks.streamSingleShot.mockClear()
     await handler('llm:generate-stream')({ sender: {} }, 'kimi-stream', {
@@ -353,11 +362,13 @@ describe('llm generation parameter policy controller integration', () => {
     await handler('llm:cancel')({}, 'kimi-stream')
     await handler('llm:cancel')({}, 'kimi-continuation')
 
-    mocks.generate.mockClear()
+    mocks.streamSingleShot.mockClear()
     await connectionHandler()({}, fixedTemperatureKimiModel)
-    expect(mocks.generate).toHaveBeenCalledWith(
+    expect(mocks.streamSingleShot).toHaveBeenCalledWith(
       fixedTemperatureKimiModel,
-      [{ role: 'user', content: 'Say "hello" and nothing else.' }],
+      '',
+      'Say "hello" and nothing else.',
+      expect.objectContaining({ name: 'submit_text' }),
       expect.objectContaining({ temperature: undefined }),
     )
   })
@@ -425,14 +436,16 @@ describe('llm model execution lease controller integration', () => {
       maxTokens: 512,
     })
 
-    expect(mocks.generate).toHaveBeenCalledWith(
+    expect(mocks.streamSingleShot).toHaveBeenCalledWith(
       expect.objectContaining({
         id: original.id,
         apiKey: 'lease-controller-original-key',
         baseUrl: 'https://api.deepseek.com',
         temperature: 0.4,
       }),
-      [{ role: 'user', content: 'write' }],
+      '',
+      'write',
+      expect.objectContaining({ name: 'submit_text' }),
       expect.objectContaining({ temperature: 0.4, maxTokens: 512 }),
     )
   })
@@ -489,7 +502,7 @@ describe('llm model execution lease controller integration', () => {
     expect(leaseId).toEqual(expect.any(String))
 
     await expect(handler('llm:close-execution-lease')({}, leaseId)).resolves.toEqual({ success: true })
-    mocks.generate.mockClear()
+    mocks.streamSingleShot.mockClear()
     await expect(handler('llm:generate')({}, {
       modelId: deepSeekModel.id,
       modelExecutionLeaseId: leaseId,
@@ -499,7 +512,7 @@ describe('llm model execution lease controller integration', () => {
       content: '',
       error: expect.stringContaining('模型执行租约无效'),
     })
-    expect(mocks.generate).not.toHaveBeenCalled()
+    expect(mocks.streamSingleShot).not.toHaveBeenCalled()
     await expect(handler('llm:close-execution-lease')({}, leaseId)).resolves.toEqual({ success: true })
 
     await expect(handler('llm:close-execution-lease')({}, 'never-issued-lease')).resolves.toEqual({
@@ -537,11 +550,10 @@ describe('llm project statistics', () => {
   it('records a non-stream provider call once with its frozen project lease', async () => {
     const handler = mocks.handlers.get('llm:generate')
     if (!handler) throw new Error('Missing llm:generate handler')
-    mocks.generate.mockResolvedValueOnce({
-      success: true,
-      content: 'done',
+    mocks.streamSingleShot.mockResolvedValueOnce({
+      artifact: undefined,
+      text: 'done',
       finishReason: 'stop',
-      usage: { promptTokens: 4, completionTokens: 3, totalTokens: 7 },
     })
 
     await handler({}, {
@@ -555,9 +567,9 @@ describe('llm project statistics', () => {
     expect(mocks.logCall).toHaveBeenCalledTimes(1)
     expect(mocks.logCall).toHaveBeenCalledWith(expect.objectContaining({
       purpose: 'draft',
-      promptTokens: 4,
-      completionTokens: 3,
-      totalTokens: 7,
+      promptTokens: null,
+      completionTokens: null,
+      totalTokens: null,
       success: true,
     }))
   })
@@ -565,11 +577,10 @@ describe('llm project statistics', () => {
   it('records a non-stream terminal reason as the repository structured finish code', async () => {
     const handler = mocks.handlers.get('llm:generate')
     if (!handler) throw new Error('Missing llm:generate handler')
-    mocks.generate.mockResolvedValueOnce({
-      success: false,
-      content: '',
+    mocks.streamSingleShot.mockResolvedValueOnce({
+      artifact: undefined,
+      text: '',
       finishReason: 'content_filter',
-      error: 'Human-readable provider policy message',
     })
 
     await expect(handler({}, {
@@ -580,7 +591,7 @@ describe('llm project statistics', () => {
     })).resolves.toMatchObject({
       success: false,
       finishReason: 'content_filter',
-      error: 'Human-readable provider policy message',
+      error: 'finish:content_filter',
     })
 
     expect(mocks.logCall).toHaveBeenCalledWith(expect.objectContaining({

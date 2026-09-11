@@ -23,6 +23,8 @@ export interface StreamSingleShotOptions {
   /** Intent-level output cap from the generation harness. */
   maxTokens?: number
   temperature?: number
+  /** Extra OpenAI-compatible body fields (reasoning, response_format). */
+  samplingParams?: Record<string, unknown>
 }
 
 export class SingleShotAbortedError extends Error {
@@ -87,6 +89,7 @@ export async function streamSingleShot(
       signal: controller.signal,
       ...(options.maxTokens !== undefined ? { maxTokens: options.maxTokens } : {}),
       ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
+      ...(options.samplingParams ? { samplingParams: options.samplingParams } : {}),
     })
 
     let text = ''

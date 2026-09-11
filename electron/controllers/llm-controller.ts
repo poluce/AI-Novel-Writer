@@ -9,8 +9,7 @@ import {
 } from '../utils/config-utils'
 import type { GlobalConfig, LLMFinishReason, LLMRequest, ModelDiscoveryRequest, ModelProfile, TokenUsage } from '../../src/shared/ipc-channels'
 import { isProjectSessionContext } from '../../src/shared/project-session-context'
-import { LLMFactory } from '../llm/llm-factory'
-import { resolveGenerationParameters } from '../llm/generation-parameter-policy'
+import { resolveGenerationParameters, type ResolvedGenerationParameters } from '../llm/generation-parameter-policy'
 import { getCurrentProjectPath } from '../database'
 import { LLMHistoryRepository } from '../repositories/llm-repository'
 import { projectAccess } from '../services/project-access'
@@ -20,7 +19,8 @@ import {
 } from '../services/model-execution-lease'
 import { ModelDiscoveryService } from '../services/model-discovery-service'
 import { isSubmitToolName } from '../../src/shared/submit-contract'
-import { SingleShotAbortedError, streamSingleShot } from '../pi/pi-single-shot'
+import { SingleShotAbortedError, streamSingleShot, type StreamSingleShotOptions } from '../pi/pi-single-shot'
+import { toPiSamplingParams } from '../pi/pi-stream-options'
 import { createSubmitTool, visibleTextFromSubmitArtifact } from '../pi/submit-tools'
 
 interface ActiveStream {
@@ -67,6 +67,48 @@ function splitGenerationMessages(messages: LLMRequest['messages']): { systemProm
     message.role === 'assistant' ? `Assistant:\n${message.content}` : message.content
   )).join('\n\n')
   return { systemPrompt, userPrompt }
+}
+
+function resolveSubmitToolName(request: Pick<LLMRequest, 'submitTool'>) {
+  return isSubmitToolName(request.submitTool) ? request.submitTool : 'submit_text'
+}
+
+function toStreamSingleShotOptions(
+  params: ResolvedGenerationParameters,
+  extra: Pick<StreamSingleShotOptions, 'signal' | 'inFlightId'> = {},
+): StreamSingleShotOptions {
+  return {
+    ...extra,
+    maxTokens: params.maxTokens,
+    temperature: params.temperature,
+    samplingParams: toPiSamplingParams(params),
+  }
+}
+
+async function completeSingleShot(
+  model: ModelProfile,
+  request: Pick<LLMRequest, 'messages' | 'submitTool'>,
+  params: ResolvedGenerationParameters,
+  extra?: Pick<StreamSingleShotOptions, 'signal' | 'inFlightId'>,
+) {
+  const submitTool = resolveSubmitToolName(request)
+  const { systemPrompt, userPrompt } = splitGenerationMessages(request.messages)
+  const result = await streamSingleShot(
+    model,
+    systemPrompt,
+    userPrompt,
+    createSubmitTool(submitTool),
+    toStreamSingleShotOptions(params, extra),
+  )
+  const content = visibleTextFromSubmitArtifact(submitTool, result.artifact, result.text)
+  const finishReason = result.finishReason
+  const success = finishReason === 'stop'
+  return {
+    success,
+    content,
+    finishReason,
+    error: success ? undefined : `finish:${finishReason}`,
+  }
 }
 
 function applyProxyConfig() {
@@ -176,10 +218,9 @@ export function registerLLMController() {
         : getModelConfig(request.modelId)
       if (!model) return { success: false, content: '', finishReason: 'error', error: '未找到模型配置' }
 
-      const provider = LLMFactory.getProvider(model)
-      const result = await provider.generate(
+      const result = await completeSingleShot(
         model,
-        request.messages,
+        request,
         resolveGenerationParameters(model, request),
       )
       recordProviderOutcome(request, model, startedAt, result)
@@ -217,22 +258,20 @@ export function registerLLMController() {
     })
     const win = BrowserWindow.fromWebContents(event.sender)
 
-    const submitTool = isSubmitToolName(request.submitTool) ? request.submitTool : 'submit_text'
-    const { systemPrompt, userPrompt } = splitGenerationMessages(request.messages)
-    void streamSingleShot(model, systemPrompt, userPrompt, createSubmitTool(submitTool), {
-      signal: abortController.signal,
-      inFlightId: `llm:${requestId}`,
-      maxTokens: generationParameters.maxTokens,
-      temperature: generationParameters.temperature,
-    }).then(result => {
-      const fullText = visibleTextFromSubmitArtifact(submitTool, result.artifact, result.text)
-      const finishReason = result.finishReason
-      const success = finishReason === 'stop'
-      recordOnce({ success, error: success ? undefined : `finish:${finishReason}` })
+    void completeSingleShot(
+      model,
+      request,
+      generationParameters,
+      {
+        signal: abortController.signal,
+        inFlightId: `llm:${requestId}`,
+      },
+    ).then(result => {
+      recordOnce({ success: result.success, error: result.error })
       win?.webContents.send('llm:stream-done', {
         requestId,
-        fullText,
-        finishReason,
+        fullText: result.content,
+        finishReason: result.finishReason,
       })
     }).catch(error => {
       if (error instanceof SingleShotAbortedError || abortController.signal.aborted) {
@@ -371,18 +410,15 @@ export function registerLLMController() {
   ) => {
     try {
       applyProxyConfig()
-      
-      const messages = [{ role: 'user', content: 'Say "hello" and nothing else.' }]
-      const provider = LLMFactory.getProvider(model)
-      
+
       let result = { success: true, error: undefined as undefined | string }
       if (model.purposes?.includes('embedding')) {
         const { generateEmbeddings } = await import('../embedding')
         await generateEmbeddings(['hello'], model.protocol, model)
       } else {
-        const res = await provider.generate(
+        const res = await completeSingleShot(
           model,
-          messages,
+          { messages: [{ role: 'user', content: 'Say "hello" and nothing else.' }] },
           resolveGenerationParameters(model, {
             // 推理模型可能先消耗 reasoning tokens；预算过小会把可用连接误判为截断失败。
             maxTokens: CONNECTION_TEST_MAX_TOKENS,
