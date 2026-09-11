@@ -156,7 +156,7 @@
 - [ ] 写入型工具确认：`beforeToolCall` 接现有确认 UI（保持"只读自动执行、写入需确认"语义）
 - [ ] 提交回执/结果未知防重写：`afterToolCall` + 现有 `commitState` 语义（`unknown` 时不自动重试）
 - [ ] 工具结果截断策略保持（现为 3000 字符）
-- [ ] MCP 工具接入：换官方 SDK，删除 `mcp-manager.ts` 自研实现（stdio/SSE 两类传输能力不得缺失）
+- [x] MCP 工具接入：换官方 SDK（stdio + SSE）；`mcp-manager` 只保留配置信任边界与 IPC 表面
 - [ ] Skill 工具接入（`skill-registry` 适配）
 
 ## 阶段 4：一次性调用层替换（P4）

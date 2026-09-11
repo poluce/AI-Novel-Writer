@@ -1,13 +1,14 @@
-import { EventEmitter } from 'node:events'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const spawnMock = vi.hoisted(() => vi.fn())
+const openSessionMock = vi.hoisted(() => vi.fn())
 
-vi.mock('child_process', () => ({ spawn: spawnMock }))
+vi.mock('../mcp-sdk-session', () => ({
+  openMcpSdkSession: (...args: unknown[]) => openSessionMock(...args),
+}))
 vi.mock('electron', () => ({ app: { getPath: vi.fn(() => 'C:/REAL-HOME-MUST-NOT-BE-READ') } }))
 
 type Manager = typeof import('../mcp-manager')['mcpManager']
@@ -15,46 +16,14 @@ type Manager = typeof import('../mcp-manager')['mcpManager']
 let velaHome = ''
 let mcpManager: Manager
 
-function createMcpProcess(options: { initializeError?: string; failToStart?: boolean; neverRespond?: boolean } = {}) {
-  const processEmitter = new EventEmitter()
-  const stdout = new EventEmitter()
-  const stderr = new EventEmitter()
-  const stdin = {
-    write: vi.fn((raw: string) => {
-      const request = JSON.parse(raw) as { id?: number; method: string }
-      if (request.id === undefined) return true
-      if (options.failToStart) {
-        queueMicrotask(() => processEmitter.emit('error', new Error('SECRET_CHILD_ERROR_MARKER')))
-        return true
-      }
-      if (options.neverRespond) return true
-
-      const payload = request.method === 'initialize' && options.initializeError
-        ? { error: { message: options.initializeError } }
-        : {
-            result: request.method === 'tools/list'
-              ? { tools: [] }
-              : request.method === 'resources/list'
-                ? { resources: [] }
-                : {},
-          }
-      queueMicrotask(() => {
-        stdout.emit('data', Buffer.from(`${JSON.stringify({
-          jsonrpc: '2.0',
-          id: request.id,
-          ...payload,
-        })}\n`))
-      })
-      return true
-    }),
+function fakeSession() {
+  const close = vi.fn(async () => {})
+  return {
+    listTools: vi.fn(async () => ({ tools: [] })),
+    listResources: vi.fn(async () => ({ resources: [] })),
+    callTool: vi.fn(async () => ({ content: [] })),
+    close,
   }
-
-  return Object.assign(processEmitter, {
-    stdout,
-    stderr,
-    stdin,
-    kill: vi.fn(),
-  })
 }
 
 function writeConfig(value: unknown): void {
@@ -67,7 +36,7 @@ function writeConfig(value: unknown): void {
 
 beforeEach(async () => {
   vi.resetModules()
-  spawnMock.mockReset()
+  openSessionMock.mockReset()
   velaHome = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-novel-mcp-'))
   process.env.AI_NOVEL_VELA_HOME = velaHome
   mcpManager = (await import('../mcp-manager')).mcpManager
@@ -84,7 +53,7 @@ describe('MCP trusted configuration boundary', () => {
   it('uses the isolated VELA_HOME and distinguishes a missing config', async () => {
     expect(mcpManager.getDefaultConfigPath()).toBe(path.join(velaHome, 'mcp_config.json'))
     await expect(mcpManager.loadConfig()).resolves.toEqual({ status: 'missing', servers: [] })
-    expect(spawnMock).not.toHaveBeenCalled()
+    expect(openSessionMock).not.toHaveBeenCalled()
   })
 
   it('revokes previously trusted ids when a reload is missing or corrupt', async () => {
@@ -105,29 +74,29 @@ describe('MCP trusted configuration boundary', () => {
 
   it('disconnects an active server when its configuration becomes missing', async () => {
     writeConfig({ mcpServers: { old_server: { command: 'node' } } })
-    const process = createMcpProcess()
-    spawnMock.mockReturnValue(process)
+    const session = fakeSession()
+    openSessionMock.mockResolvedValue(session)
     await mcpManager.loadConfig()
     await mcpManager.connect('old_server')
     fs.unlinkSync(path.join(velaHome, 'mcp_config.json'))
 
     await expect(mcpManager.loadConfig()).resolves.toEqual({ status: 'missing', servers: [] })
 
-    expect(process.kill).toHaveBeenCalledOnce()
+    expect(session.close).toHaveBeenCalledOnce()
     expect(mcpManager.getServersStatus()).toEqual([])
   })
 
   it('disconnects an active server when its configuration becomes corrupt', async () => {
     writeConfig({ mcpServers: { old_server: { command: 'node' } } })
-    const process = createMcpProcess()
-    spawnMock.mockReturnValue(process)
+    const session = fakeSession()
+    openSessionMock.mockResolvedValue(session)
     await mcpManager.loadConfig()
     await mcpManager.connect('old_server')
     writeConfig('{BROKEN_MCP_CONFIG')
 
     await expect(mcpManager.loadConfig()).resolves.toMatchObject({ status: 'error', servers: [] })
 
-    expect(process.kill).toHaveBeenCalledOnce()
+    expect(session.close).toHaveBeenCalledOnce()
     expect(mcpManager.getServersStatus()).toEqual([])
   })
 
@@ -139,13 +108,13 @@ describe('MCP trusted configuration boundary', () => {
         deleted: { command: 'node', args: ['gone.js'] },
       },
     })
-    const unchangedProcess = createMcpProcess()
-    const changedProcess = createMcpProcess()
-    const deletedProcess = createMcpProcess()
-    spawnMock
-      .mockReturnValueOnce(unchangedProcess)
-      .mockReturnValueOnce(changedProcess)
-      .mockReturnValueOnce(deletedProcess)
+    const unchanged = fakeSession()
+    const changed = fakeSession()
+    const deleted = fakeSession()
+    openSessionMock
+      .mockResolvedValueOnce(unchanged)
+      .mockResolvedValueOnce(changed)
+      .mockResolvedValueOnce(deleted)
     await mcpManager.loadConfig()
     await mcpManager.connect('unchanged')
     await mcpManager.connect('changed')
@@ -160,9 +129,9 @@ describe('MCP trusted configuration boundary', () => {
     })
     await mcpManager.loadConfig()
 
-    expect(unchangedProcess.kill).not.toHaveBeenCalled()
-    expect(changedProcess.kill).toHaveBeenCalledOnce()
-    expect(deletedProcess.kill).toHaveBeenCalledOnce()
+    expect(unchanged.close).not.toHaveBeenCalled()
+    expect(changed.close).toHaveBeenCalledOnce()
+    expect(deleted.close).toHaveBeenCalledOnce()
     expect(mcpManager.getServersStatus().map(server => server.id)).toEqual(['unchanged'])
   })
 
@@ -229,10 +198,10 @@ describe('MCP trusted configuration boundary', () => {
 
   it('rejects an id that was not loaded from the trusted config', async () => {
     await expect(mcpManager.connect('unconfigured')).rejects.toThrow(/未配置/u)
-    expect(spawnMock).not.toHaveBeenCalled()
+    expect(openSessionMock).not.toHaveBeenCalled()
   })
 
-  it('hides the child window and connects only a loaded stdio server', async () => {
+  it('connects a loaded stdio server through the official SDK', async () => {
     writeConfig({
       mcpServers: {
         hidden_window_test: {
@@ -242,21 +211,36 @@ describe('MCP trusted configuration boundary', () => {
         },
       },
     })
-    spawnMock.mockReturnValue(createMcpProcess())
+    openSessionMock.mockResolvedValue(fakeSession())
     await mcpManager.loadConfig()
 
     await mcpManager.connect('hidden_window_test')
 
-    expect(spawnMock).toHaveBeenCalledWith('node', ['server.js'], {
-      env: expect.objectContaining({ MCP_TEST: '1' }),
-      stdio: ['pipe', 'pipe', 'pipe'],
-      windowsHide: true,
-    })
+    expect(openSessionMock).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'hidden_window_test',
+      transport: 'stdio',
+      command: 'node',
+      args: ['server.js'],
+      env: { MCP_TEST: '1' },
+    }))
+  })
+
+  it('connects a loaded SSE server through the official SDK', async () => {
+    writeConfig({ mcpServers: { remote: { url: 'https://example.invalid/sse' } } })
+    openSessionMock.mockResolvedValue(fakeSession())
+    await mcpManager.loadConfig()
+
+    await mcpManager.connect('remote')
+
+    expect(openSessionMock).toHaveBeenCalledWith(expect.objectContaining({
+      transport: 'sse',
+      url: 'https://example.invalid/sse',
+    }))
   })
 
   it('rejects when MCP session initialization fails and preserves an error status', async () => {
     writeConfig({ mcpServers: { broken: { command: 'node' } } })
-    spawnMock.mockReturnValue(createMcpProcess({ initializeError: 'SECRET_INITIALIZE_ERROR_MARKER' }))
+    openSessionMock.mockRejectedValue(new Error('SECRET_INITIALIZE_ERROR_MARKER'))
     await mcpManager.loadConfig()
 
     await expect(mcpManager.connect('broken')).rejects.toThrow(/MCP.*连接失败/u)
@@ -268,7 +252,7 @@ describe('MCP trusted configuration boundary', () => {
 
   it('settles once with a safe error when the child process fails to start', async () => {
     writeConfig({ mcpServers: { broken: { command: 'node' } } })
-    spawnMock.mockReturnValue(createMcpProcess({ failToStart: true }))
+    openSessionMock.mockRejectedValue(new Error('SECRET_CHILD_ERROR_MARKER'))
     await mcpManager.loadConfig()
 
     await expect(mcpManager.connect('broken')).rejects.toThrow(/MCP.*连接失败/u)
@@ -281,7 +265,7 @@ describe('MCP trusted configuration boundary', () => {
   it('times out initialization without leaving the connection pending', async () => {
     vi.useFakeTimers()
     writeConfig({ mcpServers: { silent: { command: 'node' } } })
-    spawnMock.mockReturnValue(createMcpProcess({ neverRespond: true }))
+    openSessionMock.mockImplementation(() => new Promise(() => {}))
     await mcpManager.loadConfig()
 
     const rejection = expect(mcpManager.connect('silent')).rejects.toThrow(/MCP.*连接失败/u)

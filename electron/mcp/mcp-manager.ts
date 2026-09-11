@@ -10,11 +10,11 @@
  * - 渲染进程通过 IPC 调用 MCP Tool
  */
 
-import { spawn, type ChildProcess } from 'child_process'
 import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { isDeepStrictEqual } from 'node:util'
 import { VELA_HOME } from '../utils/config-utils'
+import { openMcpSdkSession, type McpSdkSession } from './mcp-sdk-session'
 import type {
   MCPConfigLoadResult,
   MCPConnectionStatus,
@@ -80,19 +80,10 @@ export interface MCPResourceDesc extends MCPResourceDescription {
 interface MCPServerRuntime {
   config: MCPServerConfig
   status: MCPConnectionStatus
-  process?: ChildProcess
+  session?: McpSdkSession
   tools: MCPToolDesc[]
   resources: MCPResourceDesc[]
   error?: string
-  /** 消息缓冲区（用于解析 JSON-RPC） */
-  buffer: string
-  /** 请求 ID 计数器 */
-  nextRequestId: number
-  /** 待响应的请求回调 */
-  pendingRequests: Map<number, {
-    resolve: (result: unknown) => void
-    reject: (error: Error) => void
-  }>
 }
 
 // ===== MCP Manager 实现 =====
@@ -214,36 +205,32 @@ class MCPManagerImpl {
       status: 'connecting',
       tools: [],
       resources: [],
-      buffer: '',
-      nextRequestId: 1,
-      pendingRequests: new Map(),
     }
     this.servers.set(config.id, runtime)
     this.notifyStatusChange(config.id, 'connecting')
 
     try {
-      if (config.transport === 'stdio') {
-        await this.connectStdio(runtime)
-      } else {
-        throw new Error('SSE 传输暂未实现')
-      }
-
-      // 初始化 MCP 会话
-      await this.initializeSession(runtime)
-
-      // 发现工具
+      runtime.session = await new Promise<NonNullable<MCPServerRuntime['session']>>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('MCP 请求超时: initialize')), 10_000)
+        openMcpSdkSession(config).then(
+          session => {
+            clearTimeout(timer)
+            resolve(session)
+          },
+          error => {
+            clearTimeout(timer)
+            reject(error)
+          },
+        )
+      })
       await this.discoverTools(runtime)
-
-      // 发现资源
       await this.discoverResources(runtime)
-
       runtime.status = 'connected'
       this.notifyStatusChange(config.id, 'connected')
       this.notifyToolsChange()
     } catch {
-      runtime.process?.kill()
-      runtime.pendingRequests.forEach(p => p.reject(new Error('MCP 服务器连接失败')))
-      runtime.pendingRequests.clear()
+      await runtime.session?.close().catch(() => {})
+      runtime.session = undefined
       runtime.status = 'error'
       runtime.error = 'MCP 服务器连接失败'
       this.notifyStatusChange(config.id, 'error', runtime.error)
@@ -251,139 +238,14 @@ class MCPManagerImpl {
     }
   }
 
-  /** stdio 模式连接 */
-  private async connectStdio(runtime: MCPServerRuntime): Promise<void> {
-    const { command, args = [], env } = runtime.config
-    if (!command) {
-      throw new Error('stdio 模式需要 command 参数')
-    }
-
-    const proc = spawn(command, args, {
-      env: { ...process.env, ...env },
-      stdio: ['pipe', 'pipe', 'pipe'],
-      windowsHide: true,
-    })
-
-    runtime.process = proc
-
-    // 监听 stdout（JSON-RPC 消息）
-    proc.stdout?.on('data', (data: Buffer) => {
-      runtime.buffer += data.toString()
-      this.processBuffer(runtime)
-    })
-
-    // 监听 stderr（调试日志）
-    proc.stderr?.on('data', (data: Buffer) => {
-      console.warn(`[MCP:${runtime.config.id}] stderr:`, data.toString())
-    })
-
-    // 监听进程退出
-    proc.on('exit', (code) => {
-      console.log(`[MCP:${runtime.config.id}] 进程退出，code=${code}`)
-      if (runtime.status === 'error') return
-      runtime.status = 'disconnected'
-      this.notifyStatusChange(runtime.config.id, 'disconnected')
-    })
-
-    proc.on('error', () => {
-      if (runtime.status === 'connecting') {
-        runtime.pendingRequests.forEach(p => p.reject(new Error('MCP 服务器连接失败')))
-        runtime.pendingRequests.clear()
-        return
-      }
-      runtime.status = 'error'
-      runtime.error = 'MCP 服务器连接失败'
-      this.notifyStatusChange(runtime.config.id, 'error', runtime.error)
-    })
-  }
-
-  /** 处理 JSON-RPC 消息缓冲区 */
-  private processBuffer(runtime: MCPServerRuntime): void {
-    // MCP 使用 \n 分隔的 JSON-RPC 消息
-    const lines = runtime.buffer.split('\n')
-    runtime.buffer = lines.pop() ?? '' // 保留最后一行（可能不完整）
-
-    for (const line of lines) {
-      const trimmed = line.trim()
-      if (!trimmed) continue
-
-      try {
-        const msg = JSON.parse(trimmed)
-        this.handleMessage(runtime, msg)
-      } catch {
-        // 非 JSON 行，忽略
-      }
-    }
-  }
-
-  /** 处理收到的 JSON-RPC 消息 */
-  private handleMessage(runtime: MCPServerRuntime, msg: Record<string, unknown>): void {
-    // 响应消息（有 id）
-    if ('id' in msg && msg.id != null) {
-      const pending = runtime.pendingRequests.get(msg.id as number)
-      if (pending) {
-        runtime.pendingRequests.delete(msg.id as number)
-        if ('error' in msg) {
-          const err = msg.error as { message?: string }
-          pending.reject(new Error(err?.message ?? 'MCP error'))
-        } else {
-          pending.resolve(msg.result)
-        }
-      }
-    }
-    // 通知消息（无 id）— 暂时只记录日志
-  }
-
-  /** 发送 JSON-RPC 请求 */
-  private sendRequest(runtime: MCPServerRuntime, method: string, params?: unknown): Promise<unknown> {
-    return new Promise((resolve, reject) => {
-      const id = runtime.nextRequestId++
-      runtime.pendingRequests.set(id, { resolve, reject })
-
-      const msg = JSON.stringify({
-        jsonrpc: '2.0',
-        id,
-        method,
-        params: params ?? {},
-      })
-
-      runtime.process?.stdin?.write(msg + '\n')
-
-      // 超时 10 秒
-      setTimeout(() => {
-        if (runtime.pendingRequests.has(id)) {
-          runtime.pendingRequests.delete(id)
-          reject(new Error(`MCP 请求超时: ${method}`))
-        }
-      }, 10000)
-    })
-  }
-
-  /** 初始化 MCP 会话 */
-  private async initializeSession(runtime: MCPServerRuntime): Promise<void> {
-    await this.sendRequest(runtime, 'initialize', {
-      protocolVersion: '2024-11-05',
-      capabilities: {},
-      clientInfo: {
-        name: 'vela',
-        version: '1.0.0',
-      },
-    })
-
-    // 发送 initialized 通知
-    const msg = JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'notifications/initialized',
-    })
-    runtime.process?.stdin?.write(msg + '\n')
-  }
-
   /** 发现可用工具 */
   private async discoverTools(runtime: MCPServerRuntime): Promise<void> {
     try {
-      const result = await this.sendRequest(runtime, 'tools/list') as { tools?: MCPToolDesc[] }
-      runtime.tools = (result?.tools ?? []).map(t => ({
-        ...t,
+      const result = await runtime.session!.listTools()
+      runtime.tools = (result.tools ?? []).map(tool => ({
+        name: tool.name,
+        description: tool.description ?? '',
+        inputSchema: tool.inputSchema ?? { type: 'object', properties: {} },
         serverId: runtime.config.id,
       }))
     } catch {
@@ -394,9 +256,12 @@ class MCPManagerImpl {
   /** 发现可用资源 */
   private async discoverResources(runtime: MCPServerRuntime): Promise<void> {
     try {
-      const result = await this.sendRequest(runtime, 'resources/list') as { resources?: MCPResourceDesc[] }
-      runtime.resources = (result?.resources ?? []).map(r => ({
-        ...r,
+      const result = await runtime.session!.listResources()
+      runtime.resources = (result.resources ?? []).map(resource => ({
+        uri: resource.uri,
+        name: resource.name,
+        description: resource.description,
+        mimeType: resource.mimeType,
         serverId: runtime.config.id,
       }))
     } catch {
@@ -418,16 +283,11 @@ class MCPManagerImpl {
     }
 
     try {
-      const result = await this.sendRequest(runtime, 'tools/call', {
-        name: toolName,
-        arguments: args,
-      }) as { content?: Array<{ type: string; text?: string }> }
-
-      const textParts = (result?.content ?? [])
+      const result = await runtime.session!.callTool(toolName, args)
+      const textParts = (result.content ?? [])
         .filter(c => c.type === 'text')
         .map(c => c.text ?? '')
         .join('\n')
-
       return { success: true, content: textParts }
     } catch (error) {
       return { success: false, content: '', error: String(error) }
@@ -439,9 +299,7 @@ class MCPManagerImpl {
     const runtime = this.servers.get(serverId)
     if (!runtime) return
 
-    runtime.process?.kill()
-    runtime.pendingRequests.forEach(p => p.reject(new Error('连接已断开')))
-    runtime.pendingRequests.clear()
+    await runtime.session?.close().catch(() => {})
     this.servers.delete(serverId)
     this.notifyStatusChange(serverId, 'disconnected')
     this.notifyToolsChange()
