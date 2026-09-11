@@ -36,6 +36,7 @@ export class AgentSessionManager {
     try {
       const session = this.getOrCreate(conversationId, modelId)
       session.setEditorSnapshot(editorSnapshot)
+      session.setTools(buildAgentTools(this.options.resolveLanguage(conversationId), this.options.rendererAction))
       await session.prompt(input)
       return { success: true }
     } catch (error) {

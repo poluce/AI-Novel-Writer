@@ -39,6 +39,7 @@ export interface CreatePiAgentOptions {
 export interface PiAgentHandle {
   prompt(input: string): Promise<void>
   abort(): void
+  setTools(tools: AgentTool<any>[]): void
   messages: AgentMessage[]
 }
 
@@ -124,6 +125,9 @@ export function createPiAgent(options: CreatePiAgentOptions): PiAgentHandle {
       await agent.prompt(input)
     },
     abort: () => agent.abort(),
+    setTools: (tools) => {
+      agent.state.tools = tools
+    },
     get messages() {
       return agent.state.messages
     },

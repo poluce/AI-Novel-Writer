@@ -152,12 +152,12 @@
 
 ## 阶段 3：工具层替换（P3）
 
-- [ ] 现有 17 个内置工具（`read_*` / `write_file` / `start_workflow` 等）→ Pi `AgentTool` 接口，**工具能力不得缺失**
-- [ ] 写入型工具确认：`beforeToolCall` 接现有确认 UI（保持"只读自动执行、写入需确认"语义）
+- [x] 现有内置工具（`read_*` / `write_file` / `start_workflow` 等）→ Pi `AgentTool`（`electron/pi/tool-builder.ts`）
+- [x] 写入型工具确认：`beforeToolCall` 接确认 UI（只读自动执行、写入需确认）
 - [ ] 提交回执/结果未知防重写：`afterToolCall` + 现有 `commitState` 语义（`unknown` 时不自动重试）
-- [ ] 工具结果截断策略保持（现为 3000 字符）
-- [x] MCP 工具接入：换官方 SDK（stdio + SSE）；`mcp-manager` 只保留配置信任边界与 IPC 表面
-- [ ] Skill 工具接入（`skill-registry` 适配）
+- [x] 工具结果截断策略保持（3000 字符，`truncateToolText`）
+- [x] MCP 工具接入：官方 SDK + Pi Agent 每轮注入已连接 MCP 工具（`mcp__server__name`）
+- [x] Skill 工具接入：检查/安装/绑定写作 Skill 已作为 Pi AgentTool（`inspect/install/bind_writing_skill`）
 
 ## 阶段 4：一次性调用层替换（P4）
 

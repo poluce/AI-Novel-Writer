@@ -7,6 +7,7 @@ vi.mock('../agent-session', () => ({
   AgentSession: class {
     prompt = vi.fn(async () => {})
     setEditorSnapshot = vi.fn()
+    setTools = vi.fn()
     confirm = vi.fn()
     abort = vi.fn()
   },
@@ -53,7 +54,7 @@ describe('AgentSessionManager', () => {
     await manager.prompt('conv-1', 'again')
 
     expect(createPiModelsMock).toHaveBeenCalledTimes(1)
-    expect(buildToolsMock).toHaveBeenCalledTimes(1)
+    expect(buildToolsMock.mock.calls.length).toBeGreaterThanOrEqual(2)
   })
 
   it('delegates confirm and abort to the session', async () => {

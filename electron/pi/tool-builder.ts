@@ -19,8 +19,27 @@ import { createOpenEditorTool } from './tools/open-editor.tool'
 import { createStartWorkflowTool } from './tools/start-workflow.tool'
 import { createProposeNovelConfigTool } from './tools/propose-novel-config.tool'
 import { createProposeChapterBlueprintTool } from './tools/propose-chapter-blueprint.tool'
+import { buildMcpAgentTools } from './tools/mcp.tool'
+import { truncateToolText } from './tool-result'
 
-/** Build the full built-in tool set for one agent session. */
+function withTruncatedResult(tool: AgentTool<any>): AgentTool<any> {
+  return {
+    ...tool,
+    execute: async (id, params, signal) => {
+      const result = await tool.execute(id, params, signal)
+      return {
+        ...result,
+        content: result.content.map(block => (
+          block.type === 'text'
+            ? { ...block, text: truncateToolText(block.text) }
+            : block
+        )),
+      }
+    },
+  }
+}
+
+/** Build built-in + currently connected MCP tools for one agent session. */
 export function buildAgentTools(
   language: WritingLanguage,
   rendererAction: RendererActionSink,
@@ -42,7 +61,8 @@ export function buildAgentTools(
     createStartWorkflowTool(language, rendererAction),
     createProposeNovelConfigTool(language, rendererAction),
     createProposeChapterBlueprintTool(language),
-  ]
+    ...buildMcpAgentTools(language),
+  ].map(withTruncatedResult)
 }
 
 /** Write tools that must be confirmed by the user before execution. */

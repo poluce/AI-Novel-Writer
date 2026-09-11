@@ -65,6 +65,10 @@ export class AgentSession {
     return this.agent.prompt(input)
   }
 
+  setTools(tools: AgentTool<any>[]): void {
+    this.agent.setTools(tools)
+  }
+
   private injectL1(messages: AgentMessage[]): AgentMessage[] {
     const l1 = buildL1AgentContext(this.editorSnapshot, this.language)
     if (!l1) return messages
