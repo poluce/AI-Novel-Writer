@@ -222,7 +222,7 @@
   8. 切书：在途生成 abort，助手会话不跨书保活
 - [x] **数据读取回归**：列入上表第 1 条；代码路径未改配置/提示词/MCP/Skill 落盘位置
 - [x] 全量回归：`tsc --noEmit`、`check:i18n`、`pnpm build` 已通过；Windows + UTF-8 下 `vitest run` **313 files / 2725 passed / 9 skipped**（补齐 `electron.exe` 后）
-- [ ] Windows 原生运行验证
+- [x] Windows 原生运行验证（自动化）：本机 `electron.exe` **v41.10.7**；`prepare-native-for-electron` / `startup-native-isolation` / `main-skin-startup` 通过。GUI 手工清单见上，仍待作者在桌面应用内点验
 
 ## 阶段 7：文档与发布（P7）
 
