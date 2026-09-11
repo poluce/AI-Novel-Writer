@@ -195,8 +195,8 @@
 ## 阶段 5：主进程与安全（P5）
 
 - [x] **并发闸门**：一次性 pi-ai 请求全局上限 4（`acquirePiOneShotSlot`）；空闲 Agent 会话不占名额。每供应商细分仍待评估
-- [ ] 项目会话租约：简化为"主进程内部会话状态比对"，渲染层只发意图；`leaseId` 机制评估移除
-- [ ] 模型执行租约：随 Agent 换层评估存废（密钥隔离语义必须保持）
+- [x] 项目会话租约：评估后**保留** `leaseId`（ADR 0001 项目边界；Pi 换层不替代项目会话）
+- [x] 模型执行租约：评估后**保留**（渲染层只持 opaque leaseId，密钥仍在主进程）
 - [x] 密钥隔离验证：渲染进程 `llm:generate-stream` 不带 apiKey；stream-done 事件不含密钥
 - [ ] **IPC 通道重构**：Agent 换层后 `electron/preload.ts`、`src/shared/ipc-channels.ts` 的通道增删（新增 Agent 事件/意图通道，清理租约凭证参数）
 - [x] 切书：关闭/切换项目数据库时 `abortPiOnProjectClose` 中止全部在途 pi-ai，并丢掉 Agent 实例（下次 prompt 新建）
@@ -210,7 +210,7 @@
 - [ ] **主进程测试迁移**（`electron/__tests__/`：IPC handlers、package contract、启动/隔离等）
 - [ ] 12 个工作流命令测试迁移（产物、错误路径、取消语义）
 - [ ] 工具功能测试（17 个内置工具 + MCP + Skill）
-- [ ] 新增能力门控测试（无工具调用能力的模型被拒绝并提示）
+- [x] 新增能力门控测试（`toolCalling: false` 的生成模型被拒绝并提示）
 - [ ] 手工回归清单：起草/审稿/修稿/定稿/批量/知识库/MCP/导出（确认功能可用；正文改为生成完显示属预期变化）
 - [ ] **数据读取回归**：打开旧项目、读取旧模型配置/提示词覆盖/MCP 配置/Skill 均正常
 - [ ] 全量回归：`pnpm typecheck` / `pnpm test` / `pnpm check:i18n` / `pnpm build`

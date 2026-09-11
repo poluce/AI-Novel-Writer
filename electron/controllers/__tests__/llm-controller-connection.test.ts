@@ -169,6 +169,24 @@ describe('llm connection test', () => {
     expect(options.maxTokens).toBeGreaterThanOrEqual(256)
   })
 
+  it('rejects a generation connection probe when the model lacks tool calling', async () => {
+    await expect(connectionHandler()({}, {
+      ...deepSeekModel,
+      capabilities: {
+        contextWindowTokens: 8192,
+        maxOutputTokens: 1024,
+        reasoning: false,
+        structuredOutput: false,
+        usage: true,
+        toolCalling: false,
+      },
+    })).resolves.toEqual({
+      success: false,
+      error: expect.stringMatching(/原生工具调用/),
+    })
+    expect(mocks.streamSingleShot).not.toHaveBeenCalled()
+  })
+
   it('does not count a connection probe as a project generation call', async () => {
     await connectionHandler()({}, deepSeekModel)
     expect(mocks.logCall).not.toHaveBeenCalled()

@@ -65,4 +65,17 @@ describe('createPiModels', () => {
     expect(model.maxTokens).toBe(8_000)
     expect(model.reasoning).toBe(true)
   })
+
+  it('rejects a generation model that declared no tool calling', () => {
+    expect(() => createPiModels(profile({
+      capabilities: {
+        contextWindowTokens: 8192,
+        maxOutputTokens: 1024,
+        reasoning: false,
+        structuredOutput: false,
+        usage: true,
+        toolCalling: false,
+      },
+    }))).toThrow(/原生工具调用/)
+  })
 })

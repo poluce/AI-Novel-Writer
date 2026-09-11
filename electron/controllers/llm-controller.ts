@@ -19,6 +19,7 @@ import {
 } from '../services/model-execution-lease'
 import { ModelDiscoveryService } from '../services/model-discovery-service'
 import { isSubmitToolName } from '../../src/shared/submit-contract'
+import { assertGenerationModelSupportsTools } from '../../src/shared/tool-calling-gate'
 import { SingleShotAbortedError, streamSingleShot, type StreamSingleShotOptions } from '../pi/pi-single-shot'
 import { toPiSamplingParams } from '../pi/pi-stream-options'
 import { createSubmitTool, visibleTextFromSubmitArtifact } from '../pi/submit-tools'
@@ -91,6 +92,7 @@ async function completeSingleShot(
   params: ResolvedGenerationParameters,
   extra?: Pick<StreamSingleShotOptions, 'signal' | 'inFlightId'>,
 ) {
+  assertGenerationModelSupportsTools(model)
   const submitTool = resolveSubmitToolName(request)
   const { systemPrompt, userPrompt } = splitGenerationMessages(request.messages)
   const result = await streamSingleShot(
