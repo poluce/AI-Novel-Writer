@@ -4,9 +4,7 @@
  * 采用三级注入策略管理 Token 消耗：
  * - L0 始终注入（~500 token）：项目名称/类型/进度/一句话大纲
  * - L1 编辑器感知（~800 token）：当前打开的 Tab 信息
- * - L2 按需获取：通过 Tool 调用获取详细数据
- *
- * 这是 Agent 理解用户上下文的核心模块。
+ * - L2 按需获取：通过原生 tools 读取详细数据（不再把 XML 工具说明书写入 prompt）
  */
 
 import { useProjectStore } from '../../stores/project-store'
@@ -14,7 +12,7 @@ import { useEditorStore } from '../../stores/editor-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { useLocaleStore } from '../../stores/locale-store'
 import type { AgentMode } from '../../stores/agent-store'
-import { toolRegistry, type AgentExecutionContext } from './tool-registry'
+import type { AgentExecutionContext } from './tool-registry'
 import {
   projectSessionContextFromProject,
   sameProjectSessionContext,
@@ -32,10 +30,8 @@ import { localizeNovelConfigFacts } from '../../shared/novel-config-localization
 // ===== 上下文构建 =====
 
 /**
- * 构建 Agent 系统提示词（含上下文和 Tool 描述）
- *
- * 这是 Agent 每次对话时的系统提示词入口。
- * 将项目上下文、编辑器状态、可用 Tool 列表整合为一份完整的系统提示。
+ * 构建 Agent 系统提示词（身份 + L0/L1 项目上下文）。
+ * 工具 schema 由 Pi Agent 原生 tools 提供，不写入这段字符串。
  */
 export async function buildAgentSystemPrompt(
   mode: AgentMode,
@@ -47,12 +43,6 @@ export async function buildAgentSystemPrompt(
     ?? (currentProject
       ? resolveWritingLanguage(currentProject.novelConfig.writingLanguage)
       : useLocaleStore.getState().locale)
-  const canUseProjectTools = executionContext
-    ? sameProjectSessionContext(
-        executionContext.projectSession,
-        projectSessionContextFromProject(currentProject),
-      )
-    : !!currentProject
 
   // 1. Agent 身份与行为指导
   sections.push(await buildIdentityPrompt(mode, writingLanguage, executionContext))
@@ -64,17 +54,6 @@ export async function buildAgentSystemPrompt(
   // 3. L1 — 编辑器感知上下文
   const l1 = buildL1EditorContext(writingLanguage, executionContext)
   if (l1) sections.push(l1)
-
-  // 4. Tool 系统提示词
-  const toolPrompt = toolRegistry.generateToolPrompt(
-    writingLanguage,
-    tool => canUseProjectTools
-      || tool.source === 'mcp'
-      || tool.source === 'skill'
-      || tool.name === 'inspect_writing_skill'
-      || tool.name === 'install_writing_skill',
-  )
-  if (toolPrompt) sections.push(toolPrompt)
 
   return sections.join('\n\n---\n\n')
 }

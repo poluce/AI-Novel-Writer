@@ -96,14 +96,13 @@ describe('writing skill registry identity and tool exposure', () => {
     await skillRegistry.loadAll()
 
     const builtins = skillRegistry.listBySource('builtin')
-    const prompt = toolRegistry.generateToolPrompt('en-US', tool => tool.source === 'skill')
 
     expect(builtins.length).toBeGreaterThan(2)
-    expect(prompt).toContain('Reviews a chapter for plot logic')
     for (const skill of builtins) {
       const tool = toolRegistry.get(`skill__${skill.metadata.name}`)
-      expect(prompt).toContain(`skill__${skill.metadata.name}`)
       expect(tool, skill.metadata.name).toBeDefined()
+      expect(tool!.descriptionEn ?? tool!.description).toBeTruthy()
+      expect(`${tool!.descriptionEn ?? ''}\n${tool!.name}`).not.toMatch(/[\u3400-\u9fff]/u)
       const result = await tool!.execute({ args: 'Chapter 1' }, {
         projectSession: null,
         selectedModelId: 'model-a',
@@ -113,7 +112,6 @@ describe('writing skill registry identity and tool exposure', () => {
       expect(`${result.content}\n${result.error ?? ''}`, skill.metadata.name)
         .not.toMatch(/[\u3400-\u9fff]/u)
     }
-    expect(prompt).not.toMatch(/[\u3400-\u9fff]/u)
   })
 
 })

@@ -53,7 +53,7 @@
 
 代码盘点见 [`2026-09-10-pi-agent-homemade-legacy.md`](2026-09-10-pi-agent-homemade-legacy.md)。下面只列待办勾选，不重复机制说明。
 
-- [x] 删除文本工具协议：`parseToolCalls`、三种宽松解析、DSML、`cleanAgentVisibleText`（随 `agent-engine.ts` 删除）；`generateToolPrompt` XML 说明书仍在 `tool-registry` / `context-builder`
+- [x] 删除文本工具协议：`parseToolCalls`、三种宽松解析、DSML、`cleanAgentVisibleText`、`generateToolPrompt` XML 说明书与「每次最多一个」规则
 - [ ] 删除假 user `<tool_result>` 回灌；历史不再压成 16 条 user/assistant 字符串
 - [x] OpenAI 的 `finish_reason: tool_calls` / `function_call` 映射为 `stop`；已删除 `requireCompleteAgentResponse`
 - [ ] 删除全局 `generating` / `activeAbortController` / `pendingConfirmations` 单例；`@` 预填正文改为提示模型原生调工具

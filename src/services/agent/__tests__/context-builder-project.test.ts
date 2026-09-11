@@ -35,16 +35,10 @@ afterEach(() => {
 
 describe('agent context project isolation', () => {
   it('builds every built-in tool description in English without Chinese fallback', () => {
-    toolRegistry.registerAll(builtinTools)
-
-    const prompt = toolRegistry.generateToolPrompt(
-      'en-US',
-      tool => tool.source === 'builtin',
-    )
-
-    for (const tool of builtinTools) expect(prompt).toContain(`#### ${tool.name}`)
-    expect(prompt).toContain('Inside <tool_call>, emit exactly one JSON object; do not use <name> or <arguments> child tags.')
-    expect(prompt).not.toMatch(/[\u3400-\u9fff]/u)
+    for (const tool of builtinTools) {
+      expect(tool.descriptionEn, tool.name).toBeTruthy()
+      expect(`${tool.descriptionEn}\n${tool.name}`).not.toMatch(/[\u3400-\u9fff]/u)
+    }
   })
 
   it('uses the current UI language and only exposes project-independent tools when no project is open', async () => {
@@ -90,11 +84,7 @@ describe('agent context project isolation', () => {
     expect(Object.isFrozen(executionContext)).toBe(true)
     expect(executionContext.writingLanguage).toBe('en-US')
     expect(prompt).toContain('You are an experienced long-form fiction-writing assistant')
-    expect(prompt).toContain('## Tool system')
-    expect(prompt).toContain('inspect_writing_skill')
-    expect(prompt).toContain('install_writing_skill')
-    expect(prompt).toContain('global_mcp_probe')
-    expect(prompt).toContain('skill__global_probe')
+    expect(prompt).not.toContain('<tool_call>')
     expect(prompt).not.toContain('no_project_probe')
     expect(prompt).not.toMatch(/[\u3400-\u9fff]/u)
   })
@@ -135,8 +125,7 @@ describe('agent context project isolation', () => {
 
     expect(prompt).toContain('You are an experienced long-form fiction-writing assistant')
     expect(prompt).not.toContain('迟到的中文项目')
-    expect(prompt).toContain('## Tool system')
-    expect(prompt).toContain('global_mcp_probe')
+    expect(prompt).not.toContain('<tool_call>')
     expect(prompt).not.toContain('no_project_probe')
     expect(prompt).not.toMatch(/[\u3400-\u9fff]/u)
   })
@@ -289,8 +278,8 @@ describe('agent context project isolation', () => {
     const prompt = await buildAgentSystemPrompt('fast')
 
     expect(prompt).toContain('You are an experienced long-form fiction-writing assistant')
-    expect(prompt).toContain('## Tool system')
-    expect(prompt).toContain('test_chinese_description')
+    expect(prompt).not.toContain('<tool_call>')
+    expect(prompt).not.toContain('这段中文描述不能进入英文模型提示词')
     expect(prompt).toContain('Genre: Science fiction')
     expect(prompt).toContain('Target readers: All ages')
     expect(prompt).toContain('Point of view: Third-person limited')

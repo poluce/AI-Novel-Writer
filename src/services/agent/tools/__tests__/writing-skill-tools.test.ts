@@ -89,12 +89,18 @@ describe('writing skill agent tools', () => {
     toolRegistry.clear()
     toolRegistry.registerAll([inspectWritingSkillTool, installWritingSkillTool, bindWritingSkillTool])
 
-    const prompt = toolRegistry.generateToolPrompt('en-US')
-    expect(prompt).toContain('Inspect a public GitHub repository')
-    expect(prompt).toContain('must be inspected before installation')
-    expect(prompt).toContain('prompt-only')
-    expect(prompt).toContain('never executes code')
-    expect(prompt).toContain('A public GitHub repo, tree, blob, or raw SKILL.md HTTPS URL')
-    expect(prompt).not.toMatch(/[\u3400-\u9fff]/)
+    const catalog = [inspectWritingSkillTool, installWritingSkillTool, bindWritingSkillTool]
+      .map(tool => [
+        tool.name,
+        tool.descriptionEn ?? '',
+        ...Object.values(tool.inputSchema.properties).map(property => property.descriptionEn ?? ''),
+      ].join('\n'))
+      .join('\n')
+    expect(catalog).toContain('Inspect a public GitHub repository')
+    expect(catalog).toContain('must be inspected before installation')
+    expect(catalog).toContain('prompt-only')
+    expect(catalog).toContain('never executes code')
+    expect(catalog).toContain('A public GitHub repo, tree, blob, or raw SKILL.md HTTPS URL')
+    expect(catalog).not.toMatch(/[\u3400-\u9fff]/)
   })
 })
