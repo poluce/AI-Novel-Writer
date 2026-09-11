@@ -136,7 +136,7 @@ describe('Windows cloud build workflow contract', () => {
       'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02',
     ])
     expect(workflow).toMatch(/node-version:\s*['"]?22\.23\.1['"]?/)
-    expect(workflow).toMatch(/version:\s*['"]?11\.11\.0['"]?/)
+    expect(workflow).toMatch(/version:\s*['"]?11\.21\.0['"]?/)
     expect(workflow).toContain('pnpm install --frozen-lockfile')
     expect(workflow).toContain('pnpm run build:win')
     expect(workflow).not.toContain('build:win-dir')
@@ -204,7 +204,7 @@ describe('Windows cloud build workflow contract', () => {
     expect(initialize).toContain('AI_NOVEL_RELEASE_EVIDENCE_ROOT')
     expect(initialize).toContain('git rev-parse HEAD')
     expect(initialize).toContain('--expected-node-version 22.23.1')
-    expect(initialize).toContain('--expected-pnpm-version 11.11.0')
+    expect(initialize).toContain('--expected-pnpm-version 11.21.0')
     expect(initialize).not.toContain('AI_NOVEL_CLOUD_BUILD_PNPM_VERSION')
     expect(workflow).not.toContain('- name: Record verified toolchain')
     expect(workflow).not.toContain('AI_NOVEL_CLOUD_BUILD_PNPM_VERSION')
@@ -260,7 +260,7 @@ describe('Windows cloud build workflow contract', () => {
         '--image-os', 'Windows',
         '--image-version', 'test',
         '--expected-node-version', process.versions.node,
-        '--expected-pnpm-version', '11.11.0',
+        '--expected-pnpm-version', '11.21.0',
         '--workflow-path', '.github/workflows/windows-cloud-build-test.yml',
         '--workflow-name', 'Windows cloud package qualification',
         '--actor', 'release-operator',

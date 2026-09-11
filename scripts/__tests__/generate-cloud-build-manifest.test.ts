@@ -102,7 +102,7 @@ describe('cloud Windows build manifest', () => {
       '--image-os', 'win22',
       '--image-version', '20260726.1',
       '--expected-node-version', process.versions.node,
-      '--expected-pnpm-version', '11.11.0',
+      '--expected-pnpm-version', '11.21.0',
       '--workflow-path', '.github/workflows/windows-cloud-build-test.yml',
       '--workflow-name', 'Windows cloud package qualification',
       '--actor', 'release-operator',
@@ -123,7 +123,7 @@ describe('cloud Windows build manifest', () => {
       cwd: repositoryRoot,
       env: environmentWithOverrides(process.env, {
         GITHUB_SHA: commit,
-        AI_NOVEL_CLOUD_BUILD_PNPM_VERSION: '11.11.0',
+        AI_NOVEL_CLOUD_BUILD_PNPM_VERSION: '11.21.0',
         ImageOS: 'win22',
         ImageVersion: '20260726.1',
         AI_NOVEL_RELEASE_EVIDENCE_ROOT: evidenceRoot,
@@ -141,7 +141,7 @@ describe('cloud Windows build manifest', () => {
       version: packageMetadata.version,
       lockfileSha256: canonicalPnpmLockfileSha256(path.join(repositoryRoot, 'pnpm-lock.yaml')),
       nodeVersion: process.versions.node,
-      pnpmVersion: '11.11.0',
+      pnpmVersion: '11.21.0',
       runnerImage: {
         os: 'win22',
         version: '20260726.1',

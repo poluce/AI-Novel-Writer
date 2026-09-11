@@ -14,7 +14,7 @@ const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as {
 
 describe('release dependency contract', () => {
   it('uses one pinned package manager and exposes the matching LanceDB native binding for every shipped desktop architecture', () => {
-    expect(pkg.packageManager).toBe('pnpm@11.11.0')
+    expect(pkg.packageManager).toBe('pnpm@11.21.0')
     expect(pkg.dependencies?.['@lancedb/lancedb']).toBe('0.22.3')
     expect(pkg.optionalDependencies).toMatchObject({
       '@lancedb/lancedb-darwin-arm64': '0.22.3',
