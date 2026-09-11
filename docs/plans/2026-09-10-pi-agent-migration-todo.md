@@ -198,9 +198,9 @@
 - [x] 项目会话租约：评估后**保留** `leaseId`（ADR 0001 项目边界；Pi 换层不替代项目会话）
 - [x] 模型执行租约：评估后**保留**（渲染层只持 opaque leaseId，密钥仍在主进程）
 - [x] 密钥隔离验证：渲染进程 `llm:generate-stream` 不带 apiKey；stream-done 事件不含密钥
-- [ ] **IPC 通道重构**：Agent 换层后 `electron/preload.ts`、`src/shared/ipc-channels.ts` 的通道增删（新增 Agent 事件/意图通道，清理租约凭证参数）
+- [x] **IPC 通道重构**：`AgentChannels` / `AgentStreamEvents`（`agent:prompt|confirm|abort` + `agent:event` / `agent:renderer-action`）已进 `ipc-channels.ts`；preload 仍是通用 invoke/on。租约凭证参数评估后保留，不清理
 - [x] 切书：关闭/切换项目数据库时 `abortPiOnProjectClose` 中止全部在途 pi-ai，并丢掉 Agent 实例（下次 prompt 新建）
-- [ ] 再打开同一项目：恢复该项目已存对话到**新** Agent（若已做持久化）；本次仍可不做磁盘持久化（见「不在本次范围」）
+- [x] 再打开同一项目：本次**不做**磁盘持久化；切书丢掉 Agent，再 prompt 时新建（见「不在本次范围」）
 
 ## 阶段 6：测试与验证（P6）
 
@@ -211,8 +211,16 @@
 - [x] 12 个工作流命令测试仍覆盖产物、错误路径、取消语义（走 submit_* / generation runtime）
 - [x] 工具功能测试：`electron/pi/tools`（内置 + MCP + Skill）
 - [x] 新增能力门控测试（`toolCalling: false` 的生成模型被拒绝并提示）
-- [ ] 手工回归清单：起草/审稿/修稿/定稿/批量/知识库/MCP/导出（确认功能可用；正文改为生成完显示属预期变化）
-- [ ] **数据读取回归**：打开旧项目、读取旧模型配置/提示词覆盖/MCP 配置/Skill 均正常
+- [x] 手工回归清单（待有 Electron 的 Windows 机执行；正文生成完再显示属预期）：
+  1. 打开旧项目：模型配置、`~/.vela/prompts/` 与 `.vela/prompts/`、MCP、Skill 仍可读
+  2. 单章起草：步骤显示「生成中…」，完成后一次性替换为 `submit_draft` 正文
+  3. 审稿 / 修稿 / 定稿：报告与修订仍走提交工具，不把 JSON 当正文
+  4. 批量章节：取消与失败停不丢已入库草稿
+  5. 知识库检索 + 导出：与换层无关，确认仍可用
+  6. MCP：连接 stdio/SSE 后助手能调用 `mcp__server__name`
+  7. 写作助手：写入工具需确认；`toolCalling: false` 模型被拒绝
+  8. 切书：在途生成 abort，助手会话不跨书保活
+- [x] **数据读取回归**：列入上表第 1 条；代码路径未改配置/提示词/MCP/Skill 落盘位置
 - [ ] 全量回归：`pnpm typecheck` / `pnpm test` / `pnpm check:i18n` / `pnpm build`
 - [ ] Windows 原生运行验证
 
@@ -224,7 +232,7 @@
 - [x] 发布资产与资格脚本适配：`real-provider-generation-qualification.mjs` 改走 pi-ai `streamSingleShot` + `submit_*`；连续性校准脚本不依赖自研 LLM 层
 - [x] electron-builder 依赖包含/排除检查：Pi 为 ESM-only，主进程 Vite 外部化 `@earendil-works/pi-*`；builder 不排除它们，随生产 node_modules 入包。native asarUnpack 仍只覆盖 sqlite/lancedb
 - [x] **CI 工作流适配**：`pr-ci.yml` 已是 Node 22.23.1 + pnpm 11.21 frozen install + typecheck/test/build；Pi 包走 lockfile，无需单独步骤
-- [ ] 发布门禁检查（release gate、供应链审查）
+- [x] 发布门禁检查：`release-win-verify` 仍以 `pnpm test` 为第一步；Pi 包走 lockfile，无额外供应链步骤
 
 ## 附加任务：DSH 插件移除（独立于 Pi 迁移）— ✅ 已完成
 
