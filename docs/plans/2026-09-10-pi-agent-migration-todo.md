@@ -76,7 +76,7 @@
 
 **单次调用**（起草、审稿交卷、修稿、定稿后处理、架构/蓝图、单字段、导入、规划资料、角色表修复、剧情树、叙事线索候选、编辑器选区 AI）
 
-- API：`pi-ai` 的流式补全（`models.stream(model, {...}, { toolChoice: 'any' })` 强制提交）。**一次请求一次响应，不建 `Agent`、不建循环**；主进程经 `await import('@earendil-works/pi-ai')` 动态加载（CJS 输出不能静态 import ESM-only 包）
+- API：`pi-ai` 的流式补全（`models.stream(model, {...}, { toolChoice: 'any' })` 强制提交）。**一次请求一次响应，不建 `Agent`、不建循环**；主进程产物是 ESM，直接静态 `import` Pi 包（并 external）
 - 工具集：**只挂提交合同工具**（`submit_draft` / `submit_review` / `submit_revision` / `submit_finalization` …），**不挂读取工具**——一旦挂上读取工具，模型会调用后停下等结果，一次性语义即被破坏。上下文仍由 command 预先组装（与现状一致）
 - 输出：**pi-ai 流式路径不校验工具名**——须 app 显式 `validateToolCall(tools, call)` + 校验 `submit_*` 名字（幻觉/错名工具调用会静默成功，见 P0）。命中 `submit_*` 即校验落盘；未命中按可见文本处理
 - 取消：切书 / 取消任务 = abort 该次 stream（`AbortSignal`）
@@ -110,7 +110,7 @@
 - [x] 验证 pnpm 安装兼容性（Pi 是 npm monorepo，注意锁文件与依赖审查）——已装 pi-ai/pi-agent-core 0.85.1；**坑**：项目锁定的 pnpm 11.11.0 在本仓库 `resolved… downloaded 0, added 0` 处无限卡死（CPU 冻结、无 TCP），`packageManager` 已升 11.21.0（约 15s 完成，lockfileVersion 仍 9.0，见 commit 59079cc）
 - [x] **版本要求核查**：Pi 各包 `engines: node >=22.19.0`；Electron 41 主进程 = Node 24.18.0 ✓；但项目 `engines: node >=20` 是缺口（Node 20 本地/CI 会跑不动 Pi）→ 需决定是否把 engines 提到 >=22.19.0
 - [ ] **MCP 配置兼容核查**：`~/.vela/mcp_config.json` 在官方 SDK 下是否仍兼容（stdio/SSE 两类传输）
-- [x] **打包适配验证**：**external + 动态 `import()`，不打包、不切格式**。全量 bundle 4.2MB 且 Bedrock SDK 用 `import(变量)` 逃逸打包器（运行时报 ERR_MODULE_NOT_FOUND）；external + 静态 import 会生成 `require()` 触发 ERR_PACKAGE_PATH_NOT_EXPORTED。主进程代码必须 `await import('@earendil-works/pi-ai')`（禁静态 import / 顶层 await），两包加进 `rollupOptions.external`
+- [x] **打包适配验证**：**external + 静态 ESM import，不打包、不切格式**。实测 `dist-electron/main.js` 是 **ESM 而非 CJS**（18 处 `import`/`export`、0 处 `require`；better-sqlite3 走 `createRequire(import.meta.url)`，见 `electron/database.ts`）——`vite.config.ts` 里 `format:'cjs'` 是**失效配置**（Rolldown 因 `"type":"module"` 实际输出 ESM）。故 Pi 包直接静态 `import` + 加进 `rollupOptions.external`；全量 bundle 仍不可取（4.2MB 且 Bedrock SDK 用 `import(变量)` 逃逸打包器、运行时报 ERR_MODULE_NOT_FOUND）
 - [ ] **Agent 运行位置验证**：渲染进程（现状，SQLite 不可达）vs 主进程（SQLite 直连）
 - [x] 最小 PoC（多轮）：一个 Pi Agent 实例 + 一个自定义工具 + 事件流订阅 + `beforeToolCall` 确认——**一次跑通**（脚本 `p0-multi-turn.mjs`）；事件序 `agent_start→turn_start→…→tool_execution_*→toolResult→turn_end→…→agent_end`；`beforeToolCall` 在 `tool_execution_start` 之后、带校验后 args；第二轮 prompt 保留上下文（`agent.state.messages` 自动累积）
 - [x] 最小 PoC（单次）：pi-ai 一次流式 + `tools` 强制 `submit_*`，验证「模型调用提交工具并把参数当产物」这条主路径——**跑通**（脚本 `p0-single-shot.mjs`）；`toolChoice:'any'` 触发强制调用；`submit_chapter` 的 `{title,body}` 以整包 JSON 到达即产物
@@ -123,7 +123,7 @@
 - **产物校验**：pi-ai 不校验工具名/参数（流式路径 `functionCall.name` 原样透传）。「未挂载工具必须报错」= app 显式 `validateToolCall(tools, call)` + 校验期望的 `submit_*` 名；否则幻觉/错名会被当成功产物。
 - **预算**：Gemini 3 flash 隐藏思考计入 `maxOutputTokens`——`maxTokens:500` 会把强制调用截断到 `doneReason=length`；单次产物调用要留足 maxTokens（或降 thinking）。
 - **工具参数形态**：Google adapter 不流式 partial JSON，`toolcall_delta` 一次性携带完整参数 JSON；文本与工具事件会 interleave（Gemini 3 附带空 text part）。
-- **打包**：见 P0「打包适配验证」——主进程 external + `await import()`；Agent 单例建议放主进程（P0 未实测位置，仅 API 层验证）。
+- **打包**：主进程产物是 **ESM**（见 P0「打包适配验证」）；Pi 包 **external + 静态 `import`**（同现有 `@lancedb/lancedb`/`yauzl`），无需动态 import。Agent 单例建议放主进程（P0 未实测位置，仅 API 层验证）。
 
 ## 阶段 1：依赖与清理（P1）
 
