@@ -222,8 +222,8 @@
 - [x] `docs/product-domain.md` 术语补充（稳定术语源）
 - [x] 新增 ADR：[`0018-pi-native-tool-calling-replaces-text-protocols.md`](../adr/0018-pi-native-tool-calling-replaces-text-protocols.md)
 - [x] 发布资产与资格脚本适配：`real-provider-generation-qualification.mjs` 改走 pi-ai `streamSingleShot` + `submit_*`；连续性校准脚本不依赖自研 LLM 层
-- [ ] electron-builder 依赖包含/排除检查
-- [ ] **CI 工作流适配**（`.github/workflows/pr-ci.yml` 等）：Node 版本与依赖安装步骤
+- [x] electron-builder 依赖包含/排除检查：Pi 为 ESM-only，主进程 Vite 外部化 `@earendil-works/pi-*`；builder 不排除它们，随生产 node_modules 入包。native asarUnpack 仍只覆盖 sqlite/lancedb
+- [x] **CI 工作流适配**：`pr-ci.yml` 已是 Node 22.23.1 + pnpm 11.21 frozen install + typecheck/test/build；Pi 包走 lockfile，无需单独步骤
 - [ ] 发布门禁检查（release gate、供应链审查）
 
 ## 附加任务：DSH 插件移除（独立于 Pi 迁移）— ✅ 已完成

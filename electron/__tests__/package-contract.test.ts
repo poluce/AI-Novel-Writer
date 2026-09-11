@@ -22,6 +22,9 @@ describe('release dependency contract', () => {
       '@lancedb/lancedb-win32-x64-msvc': '0.22.3',
     })
     expect(existsSync('package-lock.json')).toBe(false)
+    expect(pkg.dependencies?.['@earendil-works/pi-ai']).toBeTruthy()
+    expect(pkg.dependencies?.['@earendil-works/pi-agent-core']).toBeTruthy()
+    expect(pkg.dependencies?.['@modelcontextprotocol/sdk']).toBeTruthy()
   })
 
   it('runs clean, native verification, and executable smoke gates for Windows builds', () => {
@@ -48,6 +51,11 @@ describe('release dependency contract', () => {
     expect(builder).toContain('node_modules/@lancedb/lancedb-win32-x64-msvc/**/*')
     expect(builder).toContain('electron/security/windows-safe-file-system.ps1')
     expect(builder).toContain('security/windows-safe-file-system.ps1')
+    expect(builder).not.toMatch(/@earendil-works/)
+    expect(builder).not.toContain('node_modules/@earendil-works')
+
+    const viteConfig = readFileSync('vite.config.ts', 'utf8')
+    expect(viteConfig).toContain('/^@earendil-works\\/pi-(ai|agent-core)(\\/|$)/')
 
     const safeFileSystem = readFileSync('electron/security/windows-safe-file-system.ts', 'utf8')
     const safeFileSystemHelper = readFileSync('electron/security/windows-safe-file-system.ps1', 'utf8')
