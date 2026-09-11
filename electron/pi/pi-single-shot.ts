@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import type { AgentTool } from '@earendil-works/pi-agent-core'
 import { validateToolCall, type Tool } from '@earendil-works/pi-ai'
 
-import { registerPiInFlight } from './in-flight'
+import { acquirePiOneShotSlot, registerPiInFlight } from './in-flight'
 import { createPiModels } from './pi-models'
 
 import type { LLMFinishReason, ModelProfile } from '../../src/shared/ipc-channels'
@@ -70,16 +70,17 @@ export async function streamSingleShot(
   options: StreamSingleShotOptions = {},
 ): Promise<SingleShotResult> {
   throwIfAborted(options.signal)
-
-  const { models, model } = createPiModels(profile)
-  const tools = [asPiTool(submitTool)]
+  const releaseSlot = acquirePiOneShotSlot()
   const controller = new AbortController()
   const onOuterAbort = () => controller.abort()
-  options.signal?.addEventListener('abort', onOuterAbort, { once: true })
-  const unregister = registerPiInFlight(options.inFlightId ?? `single-shot:${randomUUID()}`, controller)
+  let unregister = () => {}
 
   try {
     throwIfAborted(options.signal)
+    const { models, model } = createPiModels(profile)
+    const tools = [asPiTool(submitTool)]
+    options.signal?.addEventListener('abort', onOuterAbort, { once: true })
+    unregister = registerPiInFlight(options.inFlightId ?? `single-shot:${randomUUID()}`, controller)
     const stream = models.stream(model, {
       systemPrompt,
       messages: [{ role: 'user', content: userPrompt, timestamp: Date.now() }],
@@ -124,6 +125,7 @@ export async function streamSingleShot(
     throw error
   } finally {
     unregister()
+    releaseSlot()
     options.signal?.removeEventListener('abort', onOuterAbort)
   }
 }

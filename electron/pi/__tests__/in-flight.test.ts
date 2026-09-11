@@ -3,7 +3,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   abortAllPiInFlight,
   abortPiInFlight,
+  acquirePiOneShotSlot,
+  PiConcurrencyError,
+  PI_MAX_ONE_SHOT,
   piInFlightCount,
+  piOneShotActiveCount,
   registerPiInFlight,
   resetPiInFlightForTests,
 } from '../in-flight'
@@ -42,5 +46,14 @@ describe('pi in-flight registry', () => {
 
     expect(first).toHaveBeenCalledOnce()
     expect(second).toHaveBeenCalledOnce()
+  })
+
+  it('caps concurrent one-shot slots', () => {
+    const slots = Array.from({ length: PI_MAX_ONE_SHOT }, () => acquirePiOneShotSlot())
+    expect(piOneShotActiveCount()).toBe(PI_MAX_ONE_SHOT)
+    expect(() => acquirePiOneShotSlot()).toThrow(PiConcurrencyError)
+    slots[0]!()
+    expect(() => acquirePiOneShotSlot()).not.toThrow()
+    expect(piOneShotActiveCount()).toBe(PI_MAX_ONE_SHOT)
   })
 })

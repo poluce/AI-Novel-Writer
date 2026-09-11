@@ -163,7 +163,7 @@ export default function PromptSettings() {
       >
         <span className="flex-shrink-0 mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{text('提示', 'Note')}</span>
         <span>
-          {text('自定义提示词仅修改 AI 的创作指导策略，输出格式约束（如 JSON schema）会自动追加，不受自定义影响。支持两级覆盖：全局（所有小说生效）和项目（仅当前小说生效）。', 'Custom prompts change AI writing guidance only. Output constraints such as JSON schemas are appended automatically. Overrides can be global for all novels or project-specific.')}
+          {text('自定义提示词仅修改 AI 的创作指导策略，提交工具的字段契约会自动追加，不受自定义影响。若旧覆盖仍含 JSON/XML 交卷指令，使用「恢复默认」。支持两级覆盖：全局（所有小说生效）和项目（仅当前小说生效）。', 'Custom prompts change AI writing guidance only. Submit-tool field contracts are appended automatically. If an old override still tells the model to dump JSON or XML, use Restore default. Overrides can be global for all novels or project-specific.')}
         </span>
       </div>
 
