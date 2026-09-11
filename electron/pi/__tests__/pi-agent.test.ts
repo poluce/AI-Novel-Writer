@@ -99,4 +99,46 @@ describe('createPiAgent', () => {
     expect(toolCompletes).toHaveLength(1)
     expect(toolCompletes[0].status).toBe('failed')
   })
+
+  it('stops after an unknown write commit instead of letting the model retry', async () => {
+    const WriteSchema = Type.Object({ file_path: Type.String(), content: Type.String() })
+    const writeTool: AgentTool<typeof WriteSchema, { commitState: 'unknown' }> = {
+      name: 'write_file',
+      label: 'Write File',
+      description: 'Write a file.',
+      parameters: WriteSchema,
+      execute: async () => ({
+        content: [{ type: 'text', text: '写入结果未知' }],
+        details: { commitState: 'unknown' },
+      }),
+    }
+
+    const faux = fauxProvider()
+    const models = createModels()
+    models.setProvider(faux.provider)
+    faux.setResponses([
+      fauxAssistantMessage([fauxToolCall('write_file', { file_path: 'notes.md', content: 'x' })]),
+      fauxAssistantMessage('I will retry the write now.'),
+    ])
+
+    let doneText = ''
+    const handle = createPiAgent({
+      model: faux.getModel(),
+      streamFn: models.streamSimple.bind(models),
+      systemPrompt: 'Writer.',
+      tools: [writeTool],
+      callbacks: {
+        onTextChunk: () => {},
+        onToolCallStart: () => {},
+        onToolCallConfirmRequired: async () => true,
+        onToolCallComplete: () => {},
+        onDone: (fullText) => { doneText = fullText },
+        onError: () => {},
+      },
+    })
+
+    await handle.prompt('write notes')
+
+    expect(doneText).not.toContain('I will retry the write now.')
+  })
 })

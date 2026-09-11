@@ -6,11 +6,13 @@ import { Type } from '@earendil-works/pi-ai'
 import { getCurrentProjectPath } from '../../database'
 import { assertProjectFilePath } from '../../utils/project-context'
 import {
+  atomicWriteFailureCommitState,
   createSecureFileCapability,
   windowsSafeFileSystem,
   type SecureFileCapability,
 } from '../../security/windows-safe-file-system'
 import { projectFactWorkflowForFilePath } from '../../../src/services/project-fact-targets'
+import type { FileWriteCommitState } from '../../../src/shared/ipc-channels'
 import {
   writingLanguageText,
   type WritingLanguage,
@@ -32,7 +34,7 @@ function parentCapability(capability: SecureFileCapability): SecureFileCapabilit
 
 export function createWriteFileTool(
   language: WritingLanguage,
-): AgentTool<typeof Schema, { path: string; characters: number }> {
+): AgentTool<typeof Schema, { path: string; characters: number; commitState: FileWriteCommitState }> {
   const text = (zhCN: string, enUS: string) => writingLanguageText(language, zhCN, enUS)
   const description = language === 'en-US'
     ? 'Create or overwrite a file in the project after user confirmation.'
@@ -77,7 +79,17 @@ export function createWriteFileTool(
         const capability = createSecureFileCapability(projectPath, fullPath)
         await windowsSafeFileSystem.mkdir(parentCapability(capability))
         await windowsSafeFileSystem.writeTextAtomically(capability, content)
-      } catch {
+      } catch (error) {
+        const commitState = atomicWriteFailureCommitState(error) ?? 'not_committed'
+        if (commitState === 'unknown') {
+          return {
+            content: [{ type: 'text', text: text(
+              '写入结果未知：文件可能已写入，请勿自动重试。',
+              'Write result is unknown: the file may already have been written. Do not retry automatically.',
+            ) }],
+            details: { path: fullPath, characters: content.length, commitState },
+          }
+        }
         throw new Error(text('写入失败', 'Could not write the file'))
       }
 
@@ -86,7 +98,7 @@ export function createWriteFileTool(
           `✅ 文件已写入：${filePath}（${content.length} 字符）`,
           `✅ File written: ${filePath} (${content.length} characters)`,
         ) }],
-        details: { path: fullPath, characters: content.length },
+        details: { path: fullPath, characters: content.length, commitState: 'committed' as const },
       }
     },
   }

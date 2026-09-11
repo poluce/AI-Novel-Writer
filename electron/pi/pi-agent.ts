@@ -8,6 +8,7 @@ import type { Model } from '@earendil-works/pi-ai'
 
 import type { ModelProfile } from '../../src/shared/ipc-channels'
 import type { PiToolCallInfo } from '../../src/shared/agent-events'
+import { afterUnknownCommit } from './commit-state'
 import { createPiModels } from './pi-models'
 
 export type { PiToolCallInfo } from '../../src/shared/agent-events'
@@ -76,6 +77,7 @@ export function createPiAgent(options: CreatePiAgentOptions): PiAgentHandle {
       call.status = 'running'
       return undefined
     },
+    afterToolCall: async (ctx) => afterUnknownCommit(ctx.result),
   })
 
   agent.subscribe((event) => {
