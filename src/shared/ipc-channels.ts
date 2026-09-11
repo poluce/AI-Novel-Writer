@@ -12,7 +12,7 @@ import type { EmbeddingOptions } from './embedding-options'
 import type { ModelCapabilities } from './provider-presets'
 import type { ModelProviderResourceId } from './model-provider-resources'
 import type { WritingLanguage } from './writing-language'
-import type { PiAgentEvent } from './agent-events'
+import type { PiAgentEvent, RendererAction } from './agent-events'
 import type { DraftStatus } from './draft-status'
 import type {
   RecoveryCandidate,
@@ -1166,6 +1166,7 @@ export interface AgentChannels {
 
 export interface AgentStreamEvents {
   'agent:event': { conversationId: string; event: PiAgentEvent }
+  'agent:renderer-action': { action: RendererAction }
 }
 
 export type AllInvokeChannels = WindowChannels & OfficialHomepageChannels & ModelProviderResourceChannels & ConfigChannels & UpdateChannels & SkinChannels & ProjectChannels & FileChannels & AppDataChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & ChapterLifecycleChannels & ImportChannels & MCPChannels & AgentChannels
