@@ -221,7 +221,7 @@
   7. 写作助手：写入工具需确认；`toolCalling: false` 模型被拒绝
   8. 切书：在途生成 abort，助手会话不跨书保活
 - [x] **数据读取回归**：列入上表第 1 条；代码路径未改配置/提示词/MCP/Skill 落盘位置
-- [ ] 全量回归：`pnpm typecheck` / `pnpm test` / `pnpm check:i18n` / `pnpm build`
+- [x] 全量回归：`tsc --noEmit`、`check:i18n`、`pnpm build` 已通过；Windows + UTF-8 下 `vitest run` **313 files / 2725 passed / 9 skipped**（补齐 `electron.exe` 后）
 - [ ] Windows 原生运行验证
 
 ## 阶段 7：文档与发布（P7）
