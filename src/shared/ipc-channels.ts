@@ -1151,7 +1151,7 @@ export interface MCPChannels {
 // ===== 合并所有频道 =====
 export interface AgentChannels {
   'agent:prompt': {
-    args: [conversationId: string, input: string]
+    args: [conversationId: string, input: string, modelId?: string]
     return: { success: boolean; error?: string }
   }
   'agent:confirm': {
