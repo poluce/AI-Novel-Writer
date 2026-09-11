@@ -76,9 +76,9 @@
 
 **单次调用**（起草、审稿交卷、修稿、定稿后处理、架构/蓝图、单字段、导入、规划资料、角色表修复、剧情树、叙事线索候选、编辑器选区 AI）
 
-- API：`pi-ai` 的流式补全（`models.streamSimple` 或带 `tools` 的流式变体）。**一次请求一次响应，不建 `Agent`、不建循环**
+- API：`pi-ai` 的流式补全（`models.stream(model, {...}, { toolChoice: 'any' })` 强制提交）。**一次请求一次响应，不建 `Agent`、不建循环**；主进程经 `await import('@earendil-works/pi-ai')` 动态加载（CJS 输出不能静态 import ESM-only 包）
 - 工具集：**只挂提交合同工具**（`submit_draft` / `submit_review` / `submit_revision` / `submit_finalization` …），**不挂读取工具**——一旦挂上读取工具，模型会调用后停下等结果，一次性语义即被破坏。上下文仍由 command 预先组装（与现状一致）
-- 输出：命中 `submit_*` 即校验落盘；未命中按可见文本处理（提示词已要求强制提交）
+- 输出：**pi-ai 流式路径不校验工具名**——须 app 显式 `validateToolCall(tools, call)` + 校验 `submit_*` 名字（幻觉/错名工具调用会静默成功，见 P0）。命中 `submit_*` 即校验落盘；未命中按可见文本处理
 - 取消：切书 / 取消任务 = abort 该次 stream（`AbortSignal`）
 - 记账：每次调用照旧写 `llm_calls`；**不产生会话历史**
 - 为什么不用 Agent：Agent 自带循环与状态，一次性用不上；包成 Agent 只会多出一个"为切书好杀"而存在的对象（见上条拍板）
@@ -105,16 +105,25 @@
 
 ## 阶段 0：调研与 PoC（P0）
 
-- [ ] 通读 pi-ai（一次流式 + tools）与 pi-agent-core（仅多轮）：Agent 类、事件流、`beforeToolCall`/`afterToolCall`/`transformContext`/`shouldStopAfterTurn`、`toolExecution: parallel`（写工具须 sequential）
-- [ ] 验证 pi-ai 对 OpenAI-compatible / Gemini 的原生工具调用支持与流式增量格式
+- [x] 通读 pi-ai（一次流式 + tools）与 pi-agent-core（仅多轮）：Agent 类、事件流、`beforeToolCall`/`afterToolCall`/`transformContext`/`shouldStopAfterTurn`、`toolExecution: parallel`（写工具须 sequential）——已通读 README/类型 + 两 PoC 实测；关键：Agent 唯一必需项是 `streamFn`；`await prompt()` 已阻塞到 idle；工具返回 `{content,details}`、失败 throw
+- [x] 验证 pi-ai 对 OpenAI-compatible / Gemini 的原生工具调用支持与流式增量格式——Gemini 原生 OK；**工具参数一次性整包下发**（单个 `toolcall_delta` = 完整 JSON，无增量 partial）；文本与工具事件会 interleave（Gemini 3 附带空 text part）
 - [x] 验证 pnpm 安装兼容性（Pi 是 npm monorepo，注意锁文件与依赖审查）——已装 pi-ai/pi-agent-core 0.85.1；**坑**：项目锁定的 pnpm 11.11.0 在本仓库 `resolved… downloaded 0, added 0` 处无限卡死（CPU 冻结、无 TCP），`packageManager` 已升 11.21.0（约 15s 完成，lockfileVersion 仍 9.0，见 commit 59079cc）
 - [x] **版本要求核查**：Pi 各包 `engines: node >=22.19.0`；Electron 41 主进程 = Node 24.18.0 ✓；但项目 `engines: node >=20` 是缺口（Node 20 本地/CI 会跑不动 Pi）→ 需决定是否把 engines 提到 >=22.19.0
 - [ ] **MCP 配置兼容核查**：`~/.vela/mcp_config.json` 在官方 SDK 下是否仍兼容（stdio/SSE 两类传输）
-- [ ] **打包适配验证**：Pi 包是 ESM，而 `vite.config.ts` 主进程输出 CJS（better-sqlite3/LanceDB/yauzl 为 external）——确认 external 策略或输出格式调整
+- [x] **打包适配验证**：**external + 动态 `import()`，不打包、不切格式**。全量 bundle 4.2MB 且 Bedrock SDK 用 `import(变量)` 逃逸打包器（运行时报 ERR_MODULE_NOT_FOUND）；external + 静态 import 会生成 `require()` 触发 ERR_PACKAGE_PATH_NOT_EXPORTED。主进程代码必须 `await import('@earendil-works/pi-ai')`（禁静态 import / 顶层 await），两包加进 `rollupOptions.external`
 - [ ] **Agent 运行位置验证**：渲染进程（现状，SQLite 不可达）vs 主进程（SQLite 直连）
-- [ ] 最小 PoC（多轮）：一个 Pi Agent 实例 + 一个自定义工具 + 事件流订阅 + `beforeToolCall` 确认
-- [ ] 最小 PoC（单次）：pi-ai 一次流式 + `tools` 强制 `submit_*`，验证「模型调用提交工具并把参数当产物」这条主路径
-- [ ] 验证单次路径下模型仍可能调用未挂载工具时的行为（应报错而非静默降级）
+- [x] 最小 PoC（多轮）：一个 Pi Agent 实例 + 一个自定义工具 + 事件流订阅 + `beforeToolCall` 确认——**一次跑通**（脚本 `p0-multi-turn.mjs`）；事件序 `agent_start→turn_start→…→tool_execution_*→toolResult→turn_end→…→agent_end`；`beforeToolCall` 在 `tool_execution_start` 之后、带校验后 args；第二轮 prompt 保留上下文（`agent.state.messages` 自动累积）
+- [x] 最小 PoC（单次）：pi-ai 一次流式 + `tools` 强制 `submit_*`，验证「模型调用提交工具并把参数当产物」这条主路径——**跑通**（脚本 `p0-single-shot.mjs`）；`toolChoice:'any'` 触发强制调用；`submit_chapter` 的 `{title,body}` 以整包 JSON 到达即产物
+- [x] 验证单次路径下模型仍可能调用未挂载工具时的行为（应报错而非静默降级）——**pi-ai 流式路径不校验工具名**：`tools=[]` 时 Gemini API 会拒（`MALFORMED_FUNCTION_CALL`→error），但挂别的工具时模型幻觉出 `submit_chapter` 会**静默成功**。故「未挂载工具必须报错」须由 app 显式 `validateToolCall(tools, call)` + 校验 `submit_*` 名字，不能依赖 pi-ai
+
+**P0 结论摘要（provider 接线 + 强制提交 + 打包）**
+
+- **Provider 接线**：内置 `googleProvider()` 硬编码官方域名，不能自定义 baseUrl/模型名；须 `createProvider({ id, baseUrl, auth:{ apiKey:{ resolve }}, models, api: googleGenerativeAIApi() })`。adapter 在设 `model.baseUrl` 时把 `@google/genai` 的 `apiVersion` 置空，故 **`model.baseUrl` 必须含 `/v1beta`**（= 代理 base + `/v1beta`）。
+- **强制提交**：`toolChoice:'any'` → Gemini `functionCallingConfig.mode=ANY`；但 **`tools` 为空时 pi-ai 静默丢弃 toolChoice**（`context.tools?.length ? … : undefined`），故单次调用务必至少挂一个 `submit_*`。
+- **产物校验**：pi-ai 不校验工具名/参数（流式路径 `functionCall.name` 原样透传）。「未挂载工具必须报错」= app 显式 `validateToolCall(tools, call)` + 校验期望的 `submit_*` 名；否则幻觉/错名会被当成功产物。
+- **预算**：Gemini 3 flash 隐藏思考计入 `maxOutputTokens`——`maxTokens:500` 会把强制调用截断到 `doneReason=length`；单次产物调用要留足 maxTokens（或降 thinking）。
+- **工具参数形态**：Google adapter 不流式 partial JSON，`toolcall_delta` 一次性携带完整参数 JSON；文本与工具事件会 interleave（Gemini 3 附带空 text part）。
+- **打包**：见 P0「打包适配验证」——主进程 external + `await import()`；Agent 单例建议放主进程（P0 未实测位置，仅 API 层验证）。
 
 ## 阶段 1：依赖与清理（P1）
 
