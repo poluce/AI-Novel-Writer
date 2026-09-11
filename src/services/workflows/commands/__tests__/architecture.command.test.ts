@@ -377,6 +377,7 @@ describe('GenerateConfigCommand error boundaries', () => {
       .resolves.toBe('生成的配置已成功应用！')
 
     expect(generateStream).toHaveBeenCalledOnce()
+    expect(generateStream.mock.calls[0]?.at(3)).toMatchObject({ submitTool: 'submit_json' })
     expect(onGenerated).toHaveBeenCalledWith(expect.objectContaining(JSON.parse(validConfigJson)))
     expect(saveProject).toHaveBeenCalledOnce()
   })

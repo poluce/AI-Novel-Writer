@@ -321,6 +321,7 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
         purpose: 'import-inference:endpoint-card-recovery',
         reasoningStage: 'planning',
         writingSkillStage: 'planning',
+        submitTool: 'submit_json',
       },
       context,
     )
@@ -453,6 +454,7 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
         purpose: 'import-inference',
         reasoningStage: 'planning',
         writingSkillStage: 'planning',
+        submitTool: 'submit_json',
       },
       context,
     )
@@ -477,6 +479,7 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
           purpose: repairTask.purpose,
           reasoningStage: 'planning',
           writingSkillStage: 'planning',
+          submitTool: 'submit_json',
           ...(repairTask.promptBudget ? { promptBudget: repairTask.promptBudget } : {}),
         },
         context,

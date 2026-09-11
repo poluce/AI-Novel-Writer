@@ -173,11 +173,11 @@
   - [x] `review-chapter`（审稿）
   - [x] `refine-draft` / `refine-from-review`（修稿）
   - [ ] `finalize-chapter` + 定稿后处理（章节要点）——要点已走 `submit_text`；角色卡仍 `json_object`
-  - [ ] `architecture`（情节大纲）
+  - [x] `architecture`（情节大纲）
   - [x] `directory`（章节蓝图）
   - [x] `analyze-style`（文风分析）
   - [x] `generate-field`（金手指/世界观/主角档案等逐字段）
-  - [ ] `import-novel`（导入推断）
+  - [x] `import-novel`（导入推断）
   - [ ] `planning-material`（规划资料 + 角色提取）
   - [ ] `legacy-character-roster-repair`
 - [ ] 非命令调用点替换：`plot-tree-generator`（剧情树）、`narrative-thread-candidate-generator`（叙事线索）、`batch-chapter-workflow`（批量创作，1–10 章/暂停/取消语义不变）

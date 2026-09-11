@@ -129,6 +129,11 @@ function textSchema() {
   })
 }
 
+/** Open JSON document: the tool arguments are the artifact root. */
+function jsonSchema() {
+  return Type.Unknown()
+}
+
 /** Draft / revision: title + full body. */
 export function submitDraftTool(): AgentTool<ReturnType<typeof draftSchema>> {
   return buildSubmitTool(
@@ -219,6 +224,16 @@ export function submitTextTool(): AgentTool<ReturnType<typeof textSchema>> {
   )
 }
 
+/** Structured JSON whose root object is the command artifact. */
+export function submitJsonTool(): AgentTool<ReturnType<typeof jsonSchema>> {
+  return buildSubmitTool(
+    'submit_json',
+    'Submit JSON',
+    'Submit a JSON object artifact. The tool arguments are the document root, not a wrapped string.',
+    jsonSchema(),
+  )
+}
+
 export function createSubmitTool(name: SubmitToolName): AgentTool<any> {
   switch (name) {
     case 'submit_draft': return submitDraftTool()
@@ -230,6 +245,7 @@ export function createSubmitTool(name: SubmitToolName): AgentTool<any> {
     case 'submit_field': return submitFieldTool()
     case 'submit_style_analysis': return submitStyleAnalysisTool()
     case 'submit_text': return submitTextTool()
+    case 'submit_json': return submitJsonTool()
   }
 }
 

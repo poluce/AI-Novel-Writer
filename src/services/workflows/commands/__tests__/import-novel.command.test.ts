@@ -585,6 +585,8 @@ describe('InferGlobalSettingsCommand', () => {
     }
 
     expect(generateStream).toHaveBeenCalledTimes(2)
+    expect(generateStream.mock.calls[0][3]?.submitTool).toBe('submit_json')
+    expect(generateStream.mock.calls[1][3]?.submitTool).toBe('submit_json')
     expect(generateStream.mock.calls[0][3]?.modelExecutionLeaseId)
       .toBe(generateStream.mock.calls[1][3]?.modelExecutionLeaseId)
     expect(invoke.mock.calls.filter(([channel]) => channel === 'db:import-global-facts-commit')).toHaveLength(1)

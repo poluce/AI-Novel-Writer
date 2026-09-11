@@ -9,6 +9,7 @@ import {
   submitOutlineTool,
   submitReviewTool,
   submitRevisionTool,
+  submitJsonTool,
   submitStyleAnalysisTool,
   submitTextTool,
   visibleTextFromSubmitArtifact,
@@ -25,6 +26,7 @@ describe('submit contract tools', () => {
     expect(submitFieldTool().name).toBe('submit_field')
     expect(submitStyleAnalysisTool().name).toBe('submit_style_analysis')
     expect(submitTextTool().name).toBe('submit_text')
+    expect(submitJsonTool().name).toBe('submit_json')
   })
 
   it('returns the submitted arguments as execute details', async () => {
@@ -49,6 +51,7 @@ describe('submit contract tools', () => {
 
   it('resolves submit_field by name', () => {
     expect(createSubmitTool('submit_field').name).toBe('submit_field')
+    expect(createSubmitTool('submit_json').name).toBe('submit_json')
   })
 
   it('prefers the field artifact value over visible text', () => {

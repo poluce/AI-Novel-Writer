@@ -9,6 +9,7 @@ export const SUBMIT_TOOL_NAMES = [
   'submit_field',
   'submit_style_analysis',
   'submit_text',
+  'submit_json',
 ] as const
 
 export type SubmitToolName = typeof SUBMIT_TOOL_NAMES[number]

@@ -999,6 +999,7 @@ export class GenerateConfigCommand extends BaseWorkflowCommand<string> {
         purpose: 'generate-global-config',
         reasoningStage: 'planning',
         writingSkillStage: 'planning',
+        submitTool: 'submit_json',
       },
       context,
     )
@@ -1019,6 +1020,7 @@ export class GenerateConfigCommand extends BaseWorkflowCommand<string> {
           purpose: 'generate-global-config-replacement',
           reasoningStage: 'planning',
           writingSkillStage: 'planning',
+          submitTool: 'submit_json',
         },
         context,
       )
@@ -1062,6 +1064,7 @@ export class GenerateConfigCommand extends BaseWorkflowCommand<string> {
           purpose: 'generate-global-guidance-replacement',
           reasoningStage: 'planning',
           writingSkillStage: 'planning',
+          submitTool: 'submit_field',
         },
         context,
       )
@@ -1162,7 +1165,7 @@ export class GenerateCoreSeedCommand extends BaseWorkflowCommand<string> {
     const result = await this.callLLMWithBuilder(
       promptBuilder,
       callbacks,
-      { purpose: 'generate-core-seed', reasoningStage: 'planning', writingSkillStage: 'planning' },
+      { purpose: 'generate-core-seed', reasoningStage: 'planning', writingSkillStage: 'planning', submitTool: 'submit_text' },
       context,
     )
     if (!result.trim()) throw new Error(text(
@@ -1323,6 +1326,7 @@ export class GenerateCharactersCommand extends BaseWorkflowCommand<string> {
         purpose: 'character-architecture-manifest',
         reasoningStage: 'planning',
         writingSkillStage: 'planning',
+        submitTool: 'submit_json',
         promptBudget: {
           limitUtf8Bytes: MAX_CHARACTER_STRUCTURED_CONTEXT_UTF8_BYTES,
           sections: [
@@ -1382,6 +1386,7 @@ export class GenerateCharactersCommand extends BaseWorkflowCommand<string> {
         return {
           purpose: 'character-architecture-details',
           output: 'structured-data',
+          submitTool: 'submit_json',
           messages: [
             { role: 'system', content: detailSystem },
             {
@@ -1652,7 +1657,7 @@ export class GenerateWorldBuildingCommand extends BaseWorkflowCommand<string> {
     const result = await this.callLLMWithBuilder(
       promptBuilder,
       callbacks,
-      { purpose: 'generate-world-building', reasoningStage: 'planning', writingSkillStage: 'planning' },
+      { purpose: 'generate-world-building', reasoningStage: 'planning', writingSkillStage: 'planning', submitTool: 'submit_text' },
       context,
     )
     if (context.cancelled) throw new Error(text('工作流已取消', 'Workflow was cancelled.'))
@@ -1983,6 +1988,7 @@ export class GeneratePlotArchitectureCommand extends BaseWorkflowCommand<string>
               : 'generate-plot-architecture',
           reasoningStage: 'planning',
           writingSkillStage: 'planning',
+          submitTool: 'submit_text',
         },
         seedText,
         maxContinuations: 3,
