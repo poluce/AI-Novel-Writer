@@ -207,7 +207,7 @@
 > 验收标准：**功能可用、数据可读、能力不降级**，回归测试是重点。
 
 - [x] agent 相关测试：自研 `agent-engine` 已删；`context-builder` / `tool-registry` / Skill 测试仍在。主进程 Pi Agent 有 `electron/pi/__tests__`
-- [ ] **主进程测试迁移**（`electron/__tests__/`：IPC handlers、package contract、启动/隔离等）——本机全量跑时因缺少 `electron.exe` 有 30 个套件无法加载，非 Pi 逻辑回归
+- [x] **主进程测试迁移**：migration / package-contract / KB 等在补上 `electron.exe` 后通过；`ipc-handlers-skin` 需 mock `registerAgentController`
 - [x] 12 个工作流命令测试仍覆盖产物、错误路径、取消语义（走 submit_* / generation runtime）
 - [x] 工具功能测试：`electron/pi/tools`（内置 + MCP + Skill）
 - [x] 新增能力门控测试（`toolCalling: false` 的生成模型被拒绝并提示）
