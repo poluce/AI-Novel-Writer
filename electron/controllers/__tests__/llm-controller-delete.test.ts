@@ -44,10 +44,6 @@ vi.mock('../../utils/config-utils', () => ({
   writeJsonFile: mocks.writeJsonFile,
 }))
 
-vi.mock('../../llm/llm-factory', () => ({
-  LLMFactory: { getProvider: vi.fn() },
-}))
-
 import { registerLLMController } from '../llm-controller'
 
 function deleteHandler(): IpcHandler {

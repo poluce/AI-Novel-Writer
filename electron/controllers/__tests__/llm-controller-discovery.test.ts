@@ -32,12 +32,6 @@ vi.mock('../../utils/config-utils', () => ({
   writeJsonFile: vi.fn(),
 }))
 
-vi.mock('../../llm/llm-factory', () => ({
-  LLMFactory: {
-    getProvider: vi.fn(() => ({ generate: vi.fn(), generateStream: vi.fn() })),
-  },
-}))
-
 vi.mock('../../database', () => ({ getCurrentProjectPath: () => null }))
 vi.mock('../../repositories/llm-repository', () => ({
   LLMHistoryRepository: { logCall: vi.fn() },

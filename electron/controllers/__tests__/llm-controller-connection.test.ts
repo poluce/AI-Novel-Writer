@@ -6,8 +6,6 @@ type IpcHandler = (...args: unknown[]) => Promise<unknown>
 
 const mocks = vi.hoisted(() => ({
   handlers: new Map<string, IpcHandler>(),
-  generate: vi.fn(),
-  generateStream: vi.fn(),
   streamSingleShot: vi.fn(),
   send: vi.fn(),
   logCall: vi.fn(),
@@ -31,12 +29,6 @@ vi.mock('../../utils/config-utils', () => ({
   readJsonFile: vi.fn((filePath: string, fallback: unknown) => filePath === 'models.json' ? mocks.models : fallback),
   tryReadJsonFile: vi.fn(() => ({ status: 'missing' })),
   writeJsonFile: vi.fn(),
-}))
-
-vi.mock('../../llm/llm-factory', () => ({
-  LLMFactory: {
-    getProvider: vi.fn(() => ({ generate: mocks.generate, generateStream: mocks.generateStream })),
-  },
 }))
 
 vi.mock('../../pi/pi-single-shot', () => ({
@@ -119,13 +111,6 @@ beforeAll(() => {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mocks.generate.mockImplementation(async (
-    _model: ModelProfile,
-    _messages: unknown,
-    options: { maxTokens: number },
-  ) => options.maxTokens <= 10
-    ? { success: false, content: '', finishReason: 'length', error: 'API 返回的文本未正常完成' }
-    : { success: true, content: 'hello', finishReason: 'stop' })
   mocks.models = [deepSeekModel]
   mocks.assertCurrentProjectContext.mockReturnValue({ rootPath: 'C:/projects/A' })
   mocks.streamSingleShot.mockResolvedValue({ artifact: undefined, text: 'hello', finishReason: 'stop' })
@@ -216,8 +201,6 @@ describe('llm generation parameter policy controller integration', () => {
     })
     await connectionHandler()({}, xaiReasoningModel, 'deep-planning')
 
-    expect(mocks.generate).not.toHaveBeenCalled()
-    expect(mocks.generateStream).not.toHaveBeenCalled()
     expect(mocks.streamSingleShot).toHaveBeenCalledTimes(3)
     for (const call of mocks.streamSingleShot.mock.calls) {
       expect(call[4]).toMatchObject({
@@ -244,8 +227,6 @@ describe('llm generation parameter policy controller integration', () => {
     })
     await connectionHandler()({}, legacyDeepSeekV4Model, 'auto')
 
-    expect(mocks.generate).not.toHaveBeenCalled()
-    expect(mocks.generateStream).not.toHaveBeenCalled()
     expect(mocks.streamSingleShot.mock.calls[0]?.[4]).toMatchObject({
       samplingParams: { thinking: { type: 'disabled' } },
     })
@@ -289,7 +270,6 @@ describe('llm generation parameter policy controller integration', () => {
       responseFormat: { type: 'json_object' },
     })
 
-    expect(mocks.generateStream).not.toHaveBeenCalled()
     expect(mocks.streamSingleShot).toHaveBeenCalledWith(
       genericModel,
       '',
@@ -339,7 +319,6 @@ describe('llm generation parameter policy controller integration', () => {
       messages: [{ role: 'user', content: 'write' }],
       maxTokens: 512,
     })
-    expect(mocks.generateStream).not.toHaveBeenCalled()
     expect(mocks.streamSingleShot).toHaveBeenCalledWith(
       fixedTemperatureKimiModel,
       '',
@@ -388,7 +367,6 @@ describe('llm generation parameter policy controller integration', () => {
       messages: [{ role: 'user', content: 'write' }],
     })).rejects.toThrow('0 到 1')
 
-    expect(mocks.generateStream).not.toHaveBeenCalled()
     expect(mocks.streamSingleShot).not.toHaveBeenCalled()
     await expect(handler('llm:cancel')({}, requestId)).resolves.toEqual({ success: false })
   })
@@ -478,7 +456,6 @@ describe('llm model execution lease controller integration', () => {
       maxTokens: 512,
     })).resolves.toEqual({ requestId: 'leased-stream', started: true })
 
-    expect(mocks.generateStream).not.toHaveBeenCalled()
     expect(mocks.streamSingleShot).toHaveBeenCalledWith(
       expect.objectContaining({
         id: leasedModel.id,
@@ -523,7 +500,6 @@ describe('llm model execution lease controller integration', () => {
 
   it('fails a stream closed when its lease is unknown instead of falling back to model id', async () => {
     mocks.models = [deepSeekModel]
-    mocks.generateStream.mockClear()
     mocks.streamSingleShot.mockClear()
 
     await expect(handler('llm:generate-stream')({ sender: {} }, 'unknown-lease-stream', {
@@ -535,7 +511,6 @@ describe('llm model execution lease controller integration', () => {
       started: false,
       error: expect.stringContaining('模型执行租约无效'),
     })
-    expect(mocks.generateStream).not.toHaveBeenCalled()
     expect(mocks.streamSingleShot).not.toHaveBeenCalled()
   })
 })
@@ -665,7 +640,7 @@ describe('llm project statistics', () => {
     }))
   })
 
-  it('uses pi-ai one-shot when submitTool is set and does not call LLMFactory streaming', async () => {
+  it('uses the requested submit_* tool for a one-shot stream', async () => {
     const handler = mocks.handlers.get('llm:generate-stream')
     if (!handler) throw new Error('Missing llm:generate-stream handler')
     mocks.streamSingleShot.mockResolvedValue({
@@ -687,7 +662,6 @@ describe('llm project statistics', () => {
     await mocks.streamSingleShot.mock.results[0]?.value
     await Promise.resolve()
 
-    expect(mocks.generateStream).not.toHaveBeenCalled()
     expect(mocks.streamSingleShot).toHaveBeenCalledOnce()
     expect(mocks.send).toHaveBeenCalledWith('llm:stream-done', {
       requestId: 'field-stream',
