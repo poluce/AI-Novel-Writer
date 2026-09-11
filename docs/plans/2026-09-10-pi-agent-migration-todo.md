@@ -107,8 +107,8 @@
 
 - [ ] 通读 pi-ai（一次流式 + tools）与 pi-agent-core（仅多轮）：Agent 类、事件流、`beforeToolCall`/`afterToolCall`/`transformContext`/`shouldStopAfterTurn`、`toolExecution: parallel`（写工具须 sequential）
 - [ ] 验证 pi-ai 对 OpenAI-compatible / Gemini 的原生工具调用支持与流式增量格式
-- [ ] 验证 pnpm 安装兼容性（Pi 是 npm monorepo，注意锁文件与依赖审查）
-- [ ] **版本要求核查**：Pi 各包对 Node / Electron 版本的要求 vs 项目 `engines: node >=20` 与 Electron 41（影响 CI 与本地开发环境）
+- [x] 验证 pnpm 安装兼容性（Pi 是 npm monorepo，注意锁文件与依赖审查）——已装 pi-ai/pi-agent-core 0.85.1；**坑**：项目锁定的 pnpm 11.11.0 在本仓库 `resolved… downloaded 0, added 0` 处无限卡死（CPU 冻结、无 TCP），`packageManager` 已升 11.21.0（约 15s 完成，lockfileVersion 仍 9.0，见 commit 59079cc）
+- [x] **版本要求核查**：Pi 各包 `engines: node >=22.19.0`；Electron 41 主进程 = Node 24.18.0 ✓；但项目 `engines: node >=20` 是缺口（Node 20 本地/CI 会跑不动 Pi）→ 需决定是否把 engines 提到 >=22.19.0
 - [ ] **MCP 配置兼容核查**：`~/.vela/mcp_config.json` 在官方 SDK 下是否仍兼容（stdio/SSE 两类传输）
 - [ ] **打包适配验证**：Pi 包是 ESM，而 `vite.config.ts` 主进程输出 CJS（better-sqlite3/LanceDB/yauzl 为 external）——确认 external 策略或输出格式调整
 - [ ] **Agent 运行位置验证**：渲染进程（现状，SQLite 不可达）vs 主进程（SQLite 直连）
@@ -118,7 +118,7 @@
 
 ## 阶段 1：依赖与清理（P1）
 
-- [ ] 添加 `@earendil-works/pi-agent-core`、`@earendil-works/pi-ai` 依赖（精确锁版本）
+- [x] 添加 `@earendil-works/pi-agent-core`、`@earendil-works/pi-ai` 依赖（精确锁版本）——0.85.1（commit 59079cc）；**不另加 typebox**：pi-ai 已 re-export `Type`/`Static`/`TSchema`（其内部 typebox@1.3.7），另加会造第二份 typebox 实例、有 schema 校验失配风险
 - [ ] 添加官方 `@modelcontextprotocol/sdk`（替换自研 MCP 客户端）
 - [ ] 能力检测加 `toolCalling` 位（`resolveModelProfileCapabilities` 扩展）；**现有 `~/.vela/models.json` 照常读取**，能力重新探测，不改文件格式约定
 - [ ] 删除 4 格式解析器（`parseToolCalls` 及三个宽松格式解析函数）
