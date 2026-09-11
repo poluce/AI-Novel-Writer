@@ -356,6 +356,7 @@ export async function generatePlotTree(
         purpose: 'plot-tree-snapshot',
         reasoningStage: 'planning' as const,
         output: 'structured-data' as const,
+        submitTool: 'submit_json' as const,
         messages: [
           {
             role: 'system' as const,

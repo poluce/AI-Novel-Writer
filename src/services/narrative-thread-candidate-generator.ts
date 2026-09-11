@@ -137,6 +137,7 @@ export function createNarrativeThreadCandidateGenerator(
           purpose: 'narrative-thread-plan-candidate',
           reasoningStage: 'planning',
           output: 'structured-data',
+          submitTool: 'submit_json',
           messages: [
             {
               role: 'system',
@@ -181,6 +182,7 @@ export function createNarrativeThreadCandidateGenerator(
           purpose: 'narrative-thread-event-candidate',
           reasoningStage: 'review',
           output: 'structured-data',
+          submitTool: 'submit_json',
           messages: [
             {
               role: 'system',

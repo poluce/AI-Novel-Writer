@@ -296,6 +296,7 @@ export class ExtractPlanningMaterialCharactersCommand extends BaseWorkflowComman
         return {
           purpose: 'planning-material-character-extraction',
           output: 'structured-data',
+          submitTool: 'submit_json',
           messages: [
             {
               role: 'system',

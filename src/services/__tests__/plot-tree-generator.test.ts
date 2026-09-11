@@ -298,6 +298,7 @@ describe('plot tree AI boundary', () => {
       purpose: 'plot-tree-snapshot',
       reasoningStage: 'planning',
       output: 'structured-data',
+      submitTool: 'submit_json',
     })
     expect(task?.messages[0]?.content).not.toMatch(/[\u3400-\u9fff]/u)
     expect(result.generatedAt).toBe('2026-09-02T03:04:05.000Z')

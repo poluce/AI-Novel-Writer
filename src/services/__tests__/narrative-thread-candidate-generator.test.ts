@@ -177,6 +177,7 @@ describe('narrative thread AI candidate boundary', () => {
       purpose: 'narrative-thread-plan-candidate',
       reasoningStage: 'planning',
       output: 'structured-data',
+      submitTool: 'submit_json',
     })
     expect(observedTask?.messages.find(message => message.role === 'system')?.content).toContain('1..12')
     expect(JSON.parse(observedTask?.messages.find(message => message.role === 'user')?.content ?? '{}'))
@@ -235,6 +236,7 @@ describe('narrative thread AI candidate boundary', () => {
       purpose: 'narrative-thread-event-candidate',
       reasoningStage: 'review',
       output: 'structured-data',
+      submitTool: 'submit_json',
     })
   })
 })

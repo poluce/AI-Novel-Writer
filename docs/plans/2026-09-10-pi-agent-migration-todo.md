@@ -168,19 +168,21 @@
 - [x] **一次性调用骨架**：`pi-ai` 流式 + `tools`（仅提交合同工具）+ `toolChoice` 强制；命中 `submit_*` 即 `validateToolCall`，错名拒绝，未命中按可见文本处理
 - [x] **不挂读取工具**：`streamSingleShot` 只接受一个 submit 工具；上下文继续由 command 预先组装
 - [ ] 提交工具的 schema 与现有输出合同一一对应（字段、必填、上限），由 schema 取代提示词里的 JSON 说明——核心 `submit_*` 已落地（`electron/pi/submit-tools.ts`），各 command 替换时再按上限收紧
-- [ ] 12 个工作流命令逐个替换 LLM 调用层（产物结构可按工具调用重定，但产出能力不得缺失）：
+- [x] 12 个工作流命令逐个替换 LLM 调用层（产物结构可按工具调用重定，但产出能力不得缺失）：
   - [x] `generate-draft`（起草）
   - [x] `review-chapter`（审稿）
   - [x] `refine-draft` / `refine-from-review`（修稿）
-  - [ ] `finalize-chapter` + 定稿后处理（章节要点）——要点已走 `submit_text`；角色卡仍 `json_object`
+  - [x] `finalize-chapter` + 定稿后处理（章节要点 `submit_text`；角色卡 `submit_json`）
   - [x] `architecture`（情节大纲）
   - [x] `directory`（章节蓝图）
   - [x] `analyze-style`（文风分析）
   - [x] `generate-field`（金手指/世界观/主角档案等逐字段）
   - [x] `import-novel`（导入推断）
-  - [ ] `planning-material`（规划资料 + 角色提取）
-  - [ ] `legacy-character-roster-repair`
-- [ ] 非命令调用点替换：`plot-tree-generator`（剧情树）、`narrative-thread-candidate-generator`（叙事线索）、`batch-chapter-workflow`（批量创作，1–10 章/暂停/取消语义不变）
+  - [x] `planning-material`（规划资料 + 角色提取）
+  - [x] `legacy-character-roster-repair`
+- [ ] 非命令调用点替换：`batch-chapter-workflow`（批量创作，1–10 章/暂停/取消语义不变；底层已走 generate-draft）
+  - [x] `plot-tree-generator`（剧情树 → `submit_json`）
+  - [x] `narrative-thread-candidate-generator`（叙事线索 → `submit_json`）
   - [x] `CodeMirrorEditor` 内联 AI（选区润色 → `submit_text`）
 - [ ] 结构化输出：**全部走工具调用**（报告类 + 正文）；正文工具参数返回后一次性显示，不做增量解析
 - [ ] 生成中 UI 状态：正文生成期间显示"生成中"进度状态（替代原有流式正文渲染）

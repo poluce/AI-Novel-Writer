@@ -235,6 +235,7 @@ describe('legacy character roster repair public workflow seam', () => {
     const repairOptions = (generateStream.mock.calls as unknown as unknown[][])[1]?.[3]
     expect(repairOptions).toMatchObject({
       purpose: 'legacy-character-roster-json-repair',
+      submitTool: 'submit_json',
     })
     expect(repairOptions).not.toHaveProperty('temperature')
     expect(invoke.mock.calls.map(([channel]) => channel).filter(channel => channel.startsWith('db:character-roster'))).toEqual([
