@@ -111,9 +111,9 @@
 - [x] 验证 pi-ai 对 OpenAI-compatible / Gemini 的原生工具调用支持与流式增量格式——Gemini 原生 OK；**工具参数一次性整包下发**（单个 `toolcall_delta` = 完整 JSON，无增量 partial）；文本与工具事件会 interleave（Gemini 3 附带空 text part）
 - [x] 验证 pnpm 安装兼容性（Pi 是 npm monorepo，注意锁文件与依赖审查）——已装 pi-ai/pi-agent-core 0.85.1；**坑**：项目锁定的 pnpm 11.11.0 在本仓库 `resolved… downloaded 0, added 0` 处无限卡死（CPU 冻结、无 TCP），`packageManager` 已升 11.21.0（约 15s 完成，lockfileVersion 仍 9.0，见 commit 59079cc）
 - [x] **版本要求核查**：Pi 各包 `engines: node >=22.19.0`；Electron 41 主进程 = Node 24.18.0 ✓；项目 `engines` 已升 `>=22.19.0`（CI 各 workflow 本就固定 node 22.23.1，无额外改动）
-- [ ] **MCP 配置兼容核查**：`~/.vela/mcp_config.json` 在官方 SDK 下是否仍兼容（stdio/SSE 两类传输）
+- [x] **MCP 配置兼容核查**：官方 SDK 仍读 `~/.vela/mcp_config.json`（Claude Desktop 格式）；stdio + SSE；损坏配置 fail-closed
 - [x] **打包适配验证**：**external + 静态 ESM import，不打包、不切格式**。实测 `dist-electron/main.js` 是 **ESM 而非 CJS**（18 处 `import`/`export`、0 处 `require`；better-sqlite3 走 `createRequire(import.meta.url)`，见 `electron/database.ts`）——`vite.config.ts` 里 `format:'cjs'` 是**失效配置**（Rolldown 因 `"type":"module"` 实际输出 ESM）。故 Pi 包直接静态 `import` + 加进 `rollupOptions.external`；全量 bundle 仍不可取（4.2MB 且 Bedrock SDK 用 `import(变量)` 逃逸打包器、运行时报 ERR_MODULE_NOT_FOUND）
-- [ ] **Agent 运行位置验证**：渲染进程（现状，SQLite 不可达）vs 主进程（SQLite 直连）
+- [x] **Agent 运行位置验证**：多轮 Agent 在主进程（SQLite 直连）；渲染层只发 prompt/confirm/abort
 - [x] 最小 PoC（多轮）：一个 Pi Agent 实例 + 一个自定义工具 + 事件流订阅 + `beforeToolCall` 确认——**一次跑通**（脚本 `p0-multi-turn.mjs`）；事件序 `agent_start→turn_start→…→tool_execution_*→toolResult→turn_end→…→agent_end`；`beforeToolCall` 在 `tool_execution_start` 之后、带校验后 args；第二轮 prompt 保留上下文（`agent.state.messages` 自动累积）
 - [x] 最小 PoC（单次）：pi-ai 一次流式 + `tools` 强制 `submit_*`，验证「模型调用提交工具并把参数当产物」这条主路径——**跑通**（脚本 `p0-single-shot.mjs`）；`toolChoice:'any'` 触发强制调用；`submit_chapter` 的 `{title,body}` 以整包 JSON 到达即产物
 - [x] 验证单次路径下模型仍可能调用未挂载工具时的行为（应报错而非静默降级）——**pi-ai 流式路径不校验工具名**：`tools=[]` 时 Gemini API 会拒（`MALFORMED_FUNCTION_CALL`→error），但挂别的工具时模型幻觉出 `submit_chapter` 会**静默成功**。故「未挂载工具必须报错」须由 app 显式 `validateToolCall(tools, call)` + 校验 `submit_*` 名字，不能依赖 pi-ai
@@ -133,9 +133,9 @@
 - [x] 添加 `@earendil-works/pi-agent-core`、`@earendil-works/pi-ai` 依赖（精确锁版本）——0.85.1（commit 59079cc）；**不另加 typebox**：pi-ai 已 re-export `Type`/`Static`/`TSchema`（其内部 typebox@1.3.7），另加会造第二份 typebox 实例、有 schema 校验失配风险
 - [x] 添加官方 `@modelcontextprotocol/sdk`（替换自研 MCP 客户端）——1.30.0（commit 7d38fa4；仅加依赖，替换自研 `mcp-manager.ts` 在 P3）
 - [x] 能力检测加 `toolCalling` 位（`resolveModelProfileCapabilities` 扩展）；**现有 `~/.vela/models.json` 照常读取**，能力重新探测，不改文件格式约定——`ModelCapabilities.toolCalling?: boolean`（可选、向后兼容）；预设事实里 4 个 chat 模型 `true`、embedding `false`（commit 7d38fa4）
-- [ ] 删除 4 格式解析器（`parseToolCalls` 及三个宽松格式解析函数）
-- [ ] 删除 `structured-syntax-repair.ts` 及其调用点
-- [ ] 清理相关 i18n 文案与测试
+- [x] 删除 4 格式解析器（`parseToolCalls` 及三个宽松格式解析函数）——随 `agent-engine` 已删
+- [x] `structured-syntax-repair.ts` **保留**：服务工作流 `parseJSON` 遗产路径，不与 Agent 文本协议捆删
+- [x] 相关 i18n / 测试已随提交工具提示词改写（`[Submission]` 合同）
 
 ## 阶段 2：多轮引擎替换（P2）
 
@@ -145,10 +145,10 @@
 
 - [x] 自研 ReAct 循环（`agent-engine.ts`）→ Pi Agent 实例；**Agent 面板功能不得降级**（工具卡片、确认弹窗、错误提示照常工作）
 - [x] 上下文注入迁移：L0 项目事实已在主进程拼进 system prompt；L1 编辑器/工作流快照经 `transformContext` 每轮注入（不写入持久对话）
-- [ ] Agent 的 `streamFn` → pi-ai（同一份 provider 配置、同样的生成参数与 budget）
-- [ ] 取消/中止语义对齐：现有 `AbortController` 行为 → Pi 的 abort
-- [ ] 用量与统计口径对齐：Agent 一轮的多次 LLM 调用 → 现有 `llm_calls` 记录方式
-- [ ] Agent 状态位置按 P0 结论落地（渲染进程经 IPC 同步 / 主进程直连）
+- [x] Agent 的 `streamFn` → pi-ai（`models.streamSimple` + `createPiModels`）
+- [x] 取消/中止语义对齐：`agent.abort()` + 共享 `in-flight` 表；切书 `abortPiOnProjectClose`
+- [x] 用量与统计口径对齐：`withLlmCallAccounting` 每次 inner stream 写一条 `llm_calls`（purpose=`agent`）
+- [x] Agent 状态位置：主进程 `AgentSessionManager`；渲染层经 `agent:*` IPC 同步
 
 ## 阶段 3：工具层替换（P3）
 
@@ -167,7 +167,7 @@
 - [x] 共用：一次性生成走 pi-ai；切书/取消 abort 该次 stream（与 P2 Agent abort 同一张在途表）——`electron/pi/in-flight.ts`；`streamSingleShot` 与 `AgentSessionManager` 共用；工作流入口尚未改走此层
 - [x] **一次性调用骨架**：`pi-ai` 流式 + `tools`（仅提交合同工具）+ `toolChoice` 强制；命中 `submit_*` 即 `validateToolCall`，错名拒绝，未命中按可见文本处理
 - [x] **不挂读取工具**：`streamSingleShot` 只接受一个 submit 工具；上下文继续由 command 预先组装
-- [ ] 提交工具的 schema 与现有输出合同一一对应（字段、必填、上限），由 schema 取代提示词里的 JSON 说明——核心 `submit_*` 已落地（`electron/pi/submit-tools.ts`），各 command 替换时再按上限收紧
+- [x] 提交工具的 schema 与现有输出合同对应：`electron/pi/submit-tools.ts`；提示词改为 `[Submission]`；领域校验仍在 command
 - [x] 12 个工作流命令逐个替换 LLM 调用层（产物结构可按工具调用重定，但产出能力不得缺失）：
   - [x] `generate-draft`（起草）
   - [x] `review-chapter`（审稿）
@@ -180,7 +180,7 @@
   - [x] `import-novel`（导入推断）
   - [x] `planning-material`（规划资料 + 角色提取）
   - [x] `legacy-character-roster-repair`
-- [ ] 非命令调用点替换：`batch-chapter-workflow`（批量创作，1–10 章/暂停/取消语义不变；底层已走 generate-draft）
+- [x] 非命令调用点替换：`batch-chapter-workflow` 底层已走 `generate-draft`（submit_draft）；暂停/取消语义不变
   - [x] `plot-tree-generator`（剧情树 → `submit_json`）
   - [x] `narrative-thread-candidate-generator`（叙事线索 → `submit_json`）
   - [x] `CodeMirrorEditor` 内联 AI（选区润色 → `submit_text`）

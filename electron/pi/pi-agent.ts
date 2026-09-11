@@ -9,6 +9,7 @@ import type { Model } from '@earendil-works/pi-ai'
 import type { ModelProfile } from '../../src/shared/ipc-channels'
 import type { PiToolCallInfo } from '../../src/shared/agent-events'
 import { afterUnknownCommit } from './commit-state'
+import { withLlmCallAccounting } from './llm-call-accounting'
 import { createPiModels } from './pi-models'
 
 export type { PiToolCallInfo } from '../../src/shared/agent-events'
@@ -62,7 +63,7 @@ export function createPiAgent(options: CreatePiAgentOptions): PiAgentHandle {
       tools: options.tools,
       messages: [],
     },
-    streamFn: options.streamFn,
+    streamFn: withLlmCallAccounting(options.streamFn),
     transformContext: options.transformContext,
     beforeToolCall: async (ctx) => {
       const call = toolCalls.get(ctx.toolCall.id)
