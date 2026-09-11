@@ -5,7 +5,7 @@
   "author": "AI Novel Writer Maintainers",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@11.11.0",
+  "packageManager": "pnpm@11.21.0",
   "engines": {
     "node": ">=20"
   },
@@ -53,6 +53,8 @@
     "@codemirror/search": "^6.7.1",
     "@codemirror/state": "^6.6.0",
     "@codemirror/view": "^6.41.0",
+    "@earendil-works/pi-agent-core": "^0.85.1",
+    "@earendil-works/pi-ai": "^0.85.1",
     "@lancedb/lancedb": "0.22.3",
     "@lezer/highlight": "^1.2.3",
     "@monaco-editor/react": "^4.7.0",
