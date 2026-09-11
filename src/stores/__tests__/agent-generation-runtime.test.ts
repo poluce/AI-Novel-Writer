@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useLLMStore } from '../llm-store'
 import { useLocaleStore } from '../locale-store'
 import { useProjectStore } from '../project-store'
-import { useAgentStore } from '../agent-store'
+import { selectIsGenerating, useAgentStore } from '../agent-store'
 
 const ipcInvoke = vi.hoisted(() => vi.fn())
 
@@ -22,7 +22,6 @@ describe('Agent IPC bridge', () => {
     useAgentStore.setState({
       conversations: [],
       activeConversationId: null,
-      generating: false,
       activeRequestId: null,
       toolsInitialized: true,
     })
@@ -57,7 +56,25 @@ describe('Agent IPC bridge', () => {
     expect(conversation?.title).toBe('New conversation')
     expect(conversation?.messages.at(-1)?.content).toContain('### Available commands')
     expect(conversation?.messages.at(-1)?.content).toContain('Show available commands and features')
+    expect(conversation?.messages.at(-1)?.content).toContain('Mentions are not prefetched into the message.')
     expect(conversation?.messages.at(-1)?.content).not.toMatch(/[\u3400-\u9fff]/u)
+  })
+
+  it('sends @ mentions as user text without prefetching tool results', async () => {
+    ipcInvoke.mockResolvedValue({ success: true })
+
+    await useAgentStore.getState().sendMessage('@角色 帮我看看林舟')
+
+    expect(ipcInvoke).toHaveBeenCalledWith('agent:prompt', expect.any(String), '@角色 帮我看看林舟', undefined)
+  })
+
+  it('derives generating from the active conversation streaming message', async () => {
+    ipcInvoke.mockResolvedValue({ success: true })
+
+    await useAgentStore.getState().sendMessage('Keep writing')
+
+    expect(selectIsGenerating(useAgentStore.getState())).toBe(true)
+    expect(useAgentStore.getState()).not.toHaveProperty('generating')
   })
 
   it('shows a generic failure when agent:prompt reports an error', async () => {
@@ -82,6 +99,7 @@ describe('Agent IPC bridge', () => {
     expect(ipcInvoke).toHaveBeenCalledWith('agent:abort', expect.any(String))
     expect(useAgentStore.getState().getActiveConversation()?.messages.at(-1)?.content)
       .toContain('_(Generation stopped)_')
+    expect(selectIsGenerating(useAgentStore.getState())).toBe(false)
   })
 
   it('resolveToolConfirmation invokes agent:confirm', async () => {

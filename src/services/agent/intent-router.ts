@@ -197,30 +197,4 @@ export function parseMentions(input: string, locale: Locale = 'zh-CN'): ParsedMe
   return mentions
 }
 
-/**
- * 将提及转换为 Tool 调用上下文
- * 返回需要预先调用的 Tool 名称和参数列表
- */
-export function mentionsToToolCalls(mentions: ParsedMention[]): Array<{
-  toolName: string
-  args: Record<string, unknown>
-}> {
-  return mentions.map(m => {
-    switch (m.target.type) {
-      case 'architecture':
-        return { toolName: 'read_architecture', args: {} }
-      case 'character':
-        return { toolName: 'read_characters', args: {} }
-      case 'blueprint':
-        return { toolName: 'read_blueprint', args: {} }
-      case 'knowledge':
-        return { toolName: 'search_knowledge', args: { query: '' } }
-      case 'chapter':
-        return { toolName: 'list_chapters', args: {} }
-      case 'file':
-        return { toolName: 'read_file', args: { file_path: '' } }
-      default:
-        return { toolName: 'read_project_state', args: {} }
-    }
-  })
-}
+

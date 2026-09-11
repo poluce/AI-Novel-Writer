@@ -56,7 +56,7 @@
 - [x] 删除文本工具协议：`parseToolCalls`、三种宽松解析、DSML、`cleanAgentVisibleText`、`generateToolPrompt` XML 说明书与「每次最多一个」规则
 - [ ] 删除假 user `<tool_result>` 回灌；历史不再压成 16 条 user/assistant 字符串
 - [x] OpenAI 的 `finish_reason: tool_calls` / `function_call` 映射为 `stop`；已删除 `requireCompleteAgentResponse`
-- [ ] 删除全局 `generating` / `activeAbortController` / `pendingConfirmations` 单例；`@` 预填正文改为提示模型原生调工具
+- [x] 删除全局 `generating` / `activeAbortController` / `pendingConfirmations` 单例；`@` 预填正文改为提示模型原生调工具（生成中状态由会话 `streaming` 推导；`mentionsToToolCalls` 已删）
 - [x] 删除 `runAgentLoop`、手写 observation、Agent 整轮 `output: 'visible-text'`（`agent-engine.ts` 已删）
 - [x] 助手 LLM 运输交给 pi-ai：已删除自研 OpenAI/Gemini SSE 解析与 `LLMFactory`；`<think>` 剥除仍留给工作流落盘层；保留 models.json / 租约 / 推理策略适配
 - [ ] **不要**把项目 `leaseId`、模型执行租约、写工具确认、workflow claims、恢复候选、自研 MCP、工作流 `parseJSON`、`generation-harness` 预算、领域工具语义、写作 Skill、React UI 当作本条遗产删除

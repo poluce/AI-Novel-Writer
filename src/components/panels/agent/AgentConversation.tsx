@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowDown, Trash2, Workflow } from 'lucide-react'
-import { useAgentStore } from '../../../stores/agent-store'
+import { selectIsGenerating, useAgentStore } from '../../../stores/agent-store'
 import { useLayoutStore } from '../../../stores/layout-store'
 import { APP_BRAND } from '../../../shared/brand'
 import AgentMessage from './AgentMessage'
@@ -104,7 +104,8 @@ function EmptyState() {
 
 function ActiveConversation() {
   const text = useLocaleStore(s => s.text)
-  const { getActiveConversation, generating } = useAgentStore()
+  const { getActiveConversation } = useAgentStore()
+  const generating = useAgentStore(selectIsGenerating)
   const activeConv = getActiveConversation()
   const scrollRef = useRef<HTMLDivElement>(null)
   const [isAtBottom, setIsAtBottom] = useState(true)

@@ -60,7 +60,7 @@ export interface AgentConversation {
 
 // ===== Store 状态接口 =====
 
-interface AgentState {
+export interface AgentState {
   /** 所有会话列表（最新的排在前面） */
   conversations: AgentConversation[]
   /** 当前活跃会话 ID */
@@ -69,8 +69,6 @@ interface AgentState {
   showHistory: boolean
   /** 全局默认模式 */
   defaultMode: AgentMode
-  /** 当前是否正在生成（用于 UI 状态） */
-  generating: boolean
   /** 当前流式请求 ID（用于取消） */
   activeRequestId: string | null
   /** Tool 系统是否已初始化 */
@@ -134,8 +132,8 @@ const generateHelpText = (locale: Locale): string => {
     '',
     text('### @ 提及', '### @ mentions'),
     text(
-      '输入 `@` 可引用项目上下文：故事架构、角色卡、蓝图、知识库等。',
-      `Type \`@\` to reference project context: ${getAllMentionTargets(locale).map(target => target.displayName).join(', ')}.`,
+      '输入 `@` 可提示助手用工具读取项目上下文：故事架构、角色卡、蓝图、知识库等。提及不会预先塞进消息。',
+      `Type \`@\` to hint that the assistant should use tools for project context: ${getAllMentionTargets(locale).map(target => target.displayName).join(', ')}. Mentions are not prefetched into the message.`,
     ),
     '',
     text('### 可用工具', '### Available tools'),
@@ -160,6 +158,12 @@ let activeConversationId: string | null = null
 let activeAssistantMsgId: string | null = null
 let activeRequestUiLocale: Locale | null = null
 
+/** True when the active conversation has an in-flight assistant turn. */
+export function selectIsGenerating(state: Pick<AgentState, 'conversations' | 'activeConversationId'>): boolean {
+  const conversation = state.conversations.find(item => item.id === state.activeConversationId)
+  return Boolean(conversation?.messages.some(message => message.streaming))
+}
+
 /** 把主进程 PiToolCallInfo 映射为渲染层 ToolCallInfo（UI 兼容）。 */
 function toToolCallInfo(call: PiToolCallInfo): ToolCallInfo {
   return {
@@ -178,7 +182,6 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   activeConversationId: null,
   showHistory: false,
   defaultMode: 'planning',
-  generating: false,
   activeRequestId: null,
   toolsInitialized: false,
 
@@ -270,7 +273,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   },
 
   sendMessage: async (content) => {
-    if (!content.trim() || get().generating) return
+    if (!content.trim() || selectIsGenerating(get())) return
     const requestLocale = useLocaleStore.getState().locale
     const text = (zhCNText: string, enUSText: string) => requestLocale === 'en-US' ? enUSText : zhCNText
     let skillInvocation: { skill: LoadedSkill; input: string } | null = null
@@ -381,7 +384,6 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
 
     // 把用户消息 + 空助手消息写入会话
     set(state => ({
-      generating: true,
       conversations: state.conversations.map(c =>
         c.id === convId
           ? {
@@ -426,7 +428,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
           content: text('生成失败，请重试。', 'Generation failed. Please try again.'),
           streaming: false,
         }))
-        set({ generating: false, activeRequestId: null })
+        set({ activeRequestId: null })
       }
     } catch {
       updateAssistantMsg(m => ({
@@ -434,7 +436,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         content: text('生成失败，请重试。', 'Generation failed. Please try again.'),
         streaming: false,
       }))
-      set({ generating: false, activeRequestId: null })
+      set({ activeRequestId: null })
     }
   },
 
@@ -450,7 +452,6 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
 
     // 找到正在 streaming 的消息，关闭其状态
     set(state => ({
-      generating: false,
       activeRequestId: null,
       conversations: state.conversations.map(c => ({
         ...c,
@@ -536,7 +537,6 @@ if (typeof window !== 'undefined') {
       case 'done':
         updateActiveAssistantMsg(m => ({ ...m, content: event.fullText, streaming: false }))
         useAgentStore.setState(state => ({
-          generating: false,
           activeRequestId: null,
           conversations: state.conversations.map(c =>
             c.id === conversationId ? { ...c, updatedAt: Date.now() } : c
@@ -545,7 +545,7 @@ if (typeof window !== 'undefined') {
         break
       case 'error':
         updateActiveAssistantMsg(m => ({ ...m, content: event.message, streaming: false }))
-        useAgentStore.setState({ generating: false, activeRequestId: null })
+        useAgentStore.setState({ activeRequestId: null })
         break
     }
   })

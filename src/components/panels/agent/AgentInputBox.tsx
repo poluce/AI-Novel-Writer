@@ -8,7 +8,7 @@ import {
   AtSign,
   Workflow,
 } from 'lucide-react'
-import { useAgentStore, type AgentMode } from '../../../stores/agent-store'
+import { selectIsGenerating, useAgentStore, type AgentMode } from '../../../stores/agent-store'
 import { useLLMStore } from '../../../stores/llm-store'
 import type { ModelProfile } from '../../../shared/ipc-channels'
 import { useOutsideClick } from '../../../hooks/useOutsideClick'
@@ -28,7 +28,8 @@ export default function AgentInputBox() {
   const text = useLocaleStore(s => s.text)
   const [inputText, setInputText] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const { generating, sendMessage, cancelGeneration, getActiveConversation, setMode, setModelId } = useAgentStore()
+  const { sendMessage, cancelGeneration, getActiveConversation, setMode, setModelId } = useAgentStore()
+  const generating = useAgentStore(selectIsGenerating)
   const models = useLLMStore(s => s.models)
   const defaultModelId = useLLMStore(s => s.defaultModelId)
 
