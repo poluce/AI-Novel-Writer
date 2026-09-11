@@ -12,6 +12,7 @@ import type { EmbeddingOptions } from './embedding-options'
 import type { ModelCapabilities } from './provider-presets'
 import type { ModelProviderResourceId } from './model-provider-resources'
 import type { WritingLanguage } from './writing-language'
+import type { PiAgentEvent } from './agent-events'
 import type { DraftStatus } from './draft-status'
 import type {
   RecoveryCandidate,
@@ -1148,8 +1149,27 @@ export interface MCPChannels {
 }
 
 // ===== 合并所有频道 =====
-export type AllInvokeChannels = WindowChannels & OfficialHomepageChannels & ModelProviderResourceChannels & ConfigChannels & UpdateChannels & SkinChannels & ProjectChannels & FileChannels & AppDataChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & ChapterLifecycleChannels & ImportChannels & MCPChannels
-export type AllEventChannels = LLMStreamEvents & UpdateStateEvents & WindowEvents
+export interface AgentChannels {
+  'agent:prompt': {
+    args: [conversationId: string, input: string]
+    return: { success: boolean; error?: string }
+  }
+  'agent:confirm': {
+    args: [conversationId: string, toolCallId: string, confirmed: boolean]
+    return: { success: boolean }
+  }
+  'agent:abort': {
+    args: [conversationId: string]
+    return: { success: boolean }
+  }
+}
+
+export interface AgentStreamEvents {
+  'agent:event': { conversationId: string; event: PiAgentEvent }
+}
+
+export type AllInvokeChannels = WindowChannels & OfficialHomepageChannels & ModelProviderResourceChannels & ConfigChannels & UpdateChannels & SkinChannels & ProjectChannels & FileChannels & AppDataChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & ChapterLifecycleChannels & ImportChannels & MCPChannels & AgentChannels
+export type AllEventChannels = LLMStreamEvents & UpdateStateEvents & WindowEvents & AgentStreamEvents
 
 /** 提取 invoke 频道名 */
 export type InvokeChannel = keyof AllInvokeChannels

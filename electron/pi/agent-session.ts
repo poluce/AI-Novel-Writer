@@ -4,17 +4,10 @@ import type { Model } from '@earendil-works/pi-ai'
 import {
   createPiAgent,
   type PiAgentHandle,
-  type PiToolCallInfo,
 } from './pi-agent'
+import type { PiAgentEvent } from '../../src/shared/agent-events'
 
-/** Serializable agent event forwarded from main to the renderer UI. */
-export type PiAgentEvent =
-  | { type: 'text_delta'; delta: string }
-  | { type: 'tool_call_start'; call: PiToolCallInfo }
-  | { type: 'tool_call_confirm'; call: PiToolCallInfo }
-  | { type: 'tool_call_complete'; call: PiToolCallInfo }
-  | { type: 'done'; fullText: string }
-  | { type: 'error'; message: string }
+export type { PiAgentEvent } from '../../src/shared/agent-events'
 
 export interface AgentSessionOptions {
   /** Pre-built pi-ai runtime (see `createPiModels`). */

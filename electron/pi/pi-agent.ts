@@ -7,17 +7,10 @@ import type {
 import type { Model } from '@earendil-works/pi-ai'
 
 import type { ModelProfile } from '../../src/shared/ipc-channels'
+import type { PiToolCallInfo } from '../../src/shared/agent-events'
 import { createPiModels } from './pi-models'
 
-/** Serializable tool-call lifecycle card (safe to forward over IPC). */
-export interface PiToolCallInfo {
-  id: string
-  toolName: string
-  arguments: unknown
-  status: 'running' | 'waiting_confirm' | 'completed' | 'failed'
-  error?: string
-  result?: unknown
-}
+export type { PiToolCallInfo } from '../../src/shared/agent-events'
 
 /** Normalized UI callback contract — mirrors the renderer agent engine. */
 export interface PiAgentCallbacks {
