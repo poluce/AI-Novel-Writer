@@ -60,4 +60,12 @@ describe('submit contract tools', () => {
     expect(visibleTextFromSubmitArtifact('submit_style_analysis', { analysis: '节奏偏快' }, '')).toBe('节奏偏快')
     expect(visibleTextFromSubmitArtifact('submit_text', { text: '润色后的句子' }, '')).toBe('润色后的句子')
   })
+
+  it('keeps a review artifact even when the model also emitted visible text', () => {
+    const artifact = {
+      summary: '本章目标待核实',
+      items: [{ category: 'continuity', severity: 'pass', description: '无漂移' }],
+    }
+    expect(visibleTextFromSubmitArtifact('submit_review', artifact, '旁白')).toBe(JSON.stringify(artifact))
+  })
 })

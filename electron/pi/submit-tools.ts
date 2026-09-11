@@ -247,5 +247,7 @@ export function visibleTextFromSubmitArtifact(
     && typeof artifact.body === 'string') {
     return artifact.body
   }
-  return text || JSON.stringify(artifact)
+  // Structured contracts (review/blueprint/outline/…) must not be displaced by
+  // interleaved visible text that providers emit alongside the tool call.
+  return JSON.stringify(artifact)
 }

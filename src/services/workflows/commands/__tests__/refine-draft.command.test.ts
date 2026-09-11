@@ -1377,6 +1377,7 @@ describe('ReviewChapterCommand reasoning stage', () => {
 
     expect(completeWithLease).toHaveBeenCalledOnce()
     expect(completeWithLease.mock.calls[0]?.[0].reasoningStage).toBe('review')
+    expect(completeWithLease.mock.calls[0]?.[0].submitTool).toBe('submit_review')
     expect(completeWithLease.mock.calls[0]?.[0].messages[1]?.content)
       .toContain('【补充写作 Skill：Review craft】')
   })

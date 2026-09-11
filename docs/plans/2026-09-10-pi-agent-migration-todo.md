@@ -170,7 +170,7 @@
 - [ ] 提交工具的 schema 与现有输出合同一一对应（字段、必填、上限），由 schema 取代提示词里的 JSON 说明——核心 `submit_*` 已落地（`electron/pi/submit-tools.ts`），各 command 替换时再按上限收紧
 - [ ] 12 个工作流命令逐个替换 LLM 调用层（产物结构可按工具调用重定，但产出能力不得缺失）：
   - [ ] `generate-draft`（起草）
-  - [ ] `review-chapter`（审稿）
+  - [x] `review-chapter`（审稿）
   - [ ] `refine-draft` / `refine-from-review`（修稿）
   - [ ] `finalize-chapter` + 定稿后处理（章节要点）
   - [ ] `architecture`（情节大纲）

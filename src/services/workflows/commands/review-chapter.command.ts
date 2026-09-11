@@ -296,6 +296,7 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
         purpose: 'review-chapter',
         reasoningStage: 'review',
         writingSkillStage: 'review',
+        submitTool: 'submit_review',
       },
       context,
     )
@@ -338,6 +339,7 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
           purpose: 'review-chapter-rebuild',
           reasoningStage: 'review',
           writingSkillStage: 'review',
+          submitTool: 'submit_review',
         },
         context,
       )
