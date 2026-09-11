@@ -144,7 +144,7 @@
 **架构事实（已核实）**：Agent 循环 + 工具现运行在**渲染进程**（`src/services/agent/`），经 `ipc.invoke` 调主进程的 DB/FS/LLM；渲染进程不持 API Key（只发 `modelId`，主进程解析）。故 pi-ai 流式必须发生在**主进程**：P2 的 `streamFn` = 渲染 Agent → 主进程 pi-ai 流式 → 事件回传（新增 IPC 流式通道）；工具仍留在渲染层（P3 只换接口不搬位置）。`electron/pi/pi-models.ts`（ModelProfile → pi-ai Models）已落地为共享调用层基础（commit c5f70fc）。
 
 - [ ] 自研 ReAct 循环（`agent-engine.ts`）→ Pi Agent 实例；**Agent 面板功能不得降级**（工具卡片、确认弹窗、错误提示照常工作）
-- [ ] 上下文注入迁移：现有 L0/L1 策略 → `transformContext`（注入内容可按新架构重做，但项目上下文能力不得缺失）
+- [x] 上下文注入迁移：L0 项目事实已在主进程拼进 system prompt（无 XML 工具说明书）；L1 编辑器感知仍待 `transformContext`
 - [ ] Agent 的 `streamFn` → pi-ai（同一份 provider 配置、同样的生成参数与 budget）
 - [ ] 取消/中止语义对齐：现有 `AbortController` 行为 → Pi 的 abort
 - [ ] 用量与统计口径对齐：Agent 一轮的多次 LLM 调用 → 现有 `llm_calls` 记录方式

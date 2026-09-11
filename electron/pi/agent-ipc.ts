@@ -9,6 +9,7 @@ import {
   DEFAULT_GLOBAL_CONFIG,
 } from '../utils/config-utils'
 import { ProjectCoreRepository } from '../repositories/project-core-repository'
+import { buildMainProcessAgentSystemPrompt } from './agent-system-prompt'
 import type { GlobalConfig, ModelProfile } from '../../src/shared/ipc-channels'
 import {
   DEFAULT_WRITING_LANGUAGE,
@@ -28,9 +29,8 @@ function resolveLanguage(): WritingLanguage {
   return core?.writingLanguage ?? DEFAULT_WRITING_LANGUAGE
 }
 
-// TODO(P2): replace with the migrated context-builder system prompt.
 function resolveSystemPrompt(): string {
-  return 'You are an AI novel writing assistant. Use the available tools to read project data and help the user write, review, and refine their novel.'
+  return buildMainProcessAgentSystemPrompt(ProjectCoreRepository.get())
 }
 
 function mainWindow(): BrowserWindow | null {
