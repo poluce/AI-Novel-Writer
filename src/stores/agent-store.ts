@@ -1,29 +1,21 @@
 import { create } from 'zustand'
-import { buildAgentSystemPrompt } from '../services/agent/context-builder'
-import {
-  cleanAgentVisibleText,
-  runAgentLoop,
-  type ConfigImpactBlueprintProposal,
-  type ToolCallInfo,
-  type LLMMessage,
-  type ToolConfirmationDecision,
-} from '../services/agent/agent-engine'
+import type { ToolCallInfo } from '../services/agent/agent-engine'
 import { registerBuiltinTools } from '../services/agent/tools'
 import { skillRegistry, type LoadedSkill } from '../services/agent/skill-registry'
 import {
   getAllMentionTargets,
   getAllSlashCommands,
   parseSlashCommand,
-  parseMentions,
-  mentionsToToolCalls,
 } from '../services/agent/intent-router'
 import { toolRegistry } from '../services/agent/tool-registry'
 import type { ToolArtifact } from '../services/agent/tool-registry'
 import { createAgentExecutionContext } from '../services/agent/tools/project-context'
-import { createGenerationRuntime } from '../services/generation/generation-runtime'
 import { writingLanguageText } from '../shared/writing-language'
+import { ipc } from '../services/ipc-client'
+import type { PiToolCallInfo, RendererAction } from '../shared/agent-events'
 import { useLocaleStore } from './locale-store'
 import { useProjectStore } from './project-store'
+import { useEditorStore } from './editor-store'
 import type { Locale } from '../i18n/types'
 
 export const AGENT_GENERATION_BUDGET = Object.freeze({
@@ -112,11 +104,7 @@ interface AgentState {
   /** 取消当前生成 */
   cancelGeneration: () => Promise<void>
   /** 响应 Tool 确认（用于 ConfirmCard） */
-  resolveToolConfirmation: (
-    toolCallId: string,
-    confirmed: boolean,
-    options?: { blueprintProposals?: readonly ConfigImpactBlueprintProposal[] },
-  ) => void
+  resolveToolConfirmation: (toolCallId: string, confirmed: boolean, options?: unknown) => void
 }
 
 // ===== 工具函数 =====
@@ -165,15 +153,23 @@ const generateHelpText = (locale: Locale): string => {
   return lines.join('\n')
 }
 
-// ===== Tool 确认回调管理 =====
-/** 存储待确认的 Tool 回调 */
-const pendingConfirmations = new Map<string, {
-  resolve: (decision: boolean | ToolConfirmationDecision) => void
-}>()
-
-/** 当前活跃的 AbortController（用于取消 ReAct 循环） */
-let activeAbortController: AbortController | null = null
+// ===== 主进程 Agent 会话状态 =====
+/** 当前流式会话 ID（用于路由 agent:event） */
+let activeConversationId: string | null = null
+/** 当前流式助手消息 ID（用于更新助手消息） */
+let activeAssistantMsgId: string | null = null
 let activeRequestUiLocale: Locale | null = null
+
+/** 把主进程 PiToolCallInfo 映射为渲染层 ToolCallInfo（UI 兼容）。 */
+function toToolCallInfo(call: PiToolCallInfo): ToolCallInfo {
+  return {
+    id: call.id,
+    toolName: call.toolName,
+    arguments: call.arguments as Record<string, unknown>,
+    status: call.status,
+    error: call.error,
+  }
+}
 
 // ===== Zustand Store =====
 
@@ -341,12 +337,6 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     const convId = conv.id
     const modelId = conv.modelId ?? undefined
     const executionContext = createAgentExecutionContext(modelId, requestLocale)
-    const runtimeProject = executionContext.projectSession
-      ? {
-          projectSession: executionContext.projectSession,
-          creativeStrategy: useProjectStore.getState().currentProject?.novelConfig.creativeStrategy ?? 'auto',
-        }
-      : {}
     const modelText = (zhCNText: string, enUSText: string) => writingLanguageText(
       executionContext.writingLanguage,
       zhCNText,
@@ -422,164 +412,23 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     }
 
     try {
-      const currentConv = get().conversations.find(c => c.id === convId)!
-
-      // 系统提示词、@ 引用预取和随后 ReAct 循环必须共享同一个项目 lease。
-      const systemPrompt = await buildAgentSystemPrompt(currentConv.mode, executionContext)
-
-      // ===== P1-5: @ 提及预取 =====
-      let enrichedUserMessage = content.trim()
-      const mentions = parseMentions(enrichedUserMessage, requestLocale)
-      if (mentions.length > 0) {
-        const prefetchCalls = mentionsToToolCalls(mentions)
-        const prefetchResults: string[] = []
-        for (const call of prefetchCalls) {
-          const tool = toolRegistry.get(call.toolName)
-          if (tool) {
-            try {
-              const result = await tool.execute(call.args, executionContext)
-              if (result.success && result.content) {
-                prefetchResults.push(`${modelText('[预加载上下文', '[Prefetched context')} @${call.toolName}]\n${result.content}`)
-              }
-            } catch {
-              // 预取失败不阻塞主流程
-            }
-          }
-        }
-        if (prefetchResults.length > 0) {
-          enrichedUserMessage = `${enrichedUserMessage}\n\n---\n${modelText(
-            '以下是用户 @ 引用的上下文数据（已自动获取）：',
-            'The following context was requested with @ and fetched automatically:',
-          )}\n\n${prefetchResults.join('\n\n---\n\n')}`
-        }
-      }
-
-      // 构造历史消息（取最近 16 条非流式消息）
-      const historyMessages: LLMMessage[] = currentConv.messages
-        .filter(m => !m.streaming && m.role !== 'system')
-        .slice(-16)
-        .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
-
-      // AbortController 用于取消（P1-7: 提升到模块级变量以便 cancelGeneration 访问）
-      const abortController = new AbortController()
-      activeAbortController = abortController
+      // 设置活跃会话 + 助手消息（用于路由 agent:event）
+      activeConversationId = convId
+      activeAssistantMsgId = assistantMsg.id
+      activeRequestUiLocale = requestLocale
       set({ activeRequestId: assistantMsg.id })
 
-      // 整个 ReAct 循环只冻结一个模型租约和一份调用/token/deadline预算。
-      const runtime = await createGenerationRuntime({
-        ...(modelId ? { modelId } : {}),
-        ...runtimeProject,
-        budget: AGENT_GENERATION_BUDGET,
-      })
-      await runtime.execute(async ({ session }) => runAgentLoop(
-        systemPrompt,
-        historyMessages,
-        enrichedUserMessage,
-        modelId,
-        async (messages) => {
-          const outcome = await session.complete({
-            purpose: 'agent',
-            reasoningStage: 'general',
-            output: 'visible-text',
-            messages: messages.map(message => ({
-              role: message.role,
-              content: message.content,
-            })),
-          }, { signal: abortController.signal })
-          if (outcome.status !== 'completed') {
-            switch (outcome.finishReason) {
-              case 'length':
-                throw new Error(text(
-                  'AI 输出达到模型最大长度，未将不完整内容写入对话或执行工具。请提高模型最大输出 Tokens 或缩短任务后重试。',
-                  'The AI response reached the model output limit. Incomplete content was not added to the conversation and no tool was run. Increase the model output-token limit or shorten the task, then try again.',
-                ))
-              case 'content_filter':
-                throw new Error(text(
-                  'AI 输出因内容限制而未完成，未将不完整内容写入对话或执行工具。',
-                  'The AI response was stopped by a content restriction. Incomplete content was not added to the conversation and no tool was run.',
-                ))
-              default:
-                throw new Error(text(
-                  'AI 未正常完成生成，未将不完整内容写入对话或执行工具。',
-                  'The AI did not complete the response normally. Incomplete content was not added to the conversation and no tool was run.',
-                ))
-            }
-          }
-          return outcome.content
-        },
-        {
-          onTextChunk: (chunk) => {
-            const cleaned = cleanAgentVisibleText(chunk)
-            if (!cleaned) return
-            updateAssistantMsg(m => ({
-              ...m,
-              content: m.content + cleaned,
-            }))
-          },
-          onToolCallStart: (toolCall) => {
-            updateAssistantMsg(m => ({
-              ...m,
-              toolCalls: [...(m.toolCalls ?? []), toolCall],
-            }))
-          },
-          onToolCallComplete: (toolCall) => {
-            updateAssistantMsg(m => ({
-              ...m,
-              toolCalls: (m.toolCalls ?? []).map(tc =>
-                tc.id === toolCall.id ? toolCall : tc
-              ),
-            }))
-          },
-          onToolCallConfirmRequired: (toolCall) => {
-            // 更新 UI 显示确认状态
-            updateAssistantMsg(m => ({
-              ...m,
-              toolCalls: (m.toolCalls ?? []).map(tc =>
-                tc.id === toolCall.id ? { ...tc, status: 'waiting_confirm' as const } : tc
-              ),
-            }))
-
-            // 返回 Promise，等待用户通过 resolveToolConfirmation 响应
-            return new Promise<boolean | ToolConfirmationDecision>((resolve) => {
-              pendingConfirmations.set(toolCall.id, { resolve })
-            })
-          },
-          onDone: (fullText, toolCalls, artifacts) => {
-            activeAbortController = null
-            activeRequestUiLocale = null
-            const cleanedText = cleanAgentVisibleText(fullText)
-            updateAssistantMsg(m => ({
-              ...m,
-              content: cleanedText,
-              streaming: false,
-              toolCalls,
-              artifacts: artifacts.length > 0 ? artifacts : undefined,
-            }))
-            set(state => ({
-              generating: false,
-              activeRequestId: null,
-              conversations: state.conversations.map(c =>
-                c.id === convId ? { ...c, updatedAt: Date.now() } : c
-              ),
-            }))
-          },
-          onError: () => {
-            activeAbortController = null
-            activeRequestUiLocale = null
-            updateAssistantMsg(m => ({
-              ...m,
-              content: text('生成失败，请重试。', 'Generation failed. Please try again.'),
-              streaming: false,
-            }))
-            set({ generating: false, activeRequestId: null })
-          },
-        },
-        abortController.signal,
-        executionContext,
-      ))
+      // 调用主进程 Pi Agent（事件经 agent:event 流式回传）
+      const result = await ipc.invoke('agent:prompt', convId, content.trim(), modelId)
+      if (!result.success) {
+        updateAssistantMsg(m => ({
+          ...m,
+          content: text('生成失败，请重试。', 'Generation failed. Please try again.'),
+          streaming: false,
+        }))
+        set({ generating: false, activeRequestId: null })
+      }
     } catch {
-      activeAbortController = null
-      activeRequestUiLocale = null
       updateAssistantMsg(m => ({
         ...m,
         content: text('生成失败，请重试。', 'Generation failed. Please try again.'),
@@ -594,17 +443,10 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     const stoppedText = cancelledUiLocale === 'en-US'
       ? '\n\n_(Generation stopped)_'
       : '\n\n_（已停止生成）_'
-    // P1-7: 触发 AbortSignal，使 ReAct 循环真正中止
-    if (activeAbortController) {
-      activeAbortController.abort()
-      activeAbortController = null
+    // 通知主进程中止当前会话的 Agent
+    if (activeConversationId) {
+      await ipc.invoke('agent:abort', activeConversationId)
     }
-
-    // P1-8: 清理所有等待确认的 Promise，防止内存泄漏
-    for (const [, pending] of pendingConfirmations) {
-      pending.resolve(false) // 取消时默认拒绝
-    }
-    pendingConfirmations.clear()
 
     // 找到正在 streaming 的消息，关闭其状态
     set(state => ({
@@ -619,13 +461,96 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     }))
   },
 
-  resolveToolConfirmation: (toolCallId, confirmed, options) => {
-    const pending = pendingConfirmations.get(toolCallId)
-    if (pending) {
-      pending.resolve(confirmed && options?.blueprintProposals?.length
-        ? { confirmed: true, blueprintProposals: options.blueprintProposals }
-        : confirmed)
-      pendingConfirmations.delete(toolCallId)
+  resolveToolConfirmation: (toolCallId, confirmed) => {
+    if (activeConversationId) {
+      void ipc.invoke('agent:confirm', activeConversationId, toolCallId, confirmed)
     }
   },
 }))
+
+// ===== 主进程 Agent 事件订阅 =====
+
+function updateActiveAssistantMsg(updater: (msg: AgentMessage) => AgentMessage): void {
+  const convId = activeConversationId
+  const msgId = activeAssistantMsgId
+  if (!convId || !msgId) return
+  useAgentStore.setState(state => ({
+    conversations: state.conversations.map(c =>
+      c.id === convId
+        ? { ...c, messages: c.messages.map(m => m.id === msgId ? updater(m) : m) }
+        : c
+    ),
+  }))
+}
+
+function handleRendererAction(action: RendererAction): void {
+  switch (action.type) {
+    case 'open_editor':
+      useEditorStore.getState().openFile({
+        id: `agent-${Date.now()}`,
+        name: action.fileName,
+        type: action.tabType as 'chapter' | 'outline' | 'character' | 'config' | 'arch-file',
+        filePath: action.filePath,
+        content: action.content,
+        savedContent: action.content,
+        projectKey: useProjectStore.getState().currentProject?.path ?? '',
+      })
+      break
+    case 'start_workflow':
+    case 'refresh_project_config':
+    case 'refresh_blueprint':
+      // TODO(P2): 触发渲染端工作流 / 刷新项目配置 / 刷新蓝图
+      break
+  }
+}
+
+if (typeof window !== 'undefined') {
+  ipc.on('agent:event', ({ conversationId, event }) => {
+    if (conversationId !== activeConversationId) return
+    switch (event.type) {
+      case 'text_delta':
+        updateActiveAssistantMsg(m => ({ ...m, content: m.content + event.delta }))
+        break
+      case 'tool_call_start':
+        updateActiveAssistantMsg(m => ({
+          ...m,
+          toolCalls: [...(m.toolCalls ?? []), toToolCallInfo(event.call)],
+        }))
+        break
+      case 'tool_call_confirm':
+        updateActiveAssistantMsg(m => ({
+          ...m,
+          toolCalls: (m.toolCalls ?? []).map(tc =>
+            tc.id === event.call.id ? { ...tc, status: 'waiting_confirm' as const } : tc
+          ),
+        }))
+        break
+      case 'tool_call_complete':
+        updateActiveAssistantMsg(m => ({
+          ...m,
+          toolCalls: (m.toolCalls ?? []).map(tc =>
+            tc.id === event.call.id ? toToolCallInfo(event.call) : tc
+          ),
+        }))
+        break
+      case 'done':
+        updateActiveAssistantMsg(m => ({ ...m, content: event.fullText, streaming: false }))
+        useAgentStore.setState(state => ({
+          generating: false,
+          activeRequestId: null,
+          conversations: state.conversations.map(c =>
+            c.id === conversationId ? { ...c, updatedAt: Date.now() } : c
+          ),
+        }))
+        break
+      case 'error':
+        updateActiveAssistantMsg(m => ({ ...m, content: event.message, streaming: false }))
+        useAgentStore.setState({ generating: false, activeRequestId: null })
+        break
+    }
+  })
+
+  ipc.on('agent:renderer-action', ({ action }) => {
+    handleRendererAction(action)
+  })
+}
