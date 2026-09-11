@@ -131,8 +131,8 @@
 ## 阶段 1：依赖与清理（P1）
 
 - [x] 添加 `@earendil-works/pi-agent-core`、`@earendil-works/pi-ai` 依赖（精确锁版本）——0.85.1（commit 59079cc）；**不另加 typebox**：pi-ai 已 re-export `Type`/`Static`/`TSchema`（其内部 typebox@1.3.7），另加会造第二份 typebox 实例、有 schema 校验失配风险
-- [ ] 添加官方 `@modelcontextprotocol/sdk`（替换自研 MCP 客户端）
-- [ ] 能力检测加 `toolCalling` 位（`resolveModelProfileCapabilities` 扩展）；**现有 `~/.vela/models.json` 照常读取**，能力重新探测，不改文件格式约定
+- [x] 添加官方 `@modelcontextprotocol/sdk`（替换自研 MCP 客户端）——1.30.0（commit 7d38fa4；仅加依赖，替换自研 `mcp-manager.ts` 在 P3）
+- [x] 能力检测加 `toolCalling` 位（`resolveModelProfileCapabilities` 扩展）；**现有 `~/.vela/models.json` 照常读取**，能力重新探测，不改文件格式约定——`ModelCapabilities.toolCalling?: boolean`（可选、向后兼容）；预设事实里 4 个 chat 模型 `true`、embedding `false`（commit 7d38fa4）
 - [ ] 删除 4 格式解析器（`parseToolCalls` 及三个宽松格式解析函数）
 - [ ] 删除 `structured-syntax-repair.ts` 及其调用点
 - [ ] 清理相关 i18n 文案与测试
