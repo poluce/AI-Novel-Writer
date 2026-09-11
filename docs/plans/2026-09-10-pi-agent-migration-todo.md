@@ -53,11 +53,11 @@
 
 代码盘点见 [`2026-09-10-pi-agent-homemade-legacy.md`](2026-09-10-pi-agent-homemade-legacy.md)。下面只列待办勾选，不重复机制说明。
 
-- [ ] 删除文本工具协议：`parseToolCalls`、三种宽松解析、DSML、`cleanAgentVisibleText`、`generateToolPrompt` 的 XML 说明书与「每次最多一个」规则——协议测试已删；实现仍被若干 renderer 工具测试通过 `runAgentLoop` 引用
+- [x] 删除文本工具协议：`parseToolCalls`、三种宽松解析、DSML、`cleanAgentVisibleText`（随 `agent-engine.ts` 删除）；`generateToolPrompt` XML 说明书仍在 `tool-registry` / `context-builder`
 - [ ] 删除假 user `<tool_result>` 回灌；历史不再压成 16 条 user/assistant 字符串
-- [x] OpenAI 的 `finish_reason: tool_calls` / `function_call` 映射为 `stop`（不再当 `unknown`）；`requireCompleteAgentResponse` 仍只接受 `stop`，随 `runAgentLoop` 一起删
+- [x] OpenAI 的 `finish_reason: tool_calls` / `function_call` 映射为 `stop`；已删除 `requireCompleteAgentResponse`
 - [ ] 删除全局 `generating` / `activeAbortController` / `pendingConfirmations` 单例；`@` 预填正文改为提示模型原生调工具
-- [ ] 删除 `runAgentLoop`、手写 observation、Agent 整轮 `output: 'visible-text'`
+- [x] 删除 `runAgentLoop`、手写 observation、Agent 整轮 `output: 'visible-text'`（`agent-engine.ts` 已删）
 - [ ] 助手 LLM 运输交给 pi-ai：删除自研 OpenAI/Gemini SSE 解析、`LLMFactory`、`<think>` 包标签；保留 models.json / 租约 / 推理策略适配
 - [ ] **不要**把项目 `leaseId`、模型执行租约、写工具确认、workflow claims、恢复候选、自研 MCP、工作流 `parseJSON`、`generation-harness` 预算、领域工具语义、写作 Skill、React UI 当作本条遗产删除
 
@@ -143,7 +143,7 @@
 
 **架构事实（已核实）**：Agent 循环 + 工具现运行在**渲染进程**（`src/services/agent/`），经 `ipc.invoke` 调主进程的 DB/FS/LLM；渲染进程不持 API Key（只发 `modelId`，主进程解析）。故 pi-ai 流式必须发生在**主进程**：P2 的 `streamFn` = 渲染 Agent → 主进程 pi-ai 流式 → 事件回传（新增 IPC 流式通道）；工具仍留在渲染层（P3 只换接口不搬位置）。`electron/pi/pi-models.ts`（ModelProfile → pi-ai Models）已落地为共享调用层基础（commit c5f70fc）。
 
-- [ ] 自研 ReAct 循环（`agent-engine.ts`）→ Pi Agent 实例；**Agent 面板功能不得降级**（工具卡片、确认弹窗、错误提示照常工作）
+- [x] 自研 ReAct 循环（`agent-engine.ts`）→ Pi Agent 实例；**Agent 面板功能不得降级**（工具卡片、确认弹窗、错误提示照常工作）
 - [x] 上下文注入迁移：L0 项目事实已在主进程拼进 system prompt（无 XML 工具说明书）；L1 编辑器感知仍待 `transformContext`
 - [ ] Agent 的 `streamFn` → pi-ai（同一份 provider 配置、同样的生成参数与 budget）
 - [ ] 取消/中止语义对齐：现有 `AbortController` 行为 → Pi 的 abort

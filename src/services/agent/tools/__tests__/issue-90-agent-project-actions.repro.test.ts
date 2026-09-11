@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useProjectStore } from '../../../../stores/project-store'
 import { useLocaleStore } from '../../../../stores/locale-store'
 import { useWorkflowStore } from '../../../../stores/workflow-store'
-import { runAgentLoop } from '../../agent-engine'
 import { toolRegistry } from '../../tool-registry'
 import { launchCreativeWorkflow } from '../../../workflows/creative-workflow-launcher'
 import { PROJECT_FACT_TARGETS } from '../../../project-fact-targets'
@@ -221,49 +220,6 @@ describe('Issue #90 AI assistant project actions', () => {
     expect(useWorkflowStore.getState().history).toEqual([])
   })
 
-  it('does not register a late workflow after an asynchronous guard exceeds the Agent tool timeout', async () => {
-    vi.useFakeTimers()
-    let finishGuard: ((core: { premise: string; charactersArch: string; worldbuilding: string; synopsis: string }) => void) | undefined
-    const guardResult = new Promise<{ premise: string; charactersArch: string; worldbuilding: string; synopsis: string }>((resolve) => {
-      finishGuard = resolve
-    })
-    stubWorkflowIpc({ 'db:project-core-get': guardResult })
-    toolRegistry.register(startWorkflowTool)
-    const callbacks = {
-      onTextChunk: vi.fn(),
-      onToolCallStart: vi.fn(),
-      onToolCallComplete: vi.fn(),
-      onToolCallConfirmRequired: vi.fn(async () => true),
-      onDone: vi.fn(),
-      onError: vi.fn(),
-    }
-    const run = runAgentLoop(
-      'system',
-      [],
-      '生成章节蓝图',
-      'model',
-      vi.fn()
-        .mockResolvedValueOnce('start_workflow\n{"workflow":"generate_blueprint"}')
-        .mockResolvedValueOnce('已停止。'),
-      callbacks,
-      undefined,
-      createAgentExecutionContext(),
-    )
-
-    await vi.advanceTimersByTimeAsync(30_000)
-    await run
-    const complete = '完整架构信息'.repeat(20)
-    finishGuard?.({ premise: complete, charactersArch: complete, worldbuilding: complete, synopsis: complete })
-    await vi.advanceTimersByTimeAsync(0)
-
-    expect(callbacks.onToolCallComplete).toHaveBeenCalledWith(expect.objectContaining({
-      status: 'failed',
-      error: expect.stringContaining('超时'),
-    }))
-    expect(useWorkflowStore.getState().activeRuns).toEqual([])
-    expect(useWorkflowStore.getState().history).toEqual([])
-  })
-
   it('freezes the English locale before asynchronous draft guards complete', async () => {
     stubWorkflowIpc()
     useLocaleStore.setState({ locale: 'en-US' })
@@ -335,35 +291,14 @@ describe('Issue #90 AI assistant project actions', () => {
     expect(failure.error).toBe('Could not start the review (Chapter 1) workflow.')
   })
 
-  it('executes a confirmed raw start_workflow response through the real draft launcher', async () => {
+  it('starts a confirmed draft workflow through the real launcher', async () => {
     stubWorkflowIpc()
-    toolRegistry.register(startWorkflowTool)
-    const callbacks = {
-      onTextChunk: vi.fn(),
-      onToolCallStart: vi.fn(),
-      onToolCallComplete: vi.fn(),
-      onToolCallConfirmRequired: vi.fn(async () => true),
-      onDone: vi.fn(),
-      onError: vi.fn(),
-    }
-    const generate = vi.fn()
-      .mockResolvedValueOnce('start_workflow\n{"workflow":"generate_draft","chapter_number":1}')
-      .mockResolvedValueOnce('已开始生成第一章。')
-
-    await runAgentLoop(
-      'system',
-      [],
-      '生成第一章',
-      'model',
-      generate,
-      callbacks,
-      undefined,
+    const result = await startWorkflowTool.execute(
+      { workflow: 'generate_draft', chapter_number: 1 },
       createAgentExecutionContext(),
     )
 
-    expect(callbacks.onToolCallConfirmRequired).toHaveBeenCalledOnce()
-    expect(callbacks.onTextChunk).toHaveBeenCalledWith('已开始生成第一章。')
-    expect(callbacks.onTextChunk).not.toHaveBeenCalledWith(expect.stringContaining('start_workflow'))
+    expect(result).toMatchObject({ success: true })
     expect(useWorkflowStore.getState().activeRuns).toContainEqual(expect.objectContaining({
       type: 'chapter_creation',
       projectPath,
@@ -371,28 +306,11 @@ describe('Issue #90 AI assistant project actions', () => {
     }))
   })
 
-  it('freezes the Agent-selected model into a confirmed draft workflow instead of falling back to the default model', async () => {
+  it('freezes the Agent-selected model into a draft workflow instead of falling back to the default model', async () => {
     stubWorkflowIpc()
-    toolRegistry.register(startWorkflowTool)
-    const callbacks = {
-      onTextChunk: vi.fn(),
-      onToolCallStart: vi.fn(),
-      onToolCallComplete: vi.fn(),
-      onToolCallConfirmRequired: vi.fn(async () => true),
-      onDone: vi.fn(),
-      onError: vi.fn(),
-    }
-    const generate = vi.fn()
-      .mockResolvedValueOnce('start_workflow\n{"workflow":"generate_draft","chapter_number":1,"model_id":"untrusted-model"}')
-      .mockResolvedValueOnce('已开始生成第一章。')
-
-    await runAgentLoop(
-      'system',
-      [],
-      '生成第一章',
-      'grok-selected-model',
-      generate,
-      callbacks,
+    await startWorkflowTool.execute(
+      { workflow: 'generate_draft', chapter_number: 1, model_id: 'untrusted-model' },
+      createAgentExecutionContext('grok-selected-model'),
     )
 
     expect(useWorkflowStore.getState().activeRuns).toContainEqual(expect.objectContaining({

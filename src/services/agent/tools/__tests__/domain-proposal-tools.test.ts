@@ -8,7 +8,6 @@ import {
   proposeChapterBlueprintTool,
 } from '../propose-chapter-blueprint.tool'
 import { builtinTools } from '..'
-import { runAgentLoop } from '../../agent-engine'
 import { toolRegistry } from '../../tool-registry'
 
 const invoke = vi.fn()
@@ -51,114 +50,6 @@ describe('explicit Agent domain proposals', () => {
       'propose_novel_config',
       'propose_chapter_blueprint',
     ])
-  })
-
-  it('does not execute a model proposal when the user rejects the existing confirmation gate', async () => {
-    toolRegistry.register(proposeNovelConfigTool)
-    const callbacks = {
-      onTextChunk: vi.fn(), onToolCallStart: vi.fn(), onToolCallComplete: vi.fn(),
-      onToolCallConfirmRequired: vi.fn(async () => false), onDone: vi.fn(), onError: vi.fn(),
-    }
-    const generate = vi.fn()
-      .mockResolvedValueOnce('propose_novel_config\n{"changes":{"genre":"科幻"}}')
-      .mockResolvedValueOnce('已取消。')
-    await runAgentLoop('system', [], '改成科幻', 'model', generate, callbacks, undefined, createAgentExecutionContext())
-    expect(callbacks.onToolCallConfirmRequired).toHaveBeenCalledOnce()
-    expect(invoke).not.toHaveBeenCalled()
-  })
-
-  it('runs selected config-impact blueprint proposals through separate existing confirmations', async () => {
-    toolRegistry.register(proposeNovelConfigTool)
-    toolRegistry.register(proposeChapterBlueprintTool)
-    invoke.mockImplementation(async (_session, channel: string) => {
-      if (channel === 'project:update-config') return { success: true }
-      if (channel === 'db:blueprint-get') return blueprint
-      if (channel === 'db:blueprint-upsert') return { success: true }
-      throw new Error(`unexpected channel ${channel}`)
-    })
-    const confirmation = vi.fn()
-      .mockResolvedValueOnce({
-        confirmed: true,
-        blueprintProposals: [{
-          name: 'propose_chapter_blueprint',
-          arguments: { chapter_number: 2, changes: { purpose: '埋下蓝钥匙线索' } },
-        }],
-      })
-      .mockResolvedValueOnce(true)
-    const callbacks = {
-      onTextChunk: vi.fn(), onToolCallStart: vi.fn(), onToolCallComplete: vi.fn(),
-      onToolCallConfirmRequired: confirmation, onDone: vi.fn(), onError: vi.fn(),
-    }
-    const generate = vi.fn()
-      .mockResolvedValueOnce('propose_novel_config\n{"changes":{"coreOutline":"蓝钥匙来自旧案"}}')
-      .mockResolvedValueOnce('配置与所选蓝图均已提交。')
-
-    await runAgentLoop(
-      'system', [], '调整旧案线索', 'model', generate, callbacks as never,
-      undefined, createAgentExecutionContext(),
-    )
-
-    expect(confirmation).toHaveBeenCalledTimes(2)
-    expect(confirmation.mock.calls[0][0]).toMatchObject({ toolName: 'propose_novel_config' })
-    expect(confirmation.mock.calls[1][0]).toMatchObject({
-      toolName: 'propose_chapter_blueprint',
-      arguments: { chapter_number: 2, changes: { purpose: '埋下蓝钥匙线索' } },
-    })
-    expect(invoke.mock.calls.map(([, channel]) => channel)).toEqual([
-      'project:update-config', 'db:blueprint-get', 'db:blueprint-upsert',
-    ])
-    expect(callbacks.onDone).toHaveBeenCalledWith(
-      '配置与所选蓝图均已提交。',
-      [
-        expect.objectContaining({ toolName: 'propose_novel_config', status: 'completed' }),
-        expect.objectContaining({ toolName: 'propose_chapter_blueprint', status: 'completed' }),
-      ],
-      [],
-    )
-  })
-
-  it('reports the real selected-blueprint failure instead of marking it successful', async () => {
-    toolRegistry.register(proposeNovelConfigTool)
-    toolRegistry.register(proposeChapterBlueprintTool)
-    invoke.mockImplementation(async (_session, channel: string) => {
-      if (channel === 'project:update-config') return { success: true }
-      if (channel === 'db:blueprint-get') return blueprint
-      if (channel === 'db:blueprint-upsert') return { success: false, error: 'blueprint storage unavailable' }
-      throw new Error(`unexpected channel ${channel}`)
-    })
-    const confirmation = vi.fn()
-      .mockResolvedValueOnce({
-        confirmed: true,
-        blueprintProposals: [{
-          name: 'propose_chapter_blueprint',
-          arguments: { chapter_number: 2, changes: { purpose: '埋下蓝钥匙线索' } },
-        }],
-      })
-      .mockResolvedValueOnce(true)
-    const callbacks = {
-      onTextChunk: vi.fn(), onToolCallStart: vi.fn(), onToolCallComplete: vi.fn(),
-      onToolCallConfirmRequired: confirmation, onDone: vi.fn(), onError: vi.fn(),
-    }
-    const generate = vi.fn()
-      .mockResolvedValueOnce('propose_novel_config\n{"changes":{"coreOutline":"蓝钥匙来自旧案"}}')
-      .mockResolvedValueOnce('蓝图更新失败。')
-
-    await runAgentLoop(
-      'system', [], '调整旧案线索', 'model', generate, callbacks as never,
-      undefined, createAgentExecutionContext(),
-    )
-
-    expect(callbacks.onDone).toHaveBeenCalledWith(
-      '蓝图更新失败。',
-      [
-        expect.objectContaining({ toolName: 'propose_novel_config', status: 'completed' }),
-        expect.objectContaining({
-          toolName: 'propose_chapter_blueprint', status: 'failed', error: '工具执行失败，请重试。',
-        }),
-      ],
-      [],
-    )
-    expect(JSON.stringify(callbacks.onDone.mock.calls)).not.toContain('blueprint storage unavailable')
   })
 
   it('commits an approved novel-config proposal through the existing project adapter', async () => {

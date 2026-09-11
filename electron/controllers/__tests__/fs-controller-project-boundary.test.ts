@@ -33,7 +33,6 @@ vi.mock('../../services/project-access', () => ({
 }))
 
 import { registerFSController } from '../fs-controller'
-import { runAgentLoop } from '../../../src/services/agent/agent-engine'
 import { toolRegistry } from '../../../src/services/agent/tool-registry'
 import { createAgentExecutionContext } from '../../../src/services/agent/tools/project-context'
 import { writeFileTool } from '../../../src/services/agent/tools/write-file.tool'
@@ -349,17 +348,6 @@ describe('project-scoped filesystem boundary', () => {
 })
 
 describe('Agent write_file commit result integration', () => {
-  function agentCallbacks() {
-    return {
-      onTextChunk: vi.fn(),
-      onToolCallStart: vi.fn(),
-      onToolCallComplete: vi.fn(),
-      onToolCallConfirmRequired: vi.fn(async () => true),
-      onDone: vi.fn(),
-      onError: vi.fn(),
-    }
-  }
-
   function prepareAgentBoundary() {
     useProjectStore.setState({
       currentProject: {
@@ -381,54 +369,34 @@ describe('Agent write_file commit result integration', () => {
     toolRegistry.register(writeFileTool)
   }
 
-  it('writes once through controller and reports the committed receipt to the confirmed Agent call', async () => {
+  it('writes once through controller and reports the committed receipt', async () => {
     prepareAgentBoundary()
-    const callbacks = agentCallbacks()
     const target = path.join(projectAPath, 'agent-output.md')
     const writeSpy = vi.spyOn(testFileSystem, 'writeTextAtomically')
-    const generate = vi.fn()
-      .mockResolvedValueOnce('<tool_call>{"name":"write_file","arguments":{"file_path":"agent-output.md","content":"committed once"}}</tool_call>')
-      .mockResolvedValueOnce('done')
 
-    await runAgentLoop(
-      'system', [], 'write', 'model', generate, callbacks, undefined,
+    const result = await writeFileTool.execute(
+      { file_path: 'agent-output.md', content: 'committed once' },
       createAgentExecutionContext(),
     )
 
-    expect(callbacks.onToolCallConfirmRequired).toHaveBeenCalledOnce()
     expect(writeSpy).toHaveBeenCalledOnce()
     expect(fs.readFileSync(target, 'utf8')).toBe('committed once')
-    expect(callbacks.onToolCallComplete).toHaveBeenCalledWith(expect.objectContaining({
-      status: 'completed',
-      commitState: 'committed',
-    }))
+    expect(result).toMatchObject({ success: true, commitState: 'committed' })
   })
 
-  it('stops without replay when controller returns an unknown helper receipt', async () => {
+  it('does not replay when controller returns an unknown helper receipt', async () => {
     prepareAgentBoundary()
-    const callbacks = agentCallbacks()
     const writeSpy = vi.spyOn(testFileSystem, 'writeTextAtomically').mockRejectedValueOnce(Object.assign(
       new Error('SECURE_FS_HELPER_TIMEOUT'),
       { commitState: 'unknown' as const },
     ))
-    const generate = vi.fn()
-      .mockResolvedValue('<tool_call>{"name":"write_file","arguments":{"file_path":"agent-unknown.md","content":"maybe"}}</tool_call>')
 
-    await runAgentLoop(
-      'system', [], 'write', 'model', generate, callbacks, undefined,
+    const result = await writeFileTool.execute(
+      { file_path: 'agent-unknown.md', content: 'maybe' },
       createAgentExecutionContext(),
     )
 
     expect(writeSpy).toHaveBeenCalledOnce()
-    expect(generate).toHaveBeenCalledOnce()
-    expect(callbacks.onToolCallComplete).toHaveBeenCalledWith(expect.objectContaining({
-      status: 'result_unknown',
-      commitState: 'unknown',
-    }))
-    expect(callbacks.onDone).toHaveBeenCalledWith(
-      expect.stringMatching(/stopped to avoid a duplicate write|避免重复写入/u),
-      expect.anything(),
-      expect.anything(),
-    )
+    expect(result).toMatchObject({ success: false, commitState: 'unknown' })
   })
 })
