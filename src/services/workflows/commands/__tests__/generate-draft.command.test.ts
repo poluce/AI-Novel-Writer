@@ -1931,7 +1931,7 @@ describe('GenerateDraftCommand generation runtime boundary', () => {
     )
   })
 
-  it('previews only authored text before completion and reconciles to the persisted terminal draft', async () => {
+  it('shows a generating placeholder before completion and reconciles to the persisted terminal draft', async () => {
     let resolveAttempt: ((value: GenerationOutcome) => void) | undefined
     let streamChunk: ((chunk: string) => void) | undefined
     const runtime = fakeRuntime((_attempt, _task, options) => {
@@ -1954,8 +1954,9 @@ describe('GenerateDraftCommand generation runtime boundary', () => {
     streamChunk!('</thi')
     streamChunk!('nk>\n林岚推开门。')
 
-    expect(replaceText).toHaveBeenLastCalledWith('林岚推开门。')
+    expect(replaceText).toHaveBeenLastCalledWith('生成中…')
     expect(JSON.stringify(replaceText.mock.calls)).not.toContain('不得展示的推理')
+    expect(JSON.stringify(replaceText.mock.calls)).not.toContain('林岚推开门。')
 
     resolveAttempt!(outcome(`${'终稿正文'.repeat(1250)}。`, 'stop'))
     await execution
@@ -1985,7 +1986,7 @@ describe('GenerateDraftCommand generation runtime boundary', () => {
 
     for (let index = 0; index < 12_000; index += 1) streamChunk!('文')
 
-    expect(replaceText.mock.calls.length).toBeLessThanOrEqual(2)
+    expect(replaceText.mock.calls).toEqual([['生成中…']])
 
     const terminalDraft = `${'终稿正文'.repeat(1250)}。`
     resolveAttempt!(outcome(terminalDraft, 'stop'))
@@ -2019,7 +2020,7 @@ describe('GenerateDraftCommand generation runtime boundary', () => {
 
     for (let index = 0; index < 12_000; index += 1) streamContinuation!('续')
 
-    expect(replaceText.mock.calls.length - callsBeforeContinuation).toBeLessThanOrEqual(2)
+    expect(replaceText.mock.calls.length - callsBeforeContinuation).toBe(0)
 
     const terminalContinuation = `${'续'.repeat(1000)}。`
     resolveContinuation!(outcome(terminalContinuation, 'stop', 2))

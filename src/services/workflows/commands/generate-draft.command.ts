@@ -61,7 +61,6 @@ const CROSS_CHAPTER_REUSE_ENGLISH_NGRAM_CHARS = 20
 const CROSS_CHAPTER_REUSE_LONG_RUN_CHARS = 80
 const ACTIVE_THREAD_CONTEXT_MAX_CHARS = 1200
 const ACTIVE_THREAD_CONTEXT_MAX_ITEMS = 6
-const STREAM_PREVIEW_INTERVAL_MS = 250
 export function sanitizeDraftText(text: string): string {
   const cleaned = stripThinkingTags(text)
     .replace(/^\s*(?:点我继续生成后续内容|继续生成后续内容|请点击继续|未完待续)\s*$/gmi, '')
@@ -103,43 +102,21 @@ export function visibleDraftStreamText(rawText: string): string {
 function createDraftStreamPreview(
   replaceText: ((text: string) => void) | undefined,
   composeVisibleText: (rawText: string) => string,
-  initialRenderedText = '',
+  options: { generatingLabel?: string } = {},
 ): { push(chunk: string): void; snapshot(): string; stop(): void } {
   let active = true
   let rawText = ''
-  let renderedText = initialRenderedText
-  let lastRenderedAt = 0
-  let timer: ReturnType<typeof setTimeout> | undefined
-
-  const render = () => {
-    timer = undefined
-    if (!active || !replaceText) return
-    const nextText = composeVisibleText(rawText)
-    if (nextText === renderedText) return
-    renderedText = nextText
-    lastRenderedAt = Date.now()
-    replaceText(nextText)
-  }
+  if (options.generatingLabel) replaceText?.(options.generatingLabel)
 
   return {
     push(chunk) {
-      if (!active) return
-      rawText += chunk
-      if (!replaceText || timer) return
-      if (lastRenderedAt === 0) {
-        render()
-        return
-      }
-      const delay = Math.max(0, STREAM_PREVIEW_INTERVAL_MS - (Date.now() - lastRenderedAt))
-      timer = setTimeout(render, delay)
+      if (active) rawText += chunk
     },
     snapshot() {
       return composeVisibleText(rawText)
     },
     stop() {
       active = false
-      if (timer) clearTimeout(timer)
-      timer = undefined
     },
   }
 }
@@ -603,6 +580,7 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
           const preview = createDraftStreamPreview(
             callbacks.replaceText,
             visibleDraftStreamText,
+            { generatingLabel: uiText('生成中…', 'Generating…') },
           )
           let initialOutcome: GenerationOutcome
           try {
@@ -926,7 +904,6 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
       const preview = createDraftStreamPreview(
         params.callbacks.replaceText,
         rawText => appendVisibleDraftContinuation(draft, visibleDraftStreamText(rawText)),
-        draft,
       )
       let outcome: GenerationOutcome
       try {

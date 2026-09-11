@@ -283,7 +283,7 @@ export default function CodeMirrorEditor({
     return exts
   }, [mode, uiLocale])
 
-  // AI 菜单处理（流式调用，实时显示生成内容）
+  // AI 菜单：一次性 submit_text，完成后才展示结果
   const handleAIAction = async (action: EditorAIAction) => {
     let runtime: Awaited<ReturnType<typeof createGenerationRuntime>> | null = null
     let requestSequence: number | null = null
