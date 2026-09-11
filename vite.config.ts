@@ -67,7 +67,6 @@ export default defineConfig({
       '**/.pnpm-store/**',
       '**/.workbuddy/**',
       '**/.runtime/**',
-      '**/plugins/**',
       '**/.release/scripts/release-artifact-retention.test.mjs',
     ],
   },

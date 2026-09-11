@@ -16,16 +16,13 @@
 
 <p align="center">
   <a href="https://github.com/EthanYoQ/AI-Novel-Writer/releases"><img src="https://badgen.net/github/tag/EthanYoQ/AI-Novel-Writer?label=release" alt="Release" /></a>
-  <a href="https://github.com/EthanYoQ/AI-Novel-Writer/tree/master/plugins/dsh-ai-novel-writer"><img src="https://badgen.net/badge/DSH%20plugin/0.1.0%20preview/blue" alt="DeepSeek Harness plugin 0.1.0 preview" /></a>
   <a href="https://github.com/EthanYoQ/AI-Novel-Writer/blob/master/LICENSE"><img src="https://badgen.net/badge/license/GPL-3.0/blue" alt="GPL-3.0 License" /></a>
   <a href="https://github.com/EthanYoQ/AI-Novel-Writer/stargazers"><img src="https://badgen.net/github/stars/EthanYoQ/AI-Novel-Writer" alt="GitHub stars" /></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/EthanYoQ/AI-Novel-Writer/releases/latest">Download desktop (Windows / macOS)</a> · <a href="https://www.npmjs.com/package/@ethanyoq/dsh-ai-novel-writer">Install the DeepSeek Harness Web plugin</a>
+  <a href="https://github.com/EthanYoQ/AI-Novel-Writer/releases/latest">Download desktop (Windows / macOS)</a>
 </p>
-
-> **DeepSeek Harness plugin notice:** the `0.1.0` preview is currently frozen and has no short-term feature work planned. It has less than 10% of the desktop application's capabilities and is not a desktop replacement. Use the desktop edition above for a complete project tree, batch workflows, a mature editor, or automated review.
 
 <p align="center">
   <img src="docs/assets/readme/hero-en-v2.png" alt="AI Novel Writer — a local-first desktop workspace for long-form fiction" width="100%" />
@@ -66,25 +63,6 @@ The 1.0.0 fixes for multi-draft saves, stale requests, source recovery, exports,
 > - **More precise failure messages** — Content restrictions, provider failures, and duplicate jobs report a more specific cause, and incomplete output is not saved as successful project content.
 >
 > One Release uses the exact seven-asset contract: `ai-novel-writer-setup-0.9.0.exe`, `ai-novel-writer-setup-0.9.0.exe.blockmap`, `latest.yml`, `ai-novel-writer-mac-arm64-0.9.0-installer.dmg`, `ai-novel-writer-mac-arm64-0.9.0-installer.dmg.sha256`, `ai-novel-writer-mac-x64-0.9.0-installer.dmg`, and `ai-novel-writer-mac-x64-0.9.0-installer.dmg.sha256`. The Windows installer is not code-signed; both macOS installers use ad-hoc signing, have no Developer ID signature, and are not notarized, so their platform security prompts may require manual confirmation on first launch.
-
-
-
-## DeepSeek Harness plugin (early MVP)
-
-In addition to the Windows and macOS desktop editions, the repository retains the `@ethanyoq/dsh-ai-novel-writer` `0.1.0` developer preview. The plugin is currently frozen, with no short-term feature work planned. The DeepSeek Harness V2 workbench is an intentionally narrow early MVP with less than 10% of the desktop application's capabilities; it does not read desktop `.vela` projects and is not a replacement for the desktop project tree, batch workflows, mature editor, or automated review.
-
-V2 offers one human-reviewed authoring chain: project settings → story architecture → characters → whole-book outline → per-chapter blueprint → per-chapter prose. When a model Proposal arrives, its draft first fills the right-side workbench editor for human review and editing; authoritative project state changes only after the user explicitly applies the Proposal.
-
-The plugin is not part of the desktop application's formal Release, but it is published as a separate npm package with its own lockfile, CI, and MIT license; the repository root remains the GPL-3.0 desktop application. Install it into the DeepSeek Harness `web` profile:
-
-```sh
-dsh plugin --profile web add @ethanyoq/dsh-ai-novel-writer
-dsh --profile web
-```
-
-The [plugin installation guide](plugins/dsh-ai-novel-writer/docs/official-dsh-plugin-installation.md) separately owns source development, immutable tarball installation, and the Windows path-with-spaces limitation. This root README does not duplicate those changing maintainer steps.
-
-After Web starts, open **Novel Workbench**, install the **AI 小说作家 V2** Preset, then create a new Session with that Preset. AI drafting first fills the local editor in the right-side workbench for human review and editing; applying the Proposal is the only action that changes the project. See the [plugin README](plugins/dsh-ai-novel-writer/README.md) for features, project format, qualification coverage, and removal. Do not run `dsh plugin add github:EthanYoQ/AI-Novel-Writer`: the repository root package is the desktop application, not an activatable DSH bundle.
 
 
 
@@ -208,7 +186,7 @@ ai-novel-writer-mac-x64-<version>-installer.dmg
 
 ## Development and architecture documentation
 
-See [`docs/README.md`](docs/README.md) for documentation authority, ADRs, research, agent rules, and dated handoffs. The DeepSeek Harness plugin has its own [plugin documentation](plugins/dsh-ai-novel-writer/README.md) and does not define desktop behavior.
+See [`docs/README.md`](docs/README.md) for documentation authority, ADRs, research, agent rules, and dated handoffs.
 
 ## License
 
