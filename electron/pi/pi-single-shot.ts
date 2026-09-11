@@ -6,13 +6,14 @@ import { validateToolCall, type Tool } from '@earendil-works/pi-ai'
 import { registerPiInFlight } from './in-flight'
 import { createPiModels } from './pi-models'
 
-import type { ModelProfile } from '../../src/shared/ipc-channels'
+import type { LLMFinishReason, ModelProfile } from '../../src/shared/ipc-channels'
 
 export interface SingleShotResult {
   /** Validated submit_* arguments, or undefined when the model returned text only. */
   artifact: Record<string, unknown> | undefined
   /** Visible text accumulated from the stream (may be empty when the model only called the tool). */
   text: string
+  finishReason: LLMFinishReason
 }
 
 export interface StreamSingleShotOptions {
@@ -21,6 +22,7 @@ export interface StreamSingleShotOptions {
   inFlightId?: string
   /** Intent-level output cap from the generation harness. */
   maxTokens?: number
+  temperature?: number
 }
 
 export class SingleShotAbortedError extends Error {
@@ -84,10 +86,12 @@ export async function streamSingleShot(
       toolChoice: 'any',
       signal: controller.signal,
       ...(options.maxTokens !== undefined ? { maxTokens: options.maxTokens } : {}),
+      ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
     })
 
     let text = ''
     let artifact: Record<string, unknown> | undefined
+    let finishReason: LLMFinishReason = 'stop'
     for await (const event of stream) {
       throwIfAborted(options.signal)
       if (event.type === 'text_delta') text += event.delta
@@ -97,6 +101,9 @@ export async function streamSingleShot(
         }
         artifact = validateToolCall(tools, event.toolCall) as Record<string, unknown>
       }
+      if (event.type === 'done') {
+        finishReason = event.reason === 'length' ? 'length' : 'stop'
+      }
       if (event.type === 'error') {
         if (event.reason === 'aborted' || controller.signal.aborted) {
           throw new SingleShotAbortedError()
@@ -105,7 +112,7 @@ export async function streamSingleShot(
       }
     }
     throwIfAborted(options.signal)
-    return { artifact, text }
+    return { artifact, text, finishReason }
   } catch (error) {
     if (error instanceof SingleShotAbortedError) throw error
     if (controller.signal.aborted || options.signal?.aborted) {

@@ -50,6 +50,7 @@ describe('streamSingleShot', () => {
 
     expect(result.artifact).toEqual({ title: '标题', body: '正文' })
     expect(result.text).toBe('旁白')
+    expect(result.finishReason).toBe('stop')
   })
 
   it('returns undefined artifact when the model emits text only', async () => {
@@ -63,6 +64,30 @@ describe('streamSingleShot', () => {
 
     expect(result.artifact).toBeUndefined()
     expect(result.text).toBe('纯文本')
+    expect(result.finishReason).toBe('stop')
+  })
+
+  it('forwards temperature and maxTokens and maps a length done reason', async () => {
+    const streamFn = vi.fn(() => (async function* () {
+      yield { type: 'text_delta', contentIndex: 0, delta: '半截', partial: {} }
+      yield { type: 'done', reason: 'length', message: {} }
+    })())
+    createPiModelsMock.mockReturnValue({
+      models: { stream: streamFn },
+      model: {},
+    })
+
+    const result = await streamSingleShot({} as never, 'sys', 'user', submitDraftTool(), {
+      maxTokens: 64,
+      temperature: 0.4,
+    })
+
+    expect(streamFn).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ maxTokens: 64, temperature: 0.4, toolChoice: 'any' }),
+    )
+    expect(result).toMatchObject({ text: '半截', finishReason: 'length' })
   })
 
   it('rejects a hallucinated tool name', async () => {

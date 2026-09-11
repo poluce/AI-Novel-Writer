@@ -595,7 +595,7 @@ export interface LLMRequest {
   maxTokens?: number
   stream?: boolean
   responseFormat?: { type: 'json_object' | 'text' }
-  /** When set, main process uses pi-ai one-shot + this submit_* tool instead of LLMFactory. */
+  /** When set, main process uses this submit_* tool; otherwise generate-stream defaults to submit_text. */
   submitTool?: SubmitToolName
 }
 

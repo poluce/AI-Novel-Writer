@@ -217,71 +217,35 @@ export function registerLLMController() {
     })
     const win = BrowserWindow.fromWebContents(event.sender)
 
-    if (isSubmitToolName(request.submitTool)) {
-      const submitTool = request.submitTool
-      const { systemPrompt, userPrompt } = splitGenerationMessages(request.messages)
-      void streamSingleShot(model, systemPrompt, userPrompt, createSubmitTool(submitTool), {
-        signal: abortController.signal,
-        inFlightId: `llm:${requestId}`,
-        maxTokens: generationParameters.maxTokens,
-      }).then(result => {
-        const fullText = visibleTextFromSubmitArtifact(submitTool, result.artifact, result.text)
-        recordOnce({ success: true })
-        win?.webContents.send('llm:stream-done', {
-          requestId,
-          fullText,
-          finishReason: 'stop' satisfies LLMFinishReason,
-        })
-      }).catch(error => {
-        if (error instanceof SingleShotAbortedError || abortController.signal.aborted) {
-          recordOnce({ success: false, error: 'cancelled' })
-          win?.webContents.send('llm:stream-error', { requestId, error: 'cancelled' })
-          return
-        }
-        const message = error instanceof Error ? error.message : String(error)
-        recordOnce({ success: false, error: message })
-        win?.webContents.send('llm:stream-error', { requestId, error: message })
-      }).finally(() => {
-        activeStreams.delete(requestId)
-      })
-      return { requestId, started: true }
-    }
-
-    const provider = LLMFactory.getProvider(model)
-    
-    // We do not await this globally since it's streaming independently
-    provider.generateStream(model, request.messages, {
-      ...generationParameters,
+    const submitTool = isSubmitToolName(request.submitTool) ? request.submitTool : 'submit_text'
+    const { systemPrompt, userPrompt } = splitGenerationMessages(request.messages)
+    void streamSingleShot(model, systemPrompt, userPrompt, createSubmitTool(submitTool), {
       signal: abortController.signal,
-      onChunk: (chunk: string) => win?.webContents.send('llm:stream-chunk', { requestId, chunk }),
-      onDone: (fullText: string, usage?: TokenUsage, finishReason?: LLMFinishReason) => {
-        const terminalReason: LLMFinishReason = finishReason ?? 'unknown'
-        const success = terminalReason === 'stop'
-        recordOnce({ success, usage, error: success ? undefined : `finish:${terminalReason}` })
-        win?.webContents.send('llm:stream-done', {
-          requestId,
-          fullText,
-          usage,
-          finishReason: terminalReason,
-        })
-        activeStreams.delete(requestId)
-      },
-      onError: (error: string, content?: string, usage?: TokenUsage) => {
-        recordOnce({ success: false, usage, error })
-        if (content !== undefined) {
-          win?.webContents.send('llm:stream-done', {
-            requestId,
-            fullText: content,
-            usage,
-            finishReason: 'error',
-          })
-        } else {
-          win?.webContents.send('llm:stream-error', { requestId, error })
-        }
-        activeStreams.delete(requestId)
-      },
+      inFlightId: `llm:${requestId}`,
+      maxTokens: generationParameters.maxTokens,
+      temperature: generationParameters.temperature,
+    }).then(result => {
+      const fullText = visibleTextFromSubmitArtifact(submitTool, result.artifact, result.text)
+      const finishReason = result.finishReason
+      const success = finishReason === 'stop'
+      recordOnce({ success, error: success ? undefined : `finish:${finishReason}` })
+      win?.webContents.send('llm:stream-done', {
+        requestId,
+        fullText,
+        finishReason,
+      })
+    }).catch(error => {
+      if (error instanceof SingleShotAbortedError || abortController.signal.aborted) {
+        recordOnce({ success: false, error: 'cancelled' })
+        win?.webContents.send('llm:stream-error', { requestId, error: 'cancelled' })
+        return
+      }
+      const message = error instanceof Error ? error.message : String(error)
+      recordOnce({ success: false, error: message })
+      win?.webContents.send('llm:stream-error', { requestId, error: message })
+    }).finally(() => {
+      activeStreams.delete(requestId)
     })
-
     return { requestId, started: true }
   })
 
