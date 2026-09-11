@@ -54,7 +54,7 @@
 代码盘点见 [`2026-09-10-pi-agent-homemade-legacy.md`](2026-09-10-pi-agent-homemade-legacy.md)。下面只列待办勾选，不重复机制说明。
 
 - [x] 删除文本工具协议：`parseToolCalls`、三种宽松解析、DSML、`cleanAgentVisibleText`、`generateToolPrompt` XML 说明书与「每次最多一个」规则
-- [ ] 删除假 user `<tool_result>` 回灌；历史不再压成 16 条 user/assistant 字符串
+- [x] 删除假 user `<tool_result>` 回灌；历史不再压成 16 条 user/assistant 字符串（随 `runAgentLoop` 删除；Pi `state.messages` 保真工具回合）
 - [x] OpenAI 的 `finish_reason: tool_calls` / `function_call` 映射为 `stop`；已删除 `requireCompleteAgentResponse`
 - [x] 删除全局 `generating` / `activeAbortController` / `pendingConfirmations` 单例；`@` 预填正文改为提示模型原生调工具（生成中状态由会话 `streaming` 推导；`mentionsToToolCalls` 已删）
 - [x] 删除 `runAgentLoop`、手写 observation、Agent 整轮 `output: 'visible-text'`（`agent-engine.ts` 已删）
@@ -144,7 +144,7 @@
 **架构事实（已核实）**：Agent 循环 + 工具现运行在**渲染进程**（`src/services/agent/`），经 `ipc.invoke` 调主进程的 DB/FS/LLM；渲染进程不持 API Key（只发 `modelId`，主进程解析）。故 pi-ai 流式必须发生在**主进程**：P2 的 `streamFn` = 渲染 Agent → 主进程 pi-ai 流式 → 事件回传（新增 IPC 流式通道）；工具仍留在渲染层（P3 只换接口不搬位置）。`electron/pi/pi-models.ts`（ModelProfile → pi-ai Models）已落地为共享调用层基础（commit c5f70fc）。
 
 - [x] 自研 ReAct 循环（`agent-engine.ts`）→ Pi Agent 实例；**Agent 面板功能不得降级**（工具卡片、确认弹窗、错误提示照常工作）
-- [x] 上下文注入迁移：L0 项目事实已在主进程拼进 system prompt（无 XML 工具说明书）；L1 编辑器感知仍待 `transformContext`
+- [x] 上下文注入迁移：L0 项目事实已在主进程拼进 system prompt；L1 编辑器/工作流快照经 `transformContext` 每轮注入（不写入持久对话）
 - [ ] Agent 的 `streamFn` → pi-ai（同一份 provider 配置、同样的生成参数与 budget）
 - [ ] 取消/中止语义对齐：现有 `AbortController` 行为 → Pi 的 abort
 - [ ] 用量与统计口径对齐：Agent 一轮的多次 LLM 调用 → 现有 `llm_calls` 记录方式

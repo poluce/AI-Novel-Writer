@@ -31,6 +31,8 @@ export interface CreatePiAgentOptions {
   tools: AgentTool<any>[]
   /** Tool names that must be confirmed by the user before execution. */
   confirmationToolNames?: ReadonlySet<string>
+  /** Inject ephemeral context (L1 editor snapshot) before convertToLlm. */
+  transformContext?: (messages: AgentMessage[], signal?: AbortSignal) => Promise<AgentMessage[]>
   callbacks: PiAgentCallbacks
 }
 
@@ -59,6 +61,7 @@ export function createPiAgent(options: CreatePiAgentOptions): PiAgentHandle {
       messages: [],
     },
     streamFn: options.streamFn,
+    transformContext: options.transformContext,
     beforeToolCall: async (ctx) => {
       const call = toolCalls.get(ctx.toolCall.id)
       if (!call || !confirmationNames.has(ctx.toolCall.name)) return undefined

@@ -29,3 +29,24 @@ export type RendererAction =
   | { type: 'refresh_blueprint' }
 
 export type RendererActionSink = (action: RendererAction) => void
+
+/** Renderer-owned editor/workflow facts sent with each agent prompt (L1). */
+export interface AgentEditorTabSnapshot {
+  name: string
+  type: string
+  active: boolean
+  unsaved: boolean
+  preview?: string
+}
+
+export interface AgentWorkflowSnapshot {
+  title: string
+  type: string
+  currentStepIndex: number
+  stepCount: number
+}
+
+export interface AgentEditorSnapshot {
+  tabs: AgentEditorTabSnapshot[]
+  workflow?: AgentWorkflowSnapshot
+}

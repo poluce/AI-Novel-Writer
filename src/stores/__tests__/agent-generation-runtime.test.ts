@@ -44,7 +44,7 @@ describe('Agent IPC bridge', () => {
 
     await useAgentStore.getState().sendMessage('检查项目')
 
-    expect(ipcInvoke).toHaveBeenCalledWith('agent:prompt', conversation.id, '检查项目', 'model-a')
+    expect(ipcInvoke).toHaveBeenCalledWith('agent:prompt', conversation.id, '检查项目', 'model-a', undefined)
   })
 
   it('creates the default conversation and /help response entirely in the frozen English UI locale', async () => {
@@ -65,7 +65,7 @@ describe('Agent IPC bridge', () => {
 
     await useAgentStore.getState().sendMessage('@角色 帮我看看林舟')
 
-    expect(ipcInvoke).toHaveBeenCalledWith('agent:prompt', expect.any(String), '@角色 帮我看看林舟', undefined)
+    expect(ipcInvoke).toHaveBeenCalledWith('agent:prompt', expect.any(String), '@角色 帮我看看林舟', undefined, undefined)
   })
 
   it('derives generating from the active conversation streaming message', async () => {

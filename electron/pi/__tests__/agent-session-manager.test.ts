@@ -6,6 +6,7 @@ import { AgentSessionManager } from '../agent-session-manager'
 vi.mock('../agent-session', () => ({
   AgentSession: class {
     prompt = vi.fn(async () => {})
+    setEditorSnapshot = vi.fn()
     confirm = vi.fn()
     abort = vi.fn()
   },

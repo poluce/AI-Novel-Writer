@@ -5,7 +5,9 @@ import {
   createPiAgent,
   type PiAgentHandle,
 } from './pi-agent'
-import type { PiAgentEvent } from '../../src/shared/agent-events'
+import { buildL1AgentContext } from './agent-l1-context'
+import type { AgentEditorSnapshot, PiAgentEvent } from '../../src/shared/agent-events'
+import type { WritingLanguage } from '../../src/shared/writing-language'
 
 export type { PiAgentEvent } from '../../src/shared/agent-events'
 
@@ -16,6 +18,7 @@ export interface AgentSessionOptions {
   systemPrompt: string
   tools: AgentTool<any>[]
   confirmationToolNames?: ReadonlySet<string>
+  language: WritingLanguage
   /** Emit a normalized event toward the renderer (IPC send in production). */
   emit: (event: PiAgentEvent) => void
 }
@@ -28,14 +31,18 @@ export interface AgentSessionOptions {
 export class AgentSession {
   private readonly agent: PiAgentHandle
   private readonly pendingConfirmations = new Map<string, (confirmed: boolean) => void>()
+  private editorSnapshot: AgentEditorSnapshot | null = null
+  private readonly language: WritingLanguage
 
   constructor(options: AgentSessionOptions) {
+    this.language = options.language
     this.agent = createPiAgent({
       model: options.model,
       streamFn: options.streamFn,
       systemPrompt: options.systemPrompt,
       tools: options.tools,
       confirmationToolNames: options.confirmationToolNames,
+      transformContext: async (messages) => this.injectL1(messages),
       callbacks: {
         onTextChunk: (chunk) => options.emit({ type: 'text_delta', delta: chunk }),
         onToolCallStart: (call) => options.emit({ type: 'tool_call_start', call }),
@@ -50,8 +57,20 @@ export class AgentSession {
     })
   }
 
+  setEditorSnapshot(snapshot: AgentEditorSnapshot | null | undefined): void {
+    this.editorSnapshot = snapshot ?? null
+  }
+
   prompt(input: string): Promise<void> {
     return this.agent.prompt(input)
+  }
+
+  private injectL1(messages: AgentMessage[]): AgentMessage[] {
+    const l1 = buildL1AgentContext(this.editorSnapshot, this.language)
+    if (!l1) return messages
+    const injected: AgentMessage = { role: 'user', content: l1, timestamp: Date.now() }
+    if (messages.length === 0) return [injected]
+    return [...messages.slice(0, -1), injected, messages[messages.length - 1]]
   }
 
   /** Resolve a pending tool confirmation from the renderer. */

@@ -9,6 +9,7 @@ import {
 } from '../services/agent/intent-router'
 import { toolRegistry } from '../services/agent/tool-registry'
 import type { ToolArtifact } from '../services/agent/tool-registry'
+import { captureAgentEditorSnapshot } from '../services/agent/editor-snapshot'
 import { createAgentExecutionContext } from '../services/agent/tools/project-context'
 import { writingLanguageText } from '../shared/writing-language'
 import { ipc } from '../services/ipc-client'
@@ -421,7 +422,13 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       set({ activeRequestId: assistantMsg.id })
 
       // 调用主进程 Pi Agent（事件经 agent:event 流式回传）
-      const result = await ipc.invoke('agent:prompt', convId, content.trim(), modelId)
+      const result = await ipc.invoke(
+        'agent:prompt',
+        convId,
+        content.trim(),
+        modelId,
+        captureAgentEditorSnapshot(),
+      )
       if (!result.success) {
         updateAssistantMsg(m => ({
           ...m,

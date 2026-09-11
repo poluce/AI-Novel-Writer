@@ -13,7 +13,7 @@ import type { EmbeddingOptions } from './embedding-options'
 import type { ModelCapabilities } from './provider-presets'
 import type { ModelProviderResourceId } from './model-provider-resources'
 import type { WritingLanguage } from './writing-language'
-import type { PiAgentEvent, RendererAction } from './agent-events'
+import type { AgentEditorSnapshot, PiAgentEvent, RendererAction } from './agent-events'
 import type { DraftStatus } from './draft-status'
 import type {
   RecoveryCandidate,
@@ -1154,7 +1154,7 @@ export interface MCPChannels {
 // ===== 合并所有频道 =====
 export interface AgentChannels {
   'agent:prompt': {
-    args: [conversationId: string, input: string, modelId?: string]
+    args: [conversationId: string, input: string, modelId?: string, editorSnapshot?: AgentEditorSnapshot]
     return: { success: boolean; error?: string }
   }
   'agent:confirm': {

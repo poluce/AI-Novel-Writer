@@ -39,6 +39,7 @@ function buildSession(decision: (callId: string) => boolean, events: PiAgentEven
     systemPrompt: 'You are a calculator.',
     tools: [addTool],
     confirmationToolNames: new Set(['add_numbers']),
+    language: 'zh-CN',
     emit: (event) => {
       events.push(event)
       if (event.type === 'tool_call_confirm') {

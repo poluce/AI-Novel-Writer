@@ -10,6 +10,7 @@ import {
 } from '../utils/config-utils'
 import { ProjectCoreRepository } from '../repositories/project-core-repository'
 import { buildMainProcessAgentSystemPrompt } from './agent-system-prompt'
+import type { AgentEditorSnapshot } from '../../src/shared/agent-events'
 import type { GlobalConfig, ModelProfile } from '../../src/shared/ipc-channels'
 import {
   DEFAULT_WRITING_LANGUAGE,
@@ -51,8 +52,14 @@ export function registerAgentController(): void {
     },
   })
 
-  ipcMain.handle('agent:prompt', async (_event, conversationId: string, input: string, modelId?: string) => {
-    return manager.prompt(conversationId, input, modelId)
+  ipcMain.handle('agent:prompt', async (
+    _event,
+    conversationId: string,
+    input: string,
+    modelId?: string,
+    editorSnapshot?: AgentEditorSnapshot,
+  ) => {
+    return manager.prompt(conversationId, input, modelId, editorSnapshot)
   })
 
   ipcMain.handle('agent:confirm', async (_event, conversationId: string, toolCallId: string, confirmed: boolean) => {

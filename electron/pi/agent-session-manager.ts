@@ -3,7 +3,7 @@ import { abortAllPiInFlight, registerPiInFlight } from './in-flight'
 import { createPiModels } from './pi-models'
 import { buildAgentTools, confirmationToolNames } from './tool-builder'
 
-import type { PiAgentEvent, RendererActionSink } from '../../src/shared/agent-events'
+import type { AgentEditorSnapshot, PiAgentEvent, RendererActionSink } from '../../src/shared/agent-events'
 import type { ModelProfile } from '../../src/shared/ipc-channels'
 import type { WritingLanguage } from '../../src/shared/writing-language'
 
@@ -31,9 +31,11 @@ export class AgentSessionManager {
     conversationId: string,
     input: string,
     modelId?: string,
+    editorSnapshot?: AgentEditorSnapshot,
   ): Promise<{ success: boolean; error?: string }> {
     try {
       const session = this.getOrCreate(conversationId, modelId)
+      session.setEditorSnapshot(editorSnapshot)
       await session.prompt(input)
       return { success: true }
     } catch (error) {
@@ -78,6 +80,7 @@ export class AgentSessionManager {
       systemPrompt: this.options.resolveSystemPrompt(conversationId),
       tools,
       confirmationToolNames: confirmationToolNames(),
+      language,
       emit: (event) => this.options.emit(conversationId, event),
     })
     this.sessions.set(conversationId, session)
