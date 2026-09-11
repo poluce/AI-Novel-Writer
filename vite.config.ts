@@ -25,12 +25,11 @@ export default defineConfig({
       entry: 'electron/main.ts',
       vite: {
         build: {
-          // 强制输出 CommonJS，保证 better-sqlite3 等 native 模块能正常加载
+          // 主进程产物为 ESM（package.json `"type":"module"` + Vite 8/Rolldown 下
+          // 该库构建默认输出 ESM）；CJS-only 的 better-sqlite3 在源码内经
+          // createRequire(import.meta.url) 加载，无需 CommonJS 输出。
           rollupOptions: {
-            external: ['better-sqlite3', '@lancedb/lancedb', 'yauzl'],
-            output: {
-              format: 'cjs'
-            }
+            external: ['better-sqlite3', '@lancedb/lancedb', 'yauzl']
           }
         }
       }
