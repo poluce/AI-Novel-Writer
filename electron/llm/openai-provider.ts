@@ -4,7 +4,7 @@ import { resolveOpenAIChatCompletionsUrl } from './openai-compatible-endpoint'
 
 export class OpenAIProvider implements ILLMProvider {
   private normalizeFinishReason(reason: string | null | undefined): LLMFinishReason {
-    if (reason === 'stop') return 'stop'
+    if (reason === 'stop' || reason === 'tool_calls' || reason === 'function_call') return 'stop'
     if (reason === 'length') return 'length'
     if (reason === 'model_context_window_exceeded') return 'length'
     if (reason === 'content_filter') return 'content_filter'

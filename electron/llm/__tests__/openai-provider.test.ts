@@ -399,7 +399,7 @@ describe('OpenAIProvider', () => {
     ['sensitive', 'content_filter'],
     ['model_context_window_exceeded', 'length'],
     ['network_error', 'error'],
-    ['tool_calls', 'unknown'],
+    ['tool_calls', 'stop'],
   ] as const)('maps Z.ai stream finish_reason %s to provider-neutral %s', async (providerReason, expectedReason) => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,

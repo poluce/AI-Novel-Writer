@@ -6,7 +6,7 @@
  */
 import { useState } from 'react'
 import { ShieldAlert } from 'lucide-react'
-import type { ToolCallInfo } from '../../../services/agent/agent-engine'
+import type { ToolCallInfo } from '../../../shared/agent-ui-types'
 import { useAgentStore } from '../../../stores/agent-store'
 import { useLocaleStore } from '../../../stores/locale-store'
 import ConfigImpactPreview, { useConfigImpactPreview } from './ConfigImpactPreview'

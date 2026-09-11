@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useEffect, useMemo, useState } from 'react'
 
-import type { ToolCallInfo } from '../../../services/agent/agent-engine'
+import type { ToolCallInfo } from '../../../shared/agent-ui-types'
 import { ipc } from '../../../services/ipc-client'
 import { buildChapterBlueprintProposal } from '../../../services/agent/tools/propose-chapter-blueprint.tool'
 import { buildNovelConfigProposal, type ProposalFieldDiff } from '../../../services/agent/tools/propose-novel-config.tool'

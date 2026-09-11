@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { ToolCallInfo } from '../services/agent/agent-engine'
+import type { ToolCallInfo } from '../shared/agent-ui-types'
 import { registerBuiltinTools } from '../services/agent/tools'
 import { skillRegistry, type LoadedSkill } from '../services/agent/skill-registry'
 import {

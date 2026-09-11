@@ -16,7 +16,7 @@ import {
   Loader2,
   AlertTriangle,
 } from 'lucide-react'
-import type { ToolCallInfo } from '../../../services/agent/agent-engine'
+import type { ToolCallInfo } from '../../../shared/agent-ui-types'
 import { useLocaleStore } from '../../../stores/locale-store'
 
 interface Props {

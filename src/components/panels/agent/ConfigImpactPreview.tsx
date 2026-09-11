@@ -8,7 +8,7 @@ import { sameProjectSessionContext, projectSessionContextFromProject } from '../
 import type {
   ConfigImpactBlueprintProposal,
   ToolCallInfo,
-} from '../../../services/agent/agent-engine'
+} from '../../../shared/agent-ui-types'
 import { buildChapterBlueprintProposal } from '../../../services/agent/tools/propose-chapter-blueprint.tool'
 import { ipc } from '../../../services/ipc-client'
 import { useLocaleStore } from '../../../stores/locale-store'

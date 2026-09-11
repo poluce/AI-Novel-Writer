@@ -53,9 +53,9 @@
 
 代码盘点见 [`2026-09-10-pi-agent-homemade-legacy.md`](2026-09-10-pi-agent-homemade-legacy.md)。下面只列待办勾选，不重复机制说明。
 
-- [ ] 删除文本工具协议：`parseToolCalls`、三种宽松解析、DSML、`cleanAgentVisibleText`、`generateToolPrompt` 的 XML 说明书与「每次最多一个」规则
+- [ ] 删除文本工具协议：`parseToolCalls`、三种宽松解析、DSML、`cleanAgentVisibleText`、`generateToolPrompt` 的 XML 说明书与「每次最多一个」规则——协议测试已删；实现仍被若干 renderer 工具测试通过 `runAgentLoop` 引用
 - [ ] 删除假 user `<tool_result>` 回灌；历史不再压成 16 条 user/assistant 字符串
-- [ ] 删除 `requireCompleteAgentResponse` 对非 `stop` 一刀切失败；OpenAI 的 `finish_reason: tool_calls` 不再映射为 `unknown`
+- [x] OpenAI 的 `finish_reason: tool_calls` / `function_call` 映射为 `stop`（不再当 `unknown`）；`requireCompleteAgentResponse` 仍只接受 `stop`，随 `runAgentLoop` 一起删
 - [ ] 删除全局 `generating` / `activeAbortController` / `pendingConfirmations` 单例；`@` 预填正文改为提示模型原生调工具
 - [ ] 删除 `runAgentLoop`、手写 observation、Agent 整轮 `output: 'visible-text'`
 - [ ] 助手 LLM 运输交给 pi-ai：删除自研 OpenAI/Gemini SSE 解析、`LLMFactory`、`<think>` 包标签；保留 models.json / 租约 / 推理策略适配

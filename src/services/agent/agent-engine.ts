@@ -19,7 +19,16 @@ import {
 } from './tool-registry'
 import { createAgentExecutionContext } from './tools/project-context'
 import { writingLanguageText, type WritingLanguage } from '../../shared/writing-language'
-import type { FileWriteCommitState } from '../../shared/ipc-channels'
+import type {
+  ToolCallInfo,
+  ToolConfirmationDecision,
+} from '../../shared/agent-ui-types'
+
+export type {
+  ConfigImpactBlueprintProposal,
+  ToolCallInfo,
+  ToolConfirmationDecision,
+} from '../../shared/agent-ui-types'
 
 // ===== 常量 =====
 
@@ -34,31 +43,7 @@ const TOOL_RESULT_MAX_CHARS = 3000
 
 // ===== 类型 =====
 
-/** Tool 调用信息 */
-export interface ToolCallInfo {
-  id: string
-  toolName: string
-  arguments: Record<string, unknown>
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'result_unknown' | 'waiting_confirm'
-  result?: string
-  error?: string
-  commitState?: FileWriteCommitState
-  /** Tool 来源标记 */
-  source?: string
-  /** Frozen project identity used to render and execute a confirmed domain proposal. */
-  projectSession?: AgentExecutionContext['projectSession']
-}
 
-/** One optional blueprint diff selected from a transient novel-config impact preview. */
-export interface ConfigImpactBlueprintProposal {
-  readonly name: 'propose_chapter_blueprint'
-  readonly arguments: Record<string, unknown>
-}
-
-export interface ToolConfirmationDecision {
-  readonly confirmed: boolean
-  readonly blueprintProposals?: readonly ConfigImpactBlueprintProposal[]
-}
 
 /** Agent Engine 回调 */
 export interface AgentEngineCallbacks {
