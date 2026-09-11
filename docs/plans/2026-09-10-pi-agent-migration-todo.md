@@ -126,6 +126,7 @@
 - **预算**：Gemini 3 flash 隐藏思考计入 `maxOutputTokens`——`maxTokens:500` 会把强制调用截断到 `doneReason=length`；单次产物调用要留足 maxTokens（或降 thinking）。
 - **工具参数形态**：Google adapter 不流式 partial JSON，`toolcall_delta` 一次性携带完整参数 JSON；文本与工具事件会 interleave（Gemini 3 附带空 text part）。
 - **打包**：主进程产物是 **ESM**（见 P0「打包适配验证」）；Pi 包 **external + 静态 `import`**（同现有 `@lancedb/lancedb`/`yauzl`），无需动态 import。Agent 单例建议放主进程（P0 未实测位置，仅 API 层验证）。
+- **打包冒烟（已验证）**：`electron-builder --win dir` 产物中，pi-ai/pi-agent-core 及全部传递依赖（`@aws-sdk/client-bedrock-runtime`、`@anthropic-ai/sdk`、`@google/genai`、`openai`、`typebox`、`partial-json`、`@earendil-works/chord`/`pi-telemetry`）均被纳入 `app.asar`；在 Electron 41.10.7/Node 24.18.0 下**从 asar 内 ESM `import` 全部成功**（含裸说明符解析与 AWS SDK），native 模块（better-sqlite3/@lancedb/apache-arrow）正确落到 `app.asar.unpacked`。**盲区关闭**。
 
 ## 阶段 1：依赖与清理（P1）
 
