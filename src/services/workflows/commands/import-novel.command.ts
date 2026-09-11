@@ -52,6 +52,7 @@ import {
   isRepairableDirectJsonSyntaxFailure,
   preservesStructuredJsonEvidence,
 } from '../structured-syntax-repair'
+import { internalPrompt } from '../../../prompts/internal/load'
 
 /** 拆分后的章节数据（从 context.data 中传递） */
 export interface ImportedChapter {
@@ -309,41 +310,11 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
       `${unresolvedTargets.length} relationship ${unresolvedTargets.length === 1 ? 'endpoint is' : 'endpoints are'} missing a character card; running one bounded correction`,
     ))
     const correction = await this.callLLMResult(
-      promptLanguageText(
-        writingLanguage,
-        [
-          '【导入推演受限补卡校正】',
-          '上一轮完整 JSON 已可解析，但 characterCards.relationships.target 引用了 characterCards 中不存在的角色名。',
-          '只输出一个完整 JSON 对象，不要 Markdown、解释或思考过程。',
-          '只允许输出严格 delta，顶层必须且只能包含 characterCards。',
-          `characterCards 必须新增且只新增这些缺失角色 name：${JSON.stringify(unresolvedTargets)}`,
-          '不得回传 novelConfig、architectureFiles 或任何原有角色卡；不得删除、重排、改名或改写任何原角色。',
-          '不得新增任意其他角色；delta 角色卡、currentState 与 relationships 内部不得包含合同外字段。',
-          '应用端会把 delta 追加到上一轮本地原始 characterCards，再执行完整导入推演 JSON 合同校验和关系闭合校验。',
-          '【delta JSON 合同】',
-          '{"characterCards":[{"name":"缺失关系端点精确 name","role":"protagonist | antagonist | supporting | minor","gender":"非空文本","age":"非空文本或有限数字","appearance":"非空文本","personality":"非空文本","background":"非空文本","abilities":"非空文本","motivation":"非空文本","relationships":[{"target":"最终 characterCards 中另一角色的精确 name","relation":"非空关系文本"}],"arc":"非空文本","notes":"非空文本","currentState":{"location":"非空文本","powerLevel":"非空文本","physicalState":"非空文本","mentalState":"非空文本","keyItems":"非空文本","recentEvents":"非空文本","updatedAtChapter":0}}]}',
-          '【上一轮完整 JSON（只用于识别已存在角色，不得回传旧内容）】',
-          JSON.stringify(originalRoot),
-        ].join('\n'),
-        [
-          '[Bounded import-inference endpoint-card correction]',
-          'The previous complete JSON is parseable, but characterCards.relationships.target references names absent from characterCards.',
-          'Output one complete JSON object only, with no Markdown, explanation, or reasoning.',
-          'Return a strict delta whose only top-level field is characterCards.',
-          `Add exactly these missing character names and no others: ${JSON.stringify(unresolvedTargets)}`,
-          'Do not return novelConfig, architectureFiles, or any existing card. Do not remove, reorder, rename, or rewrite existing characters.',
-          'Every delta card, currentState, and relationship must contain only contract fields.',
-          '[Delta JSON contract]',
-          '{"characterCards":[{"name":"exact missing endpoint name","role":"protagonist | antagonist | supporting | minor","gender":"non-empty text","age":"non-empty text or finite number","appearance":"non-empty text","personality":"non-empty text","background":"non-empty text","abilities":"non-empty text","motivation":"non-empty text","relationships":[{"target":"exact name of another final character","relation":"non-empty relationship text"}],"arc":"non-empty text","notes":"non-empty text","currentState":{"location":"non-empty text","powerLevel":"non-empty text","physicalState":"non-empty text","mentalState":"non-empty text","keyItems":"non-empty text","recentEvents":"non-empty text","updatedAtChapter":0}}]}',
-          '[Previous complete JSON — identify existing characters only; do not echo it]',
-          JSON.stringify(originalRoot),
-        ].join('\n'),
-      ),
-      promptLanguageText(
-        writingLanguage,
-        '你是导入推演 JSON 受限补卡 delta 生成器。只输出缺失关系端点对应的新增角色卡。',
-        'You generate a bounded JSON delta containing only cards for missing relationship endpoints.',
-      ),
+      internalPrompt('import_endpoint_card_correction', writingLanguage, {
+          unresolved_targets: JSON.stringify(unresolvedTargets),
+          original_root: JSON.stringify(originalRoot),
+        }),
+      internalPrompt('import_endpoint_card_delta_system', writingLanguage),
       callbacks,
       {
         responseFormat: { type: 'json_object' },
@@ -474,7 +445,7 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
     const initial = await this.callLLMResult(
       prompt,
       composePromptSystemRole({
-        systemRole: template.systemRole || promptLanguageText(writingLanguage, '你是一位资深小说编辑和阅读分析师。', 'You are a senior fiction editor and reading analyst.'),
+        systemRole: template.systemRole || internalPrompt('import_editor_analyst_role', writingLanguage),
       }, writingLanguage),
       callbacks,
       {
@@ -780,7 +751,7 @@ export class InferBlueprintsPerChapterCommand extends BaseWorkflowCommand<void> 
             {
               role: 'system',
               content: composePromptSystemRole({
-                systemRole: template.systemRole || promptLanguageText(writingLanguage, '你是一位专业的小说结构分析师。', 'You are a professional fiction-structure analyst.'),
+                systemRole: template.systemRole || internalPrompt('import_structure_analyst_role', writingLanguage),
               }, writingLanguage),
             },
             { role: 'user', content: prompt },

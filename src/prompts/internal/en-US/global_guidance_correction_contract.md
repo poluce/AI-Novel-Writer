@@ -1,0 +1,1 @@
+[Correction contract] The previous candidate was invalid and discarded. Regenerate only the Global writing guidance field: {{min_rules}}–{{max_rules}} rules, one rule per line, within {{max_chars}} characters total. Output only the rules, with no title, explanation, Markdown, or chapter-by-chapter outline.

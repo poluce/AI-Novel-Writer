@@ -15,6 +15,7 @@ import {
   workflowWritingLanguage,
 } from '../workflow-project-session'
 import { promptLanguageText } from '../../prompt-language'
+import { internalPrompt } from '../../../prompts/internal/load'
 import { readConsistencyPreflight } from '../../consistency-preflight'
 import { mergeConsistencyFindingsIntoReview, type ReviewLike } from '../../../shared/consistency-preflight'
 import type { ChapterBlueprint } from '../directory-workflow'
@@ -326,11 +327,7 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
         'The previous review output failed contract validation and was discarded. Do not quote or continue it; complete the original review task again.',
       )
       const rebuildHeading = promptLanguageText(writingLanguage, '【原始审稿任务】', '[Original review task]')
-      const rebuildContract = promptLanguageText(
-        writingLanguage,
-        '【硬性要求】只重新输出一个完整审稿 JSON，根字段为 summary、items、goalReviews：summary 不超过 120 字符；items 为 1–10 条，每条含 category、severity(error|warning|pass)、description(≤200 字符)；quote 仅 pass 可省略，error/warning 必须提供且不超过 160 字符。goalReviews 按上方最初冻结清单逐项返回 id、status、description、evidence，不受 items 条数限制；只用原始待审正文核对。不得输出这些约定以外的字段、Markdown、解释或思考过程。',
-        '[Hard requirement] Output one complete review JSON with root fields summary, items and goalReviews: summary within 120 characters; items 1–10 entries with category, severity(error|warning|pass), description(≤200 characters); quote is optional only for pass and required (≤160 characters) for error/warning. goalReviews must cover the original frozen checklist above with id, status, description and evidence, without the general items count limit; use only the original draft for evidence. No fields outside these contracts, Markdown, explanation, or reasoning.',
-      )
+      const rebuildContract = internalPrompt('review_json_retry_contract', writingLanguage)
       reviewResultRaw = await this.callLLMWithBoundedCompletion(
         [rebuildInstruction, rebuildHeading, reviewPrompt, rebuildContract].join('\n\n'),
         promptBuilder.getSystemRole(),

@@ -47,6 +47,7 @@ import {
   type SelectedCandidateDraft,
 } from '../chapter-materials'
 import type { DraftSourceDependency } from '../../../shared/draft-source-dependency'
+import { internalPrompt } from '../../../prompts/internal/load'
 
 export { countDraftUnits } from '../../../shared/draft-units'
 export { previousChapterEnding } from '../chapter-materials'
@@ -907,77 +908,19 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
       const remaining = Math.max(0, params.targetChars - currentChars)
       const visibleTail = sanitizeDraftText(draft).slice(-CONTINUE_PROMPT_MAX_CHARS)
       const recoveryInstruction = recoveryPending
-        ? promptLanguageText(
-            params.writingLanguage,
-            '上一轮续写达到输出上限且没有增加足够的新正文，已被全部丢弃。\n'
-              + '这是本次任务唯一一次无进展恢复机会：请直接推进下一事件、动作或对话，禁止复述已写末尾。\n\n',
-            'The previous continuation reached the output limit without adding enough new prose, so it was discarded in full.\n'
-              + 'This is the only no-progress recovery attempt: advance directly to the next event, action, or line of dialogue without repeating the existing ending.\n\n',
-          )
+        ? internalPrompt('chapter_continuation_recovery_notice', params.writingLanguage)
         : ''
-      const continuationPrompt = promptLanguageText(
-        params.writingLanguage,
-        `${recoveryInstruction}请无缝续写当前章节正文。
 
-【硬性要求】
-- 只输出新增正文，不要复述已写内容。
-- 从“已写正文末尾”自然接下去，保持同一场景逻辑或合理转场。
-- 本次续写尽可能完成剩余约 ${remaining} 字；如果无法达到，停在自然段落末尾。
-- 不要输出标题、解释、总结、Markdown、思考过程或“点我继续”。
-- 避免重复已写正文中的整句、整段、动作链和意象。
-- 不提前写后续章节，只完成本章蓝图允许的内容。
-
-【本章蓝图】
-${JSON.stringify(params.chapterInfo, null, 2)}
-
-【全局写作要求】
-${params.globalGuidance}
-
-【文风要求】
-${params.writingStyle || '（无）'}
-
-【文风适用边界】
-- 文风仅用于选择表达方式，不是新增事实或事件要求；无需逐条强行兑现。
-- 作者明确事实与指导、实际前文、本章关键因果和本章篇幅优先。不得用文风改写这些内容或仅为兑现文风增加场景、动作或事件；不得把作者明确事实或要求降格为推测。
-
-【小说配置事实】
-${params.novelConfigFacts}
-
-${params.chapterMaterials}
-
-【已写正文末尾】
-${visibleTail}`,
-        `${recoveryInstruction}Continue the current chapter seamlessly.
-
-[Requirements]
-- Output only new manuscript prose; do not repeat existing text.
-- Continue naturally from the existing ending, preserving the same scene logic or making a justified transition.
-- Complete as much as possible of the remaining approximately ${remaining} words; if that is not possible, stop at a natural paragraph boundary.
-- Do not output a title, explanation, summary, Markdown, reasoning, or an interface continuation prompt.
-- Avoid repeating complete sentences, paragraphs, action sequences, or imagery from the existing manuscript.
-- Complete only the current chapter blueprint; do not advance later chapters.
-
-[Current chapter blueprint]
-${JSON.stringify(params.chapterInfo, null, 2)}
-
-[Project-wide writing guidance]
-${params.globalGuidance}
-
-[Writing style]
-${params.writingStyle || '(none)'}
-
-[Writing-style applicability]
-- Writing style selects expression only; it adds no facts or events, and not every item must be forced into the manuscript.
-- Explicit author facts and guidance, actual prior prose, the chapter's key causality, and its target length take priority. Do not use style guidance to rewrite them, relabel explicit author facts or requirements as guesses, or add scenes, actions, or events merely to satisfy style guidance.
-
-[Novel configuration facts]
-${params.novelConfigFacts}
-
-${params.chapterMaterials}
-
-[End of existing manuscript]
-${visibleTail}`,
-      )
+      const continuationPrompt = internalPrompt('chapter_continuation_prompt', params.writingLanguage, {
+        recovery_instruction: recoveryInstruction,
+        remaining,
+        chapter_info: JSON.stringify(params.chapterInfo, null, 2),
+        global_guidance: params.globalGuidance,
+        writing_style: params.writingStyle || promptLanguageText(params.writingLanguage, '（无）', '(none)'),
+        novel_config_facts: params.novelConfigFacts,
+        chapter_materials: params.chapterMaterials,
+        visible_tail: visibleTail,
+      })
 
       const preview = createDraftStreamPreview(
         params.callbacks.replaceText,

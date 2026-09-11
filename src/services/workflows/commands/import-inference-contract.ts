@@ -3,7 +3,7 @@ import { CHARACTER_ROSTER_ROLES } from '../../../shared/character-roster'
 import { StructuredContractDiagnostic } from '../../../shared/structured-contract-diagnostic'
 import type { NovelConfig } from '../../../shared/ipc-channels'
 import type { WritingLanguage } from '../../../shared/writing-language'
-import { promptLanguageText } from '../../prompt-language'
+import { internalPrompt } from '../../../prompts/internal/load'
 
 type InferredNovelConfig = Omit<NovelConfig, 'totalChapters' | 'wordsPerChapter'>
 
@@ -21,62 +21,8 @@ const PLOT_STRUCTURES = ['three_act', 'heros_journey', 'save_the_cat', 'kishoten
 const NARRATIVE_POVS = ['third_limited', 'first_person', 'third_omniscient', 'multi_pov'] as const
 const EDGE_INVISIBLE_WRAPPER_RESIDUE = new Set(['\uFEFF', '\u200B', '\u200C', '\u200D', '\u2060'])
 
-export const IMPORT_INFERENCE_JSON_CONTRACT = `
-【不可变导入推演 JSON 合同】
-只输出一个直接 JSON 对象（禁止 Markdown 围栏和解释），完整包含：
-{
-  "novelConfig": {
-    "genre": "非空文本", "subGenre": "非空文本", "targetAudience": "非空文本",
-    "plotStructure": "three_act | heros_journey | save_the_cat | kishotenketsu | multi_thread | freeform",
-    "narrativePOV": "third_limited | first_person | third_omniscient | multi_pov",
-    "coreOutline": "非空文本", "worldSetting": "非空文本", "goldenFinger": "非空文本",
-    "protagonistProfile": "非空文本", "globalGuidance": "非空文本"
-  },
-  "architectureFiles": {
-    "premise": "非空文本", "worldbuilding": "非空文本", "synopsis": "非空文本"
-  },
-  "characterCards": [{
-    "name": "唯一非空角色名", "role": "protagonist | antagonist | supporting | minor",
-    "gender": "非空文本", "age": "非空文本或有限数字", "appearance": "非空文本",
-    "personality": "非空文本", "background": "非空文本", "abilities": "非空文本",
-    "motivation": "非空文本", "relationships": [{"target":"同一 characterCards 中另一角色的精确 name","relation":"非空关系文本"}],
-    "arc": "非空文本", "notes": "非空文本",
-    "currentState": {"location":"非空文本","powerLevel":"非空文本","physicalState":"非空文本","mentalState":"非空文本","keyItems":"非空文本","recentEvents":"非空文本","updatedAtChapter":0}
-  }]
-}
-characterCards 必须有 3–8 项，name 唯一，至少一个 protagonist；关系不得自指，target 必须在本次 name 集合中。不得省略字段、使用中文枚举或以近义字段替代。`
-
-const EN_US_IMPORT_INFERENCE_JSON_CONTRACT = `
-[Immutable import-inference JSON contract]
-Output one direct JSON object only, with no Markdown fence or explanation. It must contain:
-{
-  "novelConfig": {
-    "genre": "non-empty text", "subGenre": "non-empty text", "targetAudience": "non-empty text",
-    "plotStructure": "three_act | heros_journey | save_the_cat | kishotenketsu | multi_thread | freeform",
-    "narrativePOV": "third_limited | first_person | third_omniscient | multi_pov",
-    "coreOutline": "non-empty text", "worldSetting": "non-empty text", "goldenFinger": "non-empty text",
-    "protagonistProfile": "non-empty text", "globalGuidance": "non-empty text"
-  },
-  "architectureFiles": {
-    "premise": "non-empty text", "worldbuilding": "non-empty text", "synopsis": "non-empty text"
-  },
-  "characterCards": [{
-    "name": "unique non-empty character name", "role": "protagonist | antagonist | supporting | minor",
-    "gender": "non-empty text", "age": "non-empty text or finite number", "appearance": "non-empty text",
-    "personality": "non-empty text", "background": "non-empty text", "abilities": "non-empty text",
-    "motivation": "non-empty text", "relationships": [{"target":"exact name of another character in characterCards","relation":"non-empty relationship text"}],
-    "arc": "non-empty text", "notes": "non-empty text",
-    "currentState": {"location":"non-empty text","powerLevel":"non-empty text","physicalState":"non-empty text","mentalState":"non-empty text","keyItems":"non-empty text","recentEvents":"non-empty text","updatedAtChapter":0}
-  }]
-}
-characterCards must contain 3–8 unique names and at least one protagonist. Relationships may not self-reference, and every target must occur in the same name set. Do not omit fields, translate enum values, or substitute synonym field names.`
-
 export function importInferenceJsonContract(writingLanguage: WritingLanguage): string {
-  return promptLanguageText(
-    writingLanguage,
-    IMPORT_INFERENCE_JSON_CONTRACT,
-    EN_US_IMPORT_INFERENCE_JSON_CONTRACT,
-  )
+  return internalPrompt('import_inference_json_contract', writingLanguage)
 }
 
 function trimEdgeWrapperResidue(content: string): string {

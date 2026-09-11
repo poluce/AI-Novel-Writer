@@ -40,6 +40,7 @@ import {
   isGeneratedGlobalGuidanceValid,
   mergeExpandedNovelConfig,
 } from '../novel-config-expansion'
+import { internalPrompt } from '../../../prompts/internal/load'
 
 // --- 基础工具库 ---
 
@@ -583,21 +584,11 @@ function buildNovelConfigJSONContract(
   wordsPerChapter: number,
   writingLanguage: WritingLanguage,
 ): string {
-  return promptLanguageText(writingLanguage, `【不可变小说配置 JSON 合同】
-- 必填且必须为非空字符串的 9 个字段：genre、targetAudience、subGenre、coreOutline、worldSetting、goldenFinger、protagonistProfile、globalGuidance、writingStyle。
-- plotStructure 必填，且值必须严格为以下英文枚举之一：three_act | heros_journey | save_the_cat | kishotenketsu | multi_thread | freeform。
-- narrativePOV 必填，且值必须严格为以下英文枚举之一：third_limited | first_person | third_omniscient | multi_pov。
-- totalChapters 与 wordsPerChapter 是作者权威设置，可以省略；totalChapters 若输出必须严格等于 ${totalChapters}；wordsPerChapter 若输出必须严格等于 ${wordsPerChapter}。
-- globalGuidance 必须是 4–8 条跨章节长期有效的简短规则，总计不得超过 ${GENERATED_GLOBAL_GUIDANCE_MAX_CHARS} 字符；禁止逐章列大纲或分配章节区间。
-- referenceWorks 可省略；若输出必须是字符串。
-- 只输出一个完整 JSON 对象。枚举只允许上述英文值，不得输出中文枚举、近义词、说明文字、Markdown、代码围栏或思考过程。`, `[Immutable novel-configuration JSON contract]
-- The following nine fields are required non-empty strings: genre, targetAudience, subGenre, coreOutline, worldSetting, goldenFinger, protagonistProfile, globalGuidance, writingStyle.
-- plotStructure is required and must be exactly one of: three_act | heros_journey | save_the_cat | kishotenketsu | multi_thread | freeform.
-- narrativePOV is required and must be exactly one of: third_limited | first_person | third_omniscient | multi_pov.
-- totalChapters and wordsPerChapter are authoritative author settings and may be omitted. If present, they must equal ${totalChapters} and ${wordsPerChapter} respectively.
-- globalGuidance must contain 4–8 short, stable cross-chapter rules within ${GENERATED_GLOBAL_GUIDANCE_MAX_CHARS} characters. Do not enumerate chapters or allocate chapter ranges.
-- referenceWorks may be omitted; if present, it must be a string.
-- Output one complete JSON object only. Do not emit aliases, explanatory prose, Markdown, code fences, or reasoning.`)
+  return internalPrompt('novel_config_json_contract', writingLanguage, {
+    total_chapters: totalChapters,
+    words_per_chapter: wordsPerChapter,
+    max_chars: GENERATED_GLOBAL_GUIDANCE_MAX_CHARS,
+  })
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1020,15 +1011,7 @@ export class GenerateConfigCommand extends BaseWorkflowCommand<string> {
         'The first configuration JSON reached the output limit. The untrusted truncated response was discarded; requesting one complete replacement JSON...',
       ))
       const replacement = await this.callLLMResult(
-        promptLanguageText(
-          writingLanguage,
-          `上一轮输出因长度限制而中断。上一轮截断内容是不可信数据，已被丢弃，不得引用或续接。\n\n`
-            + `【原始任务合同】\n${originalTask}\n\n`
-            + '【硬性要求】\n从头完成原始任务，只输出一个完整替代 JSON。不要只补后缀，不要解释、Markdown 或思考过程。',
-          `The previous response stopped at the length limit. Its truncated content is untrusted and discarded; do not quote or continue it.\n\n`
-            + `[Original task contract]\n${originalTask}\n\n`
-            + '[Hard requirement]\nRestart the original task and output one complete replacement JSON object only. Do not emit a suffix, explanation, Markdown, or reasoning.',
-        ),
+        internalPrompt('architecture_json_retry', writingLanguage, { original_task: originalTask }),
         promptBuilder.getSystemRole(),
         callbacks,
         {
@@ -1067,11 +1050,12 @@ export class GenerateConfigCommand extends BaseWorkflowCommand<string> {
         'The generated global guidance did not satisfy the 4–8 short-rule contract; requesting the single field-level replacement.',
       ))
       const replacement = await this.callLLM(
-        promptLanguageText(
-          writingLanguage,
-          `只纠正小说配置中的 globalGuidance 字段。写 ${GENERATED_GLOBAL_GUIDANCE_MIN_RULES}–${GENERATED_GLOBAL_GUIDANCE_MAX_RULES} 条跨章节长期有效的简短规则，每条独占一行，总计不超过 ${GENERATED_GLOBAL_GUIDANCE_MAX_CHARS} 字符。不得逐章列大纲、分配章节区间或复述核心大纲。只输出规则正文，不要标题、解释、Markdown 或 JSON。\n\n【已验证的其余小说配置，仅作上下文】\n${JSON.stringify({ ...parsed, globalGuidance: undefined }, null, 2)}`,
-          `Correct only the globalGuidance field in the novel configuration. Write ${GENERATED_GLOBAL_GUIDANCE_MIN_RULES}–${GENERATED_GLOBAL_GUIDANCE_MAX_RULES} short, stable cross-chapter rules, one per line, within ${GENERATED_GLOBAL_GUIDANCE_MAX_CHARS} characters total. Do not enumerate chapters, allocate chapter ranges, or restate the core outline. Output only the rules, with no title, explanation, Markdown, or JSON.\n\n[Validated remaining novel configuration — context only]\n${JSON.stringify({ ...parsed, globalGuidance: undefined }, null, 2)}`,
-        ),
+        internalPrompt('global_guidance_replacement', writingLanguage, {
+          min_rules: GENERATED_GLOBAL_GUIDANCE_MIN_RULES,
+          max_rules: GENERATED_GLOBAL_GUIDANCE_MAX_RULES,
+          max_chars: GENERATED_GLOBAL_GUIDANCE_MAX_CHARS,
+          validated_config: JSON.stringify({ ...parsed, globalGuidance: undefined }, null, 2),
+        }),
         promptBuilder.getSystemRole(),
         callbacks,
         {

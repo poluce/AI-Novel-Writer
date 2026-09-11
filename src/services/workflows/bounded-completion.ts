@@ -2,6 +2,7 @@ import type { LLMFinishReason } from '../../shared/ipc-channels'
 import type { WritingLanguage } from '../../shared/writing-language'
 import { localize, type Locale } from '../../i18n/core'
 import { promptLanguageText } from '../prompt-language'
+import { internalPrompt } from '../../prompts/internal/load'
 import { stripThinkingTags } from './workflow-utils'
 
 const CONTINUATION_VISIBLE_TAIL_CHARS = 1600
@@ -376,23 +377,10 @@ function buildStructuredReplacementPrompt(
   visiblePartial: string,
   writingLanguage: WritingLanguage,
 ): string {
-  return promptLanguageText(
-    writingLanguage,
-    `上一轮结构化输出因长度限制而中断。请重新完成任务。\n\n`
-      + `【原始任务】\n${originalPrompt}\n\n`
-      + `【上一轮可见的不完整输出（仅供参考，可能不完整）】\n${visiblePartial || '（没有可用输出）'}\n\n`
-      + `【硬性要求】\n`
-      + `- 返回完整 JSON，从头重建，不要只补后缀。\n`
-      + `- 仅输出可被 JSON.parse 解析的完整 JSON；不要 Markdown、解释或思考过程。\n`
-      + `- 以上一轮可见内容为参考，但以原始任务为准，补全所有必需字段和数组。`,
-    `The previous structured output stopped at the length limit. Complete the task again.\n\n`
-      + `[Original task]\n${originalPrompt}\n\n`
-      + `[Visible incomplete output from the previous attempt — reference only]\n${visiblePartial || '(no visible output)'}\n\n`
-      + `[Requirements]\n`
-      + `- Rebuild and return the complete JSON from the beginning; do not return only a suffix.\n`
-      + `- Output only complete JSON accepted by JSON.parse, with no Markdown, explanation, or reasoning.\n`
-      + `- Use the visible prior output only as evidence; the original task remains authoritative, and every required field and array must be complete.`,
-  )
+  return internalPrompt('bounded_json_retry', writingLanguage, {
+    original_prompt: originalPrompt,
+    visible_partial: visiblePartial || noVisibleOutputLabel(writingLanguage),
+  })
 }
 
 function buildTextContinuationPrompt(
@@ -401,21 +389,15 @@ function buildTextContinuationPrompt(
   writingLanguage: WritingLanguage,
 ): string {
   const visibleTail = visibleText.slice(-CONTINUATION_VISIBLE_TAIL_CHARS)
-  return promptLanguageText(
-    writingLanguage,
-    `上一轮文本因长度限制而中断。请继续完成原始任务。\n\n`
-      + `【原始任务】\n${originalPrompt}\n\n`
-      + `【已完成可见文本末尾】\n${visibleTail || '（没有可用输出）'}\n\n`
-      + `【硬性要求】\n`
-      + `- 只输出新增的可见文本，不要复述、总结、解释、Markdown 或思考过程。\n`
-      + `- 从已完成文本的末尾自然续写，完成原始任务。`,
-    `The previous text stopped at the length limit. Continue and complete the original task.\n\n`
-      + `[Original task]\n${originalPrompt}\n\n`
-      + `[End of the completed visible text]\n${visibleTail || '(no visible output)'}\n\n`
-      + `[Requirements]\n`
-      + `- Output only new visible prose. Do not repeat, summarize, explain, use Markdown, or reveal reasoning.\n`
-      + `- Continue naturally from the end of the completed text and finish the original task.`,
-  )
+  return internalPrompt('bounded_text_retry', writingLanguage, {
+    original_prompt: originalPrompt,
+    visible_tail: visibleTail || noVisibleOutputLabel(writingLanguage),
+  })
+}
+
+/** 续写提示词里"上一轮没有可用输出"的占位标签；与写作语言一致。 */
+function noVisibleOutputLabel(writingLanguage: WritingLanguage): string {
+  return promptLanguageText(writingLanguage, '（没有可用输出）', '(no visible output)')
 }
 
 function buildContinuationPrompt(

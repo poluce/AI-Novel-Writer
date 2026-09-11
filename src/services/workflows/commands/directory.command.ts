@@ -41,6 +41,7 @@ import {
 import { readAuthoritativeNextChapter } from '../../authoritative-chapter-sequence'
 import { localizeNovelConfigFacts } from '../../../shared/novel-config-localization'
 import { normalizeChapterWordsTarget } from '../chapter-creation-parameters'
+import { internalPrompt } from '../../../prompts/internal/load'
 
 type CreateDirectoryGenerationRuntime = typeof createGenerationRuntime
 
@@ -287,7 +288,7 @@ function buildCompactBlueprintTask(input: {
   ].join('\n')
   const systemRole = composePromptSystemRole({
     systemRole: boundedFactText(input.systemRole, COMPACT_SYSTEM_ROLE_MAX_UTF8_BYTES)
-      || promptLanguageText(input.writingLanguage, '你是一位经验丰富的章节架构师。', 'You are an experienced chapter architect.'),
+      || internalPrompt('directory_chapter_architect_role', input.writingLanguage),
   }, input.writingLanguage)
   const factSection = (sectionName: string, key: keyof typeof facts) => ({
     sectionName,
@@ -411,7 +412,7 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
         genre: modelFacts.genre,
         globalGuidance: novelConfig.globalGuidance || '',
         pacingGuidance: (context.data.pacingGuidance as string) || '',
-        systemRole: template.systemRole || promptLanguageText(writingLanguage, '你是一位经验丰富的小说架构师。', 'You are an experienced fiction architect.'),
+        systemRole: template.systemRole || internalPrompt('directory_fiction_architect_role', writingLanguage),
         writingLanguage,
         diagnostic,
       })
@@ -460,7 +461,7 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
             {
               role: 'system',
               content: composePromptSystemRole({
-                systemRole: template.systemRole || promptLanguageText(writingLanguage, '你是一位经验丰富的小说架构师。', 'You are an experienced fiction architect.'),
+                systemRole: template.systemRole || internalPrompt('directory_fiction_architect_role', writingLanguage),
               }, writingLanguage),
             },
             { role: 'user', content: prompt },

@@ -9,6 +9,7 @@ import { requireWorkflowProjectSession } from '../workflow-project-session'
 import { workflowUiText, workflowWritingLanguage } from '../workflow-project-session'
 import { composePromptSystemRole, resolvePromptTemplate, renderPrompt } from '../../prompt-templates'
 import { promptLanguageText } from '../../prompt-language'
+import { internalPrompt } from '../../../prompts/internal/load'
 import type { WritingLanguage } from '../../../shared/writing-language'
 import { GenerationAttemptError, PromptBudgetExceededError } from '../../generation/generation-harness'
 import { BoundedCompletionFailure } from '../bounded-completion'
@@ -142,11 +143,11 @@ export class GenerateFieldCommand extends BaseWorkflowCommand<string> {
         'The first global-guidance candidate did not satisfy the 4–8 short-rule contract; requesting the single field-level replacement.',
       ))
       result = await requestFieldCompletion(
-        `${prompt}\n\n${promptLanguageText(
-          writingLanguage,
-          `【纠正规则】上一轮候选无效且已丢弃。只重新生成“全局写作要求”字段：${GENERATED_GLOBAL_GUIDANCE_MIN_RULES}–${GENERATED_GLOBAL_GUIDANCE_MAX_RULES} 条，每条独占一行，总计不超过 ${GENERATED_GLOBAL_GUIDANCE_MAX_CHARS} 字符。只输出规则正文，不要标题、解释、Markdown 或逐章大纲。`,
-          `[Correction contract] The previous candidate was invalid and discarded. Regenerate only the Global writing guidance field: ${GENERATED_GLOBAL_GUIDANCE_MIN_RULES}–${GENERATED_GLOBAL_GUIDANCE_MAX_RULES} rules, one rule per line, within ${GENERATED_GLOBAL_GUIDANCE_MAX_CHARS} characters total. Output only the rules, with no title, explanation, Markdown, or chapter-by-chapter outline.`,
-        )}`,
+        `${prompt}\n\n${internalPrompt('global_guidance_correction_contract', writingLanguage, {
+            min_rules: GENERATED_GLOBAL_GUIDANCE_MIN_RULES,
+            max_rules: GENERATED_GLOBAL_GUIDANCE_MAX_RULES,
+            max_chars: GENERATED_GLOBAL_GUIDANCE_MAX_CHARS,
+          })}`,
         'generate-field-globalGuidance-replacement',
       )
       this.assertNotCancelled(context)
