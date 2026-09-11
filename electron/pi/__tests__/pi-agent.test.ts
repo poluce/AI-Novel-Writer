@@ -1,0 +1,102 @@
+import { describe, expect, it } from 'vitest'
+
+import type { AgentTool } from '@earendil-works/pi-agent-core'
+import { createModels, Type } from '@earendil-works/pi-ai'
+import {
+  fauxAssistantMessage,
+  fauxProvider,
+  fauxToolCall,
+} from '@earendil-works/pi-ai/providers/faux'
+
+import { createPiAgent } from '../pi-agent'
+import type { PiToolCallInfo } from '../pi-agent'
+
+const AddSchema = Type.Object({ a: Type.Number(), b: Type.Number() })
+
+const addTool: AgentTool<typeof AddSchema, { sum: number }> = {
+  name: 'add_numbers',
+  label: 'Add Numbers',
+  description: 'Add two numbers.',
+  parameters: AddSchema,
+  execute: async (_id, params) => ({
+    content: [{ type: 'text', text: String(params.a + params.b) }],
+    details: { sum: params.a + params.b },
+  }),
+}
+
+describe('createPiAgent', () => {
+  it('streams text, executes a tool, and reports done via the callback contract', async () => {
+    const faux = fauxProvider()
+    const models = createModels()
+    models.setProvider(faux.provider)
+    faux.setResponses([
+      fauxAssistantMessage([fauxToolCall('add_numbers', { a: 12, b: 7 })]),
+      fauxAssistantMessage('The sum is 19.'),
+    ])
+
+    const text: string[] = []
+    const toolStarts: PiToolCallInfo[] = []
+    const toolCompletes: PiToolCallInfo[] = []
+    let doneText = ''
+
+    const handle = createPiAgent({
+      model: faux.getModel(),
+      streamFn: models.streamSimple.bind(models),
+      systemPrompt: 'You are a calculator.',
+      tools: [addTool],
+      callbacks: {
+        onTextChunk: (chunk) => { text.push(chunk) },
+        onToolCallStart: (call) => { toolStarts.push(call) },
+        onToolCallConfirmRequired: async () => true,
+        onToolCallComplete: (call) => { toolCompletes.push(call) },
+        onDone: (fullText) => { doneText = fullText },
+        onError: () => {},
+      },
+    })
+
+    await handle.prompt('What is 12 + 7?')
+
+    expect(text.join('')).toBe('The sum is 19.')
+    expect(toolStarts).toHaveLength(1)
+    expect(toolStarts[0].toolName).toBe('add_numbers')
+    expect(toolCompletes).toHaveLength(1)
+    expect(toolCompletes[0].status).toBe('completed')
+    expect(toolCompletes[0].result).toEqual({ sum: 19 })
+    expect(doneText).toBe('The sum is 19.')
+  })
+
+  it('blocks a confirmed write tool when the user declines', async () => {
+    const faux = fauxProvider()
+    const models = createModels()
+    models.setProvider(faux.provider)
+    faux.setResponses([
+      fauxAssistantMessage([fauxToolCall('add_numbers', { a: 1, b: 2 })]),
+      fauxAssistantMessage('ok'),
+    ])
+
+    const toolCompletes: PiToolCallInfo[] = []
+    let confirmations = 0
+
+    const handle = createPiAgent({
+      model: faux.getModel(),
+      streamFn: models.streamSimple.bind(models),
+      systemPrompt: 'Calculator.',
+      tools: [addTool],
+      confirmationToolNames: new Set(['add_numbers']),
+      callbacks: {
+        onTextChunk: () => {},
+        onToolCallStart: () => {},
+        onToolCallConfirmRequired: async () => { confirmations++; return false },
+        onToolCallComplete: (call) => { toolCompletes.push(call) },
+        onDone: () => {},
+        onError: () => {},
+      },
+    })
+
+    await handle.prompt('add 1 and 2')
+
+    expect(confirmations).toBe(1)
+    expect(toolCompletes).toHaveLength(1)
+    expect(toolCompletes[0].status).toBe('failed')
+  })
+})
