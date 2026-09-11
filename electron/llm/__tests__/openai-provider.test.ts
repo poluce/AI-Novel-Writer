@@ -5,21 +5,21 @@ import { resolveOpenAIChatCompletionsUrl } from '../openai-compatible-endpoint'
 import { resolveGenerationParameters } from '../generation-parameter-policy'
 import type { ModelProfile } from '../../../src/shared/ipc-channels'
 
-const novelAIModel: ModelProfile = {
-  id: 'novelai-test',
-  name: 'NovelAI Test',
-  provider: 'novelai',
+const baseModel: ModelProfile = {
+  id: 'base-model',
+  name: 'Base Model',
+  provider: 'custom',
   protocol: 'openai',
-  modelName: 'novelai-model',
-  apiKey: 'pst-test-token',
-  baseUrl: 'https://text.novelai.net/oa',
+  modelName: 'base-model',
+  apiKey: 'test-token',
+  baseUrl: 'https://gateway.example/v1',
   temperature: 0.7,
   maxTokens: 4096,
   purposes: ['generation'],
 }
 
 const fixedTemperatureKimiModel: ModelProfile = {
-  ...novelAIModel,
+  ...baseModel,
   id: 'kimi-k3',
   name: 'Kimi K3',
   provider: 'custom',
@@ -29,7 +29,7 @@ const fixedTemperatureKimiModel: ModelProfile = {
 }
 
 const legacyDeepSeekV4Model: ModelProfile = {
-  ...novelAIModel,
+  ...baseModel,
   id: 'deepseek-v4-flash',
   name: 'DeepSeek V4 Flash',
   provider: 'deepseek',
@@ -75,11 +75,11 @@ describe('resolveOpenAIChatCompletionsUrl', () => {
     ['generic path prefix', 'https://gateway.example/tenant/openai', 'https://gateway.example/tenant/openai/chat/completions'],
     ['trailing slashes', 'https://gateway.example/api/plan/v3///', 'https://gateway.example/api/plan/v3/chat/completions'],
   ])('resolves the %s without replacing its configured prefix', (_case, baseUrl, expectedUrl) => {
-    expect(resolveOpenAIChatCompletionsUrl(baseUrl, 'custom')).toBe(expectedUrl)
+    expect(resolveOpenAIChatCompletionsUrl(baseUrl)).toBe(expectedUrl)
   })
 })
 
-describe('OpenAIProvider NovelAI compatibility', () => {
+describe('OpenAIProvider', () => {
   it('preserves an explicitly configured endpoint prefix for normal and streaming generation', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({
@@ -92,7 +92,7 @@ describe('OpenAIProvider NovelAI compatibility', () => {
       })
     vi.stubGlobal('fetch', fetchMock)
     const model = {
-      ...novelAIModel,
+      ...baseModel,
       provider: 'custom' as const,
       baseUrl: 'https://gateway.example/tenant/openai',
     }
@@ -116,65 +116,6 @@ describe('OpenAIProvider NovelAI compatibility', () => {
     ])
   })
 
-  it('uses the OpenAI-compatible URL and Bearer token without unsupported JSON response formatting', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: '正文' }, finish_reason: 'stop' }] }),
-    })
-    vi.stubGlobal('fetch', fetchMock)
-
-    await expect(new OpenAIProvider().generate(novelAIModel, [{ role: 'user', content: '写一段正文' }], {
-      temperature: 0.2,
-      maxTokens: 512,
-      responseFormat: { type: 'json_object' },
-    })).resolves.toMatchObject({ success: true, content: '正文', finishReason: 'stop' })
-
-    const [url, request] = fetchMock.mock.calls[0] as [string, RequestInit]
-    expect(url).toBe('https://text.novelai.net/oa/v1/chat/completions')
-    expect(request.headers).toMatchObject({ Authorization: 'Bearer pst-test-token' })
-
-    const body = requestBody(fetchMock)
-    expect(body).toMatchObject({ stream: false })
-    expect(body).not.toHaveProperty('enable_thinking')
-    expect(body).not.toHaveProperty('thinking')
-    expect(body).not.toHaveProperty('response_format')
-  })
-
-  it('applies the same NovelAI request compatibility to streaming generation', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      body: {
-        getReader: () => sseReader(
-          'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
-          'data: [DONE]\n\n',
-        ),
-      },
-    })
-    vi.stubGlobal('fetch', fetchMock)
-
-    const onDone = vi.fn()
-    await new OpenAIProvider().generateStream(novelAIModel, [{ role: 'user', content: '流式正文' }], {
-      temperature: 0.2,
-      maxTokens: 512,
-      responseFormat: { type: 'json_object' },
-      signal: new AbortController().signal,
-      onChunk: vi.fn(),
-      onDone,
-      onError: vi.fn(),
-    })
-
-    const [url, request] = fetchMock.mock.calls[0] as [string, RequestInit]
-    expect(url).toBe('https://text.novelai.net/oa/v1/chat/completions')
-    expect(request.headers).toMatchObject({ Authorization: 'Bearer pst-test-token' })
-
-    const body = requestBody(fetchMock)
-    expect(body).toMatchObject({ stream: true })
-    expect(body).not.toHaveProperty('enable_thinking')
-    expect(body).not.toHaveProperty('thinking')
-    expect(body).not.toHaveProperty('response_format')
-    expect(onDone).toHaveBeenCalledWith('', undefined, 'stop')
-  })
-
   it('applies the same verified reasoning effort to normal and streaming xAI requests', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({
@@ -188,7 +129,7 @@ describe('OpenAIProvider NovelAI compatibility', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const xaiModel: ModelProfile = {
-      ...novelAIModel,
+      ...baseModel,
       provider: 'xai',
       modelName: 'grok-4.5',
       baseUrl: 'https://api.x.ai/v1',
@@ -375,7 +316,7 @@ describe('OpenAIProvider NovelAI compatibility', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(new OpenAIProvider().generate(novelAIModel, [{ role: 'user', content: '写正文' }], {
+    await expect(new OpenAIProvider().generate(baseModel, [{ role: 'user', content: '写正文' }], {
       temperature: 0.2,
       maxTokens: 512,
     })).resolves.toMatchObject({
@@ -391,7 +332,7 @@ describe('OpenAIProvider NovelAI compatibility', () => {
       json: async () => ({ choices: [{ message: { content: '传输已结束但完成原因未知' } }] }),
     }))
 
-    await expect(new OpenAIProvider().generate(novelAIModel, [{ role: 'user', content: '写正文' }], {
+    await expect(new OpenAIProvider().generate(baseModel, [{ role: 'user', content: '写正文' }], {
       temperature: 0.2,
       maxTokens: 512,
     })).resolves.toMatchObject({
@@ -415,7 +356,7 @@ describe('OpenAIProvider NovelAI compatibility', () => {
     const onDone = vi.fn()
     const onError = vi.fn()
 
-    await new OpenAIProvider().generateStream(novelAIModel, [{ role: 'user', content: '写正文' }], {
+    await new OpenAIProvider().generateStream(baseModel, [{ role: 'user', content: '写正文' }], {
       temperature: 0.2,
       maxTokens: 512,
       signal: new AbortController().signal,
@@ -441,7 +382,7 @@ describe('OpenAIProvider NovelAI compatibility', () => {
     const onDone = vi.fn()
     const onError = vi.fn()
 
-    await new OpenAIProvider().generateStream(novelAIModel, [{ role: 'user', content: '写正文' }], {
+    await new OpenAIProvider().generateStream(baseModel, [{ role: 'user', content: '写正文' }], {
       temperature: 0.2,
       maxTokens: 512,
       signal: new AbortController().signal,
@@ -472,7 +413,7 @@ describe('OpenAIProvider NovelAI compatibility', () => {
     const onDone = vi.fn()
     const onError = vi.fn()
 
-    await new OpenAIProvider().generateStream(novelAIModel, [{ role: 'user', content: '写正文' }], {
+    await new OpenAIProvider().generateStream(baseModel, [{ role: 'user', content: '写正文' }], {
       temperature: 0.2,
       maxTokens: 512,
       signal: new AbortController().signal,
@@ -497,7 +438,7 @@ describe('OpenAIProvider NovelAI compatibility', () => {
     }))
     const onDone = vi.fn()
 
-    await new OpenAIProvider().generateStream(novelAIModel, [{ role: 'user', content: '写正文' }], {
+    await new OpenAIProvider().generateStream(baseModel, [{ role: 'user', content: '写正文' }], {
       temperature: 0.2,
       maxTokens: 512,
       signal: new AbortController().signal,
@@ -524,7 +465,7 @@ describe('OpenAIProvider NovelAI compatibility', () => {
     const onDone = vi.fn()
 
     await new OpenAIProvider().generateStream({
-      ...novelAIModel,
+      ...baseModel,
       provider: 'openai',
       baseUrl: 'https://api.openai.com',
     }, [{ role: 'user', content: '写正文' }], {
@@ -558,7 +499,7 @@ describe('OpenAIProvider NovelAI compatibility', () => {
     const onDone = vi.fn()
     const onError = vi.fn()
 
-    await new OpenAIProvider().generateStream(novelAIModel, [{ role: 'user', content: '写正文' }], {
+    await new OpenAIProvider().generateStream(baseModel, [{ role: 'user', content: '写正文' }], {
       temperature: 0.2,
       maxTokens: 512,
       signal: new AbortController().signal,
@@ -585,7 +526,7 @@ describe('OpenAIProvider NovelAI compatibility', () => {
     const onChunk = vi.fn()
     const onDone = vi.fn()
 
-    await new OpenAIProvider().generateStream(novelAIModel, [], {
+    await new OpenAIProvider().generateStream(baseModel, [], {
       temperature: 0.2,
       maxTokens: 512,
       signal: new AbortController().signal,
@@ -608,7 +549,7 @@ describe('OpenAIProvider NovelAI compatibility', () => {
     }))
     const onDone = vi.fn()
 
-    await new OpenAIProvider().generateStream(novelAIModel, [], {
+    await new OpenAIProvider().generateStream(baseModel, [], {
       temperature: 0.2,
       maxTokens: 512,
       signal: new AbortController().signal,
@@ -633,7 +574,7 @@ describe('OpenAIProvider NovelAI compatibility', () => {
     const onDone = vi.fn()
     const onError = vi.fn()
 
-    await new OpenAIProvider().generateStream(novelAIModel, [], {
+    await new OpenAIProvider().generateStream(baseModel, [], {
       temperature: 0.2,
       maxTokens: 512,
       signal: new AbortController().signal,
@@ -658,7 +599,7 @@ describe('OpenAIProvider NovelAI compatibility', () => {
     const onChunk = vi.fn()
     const onError = vi.fn()
 
-    await new OpenAIProvider().generateStream(novelAIModel, [], {
+    await new OpenAIProvider().generateStream(baseModel, [], {
       temperature: 0.2,
       maxTokens: 512,
       signal: new AbortController().signal,
@@ -684,7 +625,7 @@ describe('OpenAIProvider NovelAI compatibility', () => {
     const onDone = vi.fn()
     const onError = vi.fn()
 
-    await new OpenAIProvider().generateStream(novelAIModel, [], {
+    await new OpenAIProvider().generateStream(baseModel, [], {
       temperature: 0.2,
       maxTokens: 512,
       signal: new AbortController().signal,
@@ -710,7 +651,7 @@ describe('OpenAIProvider NovelAI compatibility', () => {
     const onDone = vi.fn()
     const onError = vi.fn()
 
-    await new OpenAIProvider().generateStream(novelAIModel, [], {
+    await new OpenAIProvider().generateStream(baseModel, [], {
       temperature: 0.2,
       maxTokens: 512,
       signal: new AbortController().signal,
@@ -739,7 +680,7 @@ describe('OpenAIProvider NovelAI compatibility', () => {
     const onDone = vi.fn()
     const onError = vi.fn()
 
-    await new OpenAIProvider().generateStream(novelAIModel, [], {
+    await new OpenAIProvider().generateStream(baseModel, [], {
       temperature: 0.2,
       maxTokens: 512,
       signal: new AbortController().signal,

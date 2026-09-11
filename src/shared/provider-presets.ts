@@ -119,14 +119,6 @@ export function createProviderCatalog(): ProviderPreset[] {
     },
   },
   {
-    provider: 'novelai',
-    displayName: 'NovelAI',
-    baseUrl: 'https://text.novelai.net/oa',
-    protocol: 'openai',
-    models: [],
-    embeddingModels: [],
-  },
-  {
     provider: 'deepseek',
     displayName: 'DeepSeek',
     baseUrl: 'https://api.deepseek.com',

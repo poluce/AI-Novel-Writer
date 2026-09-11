@@ -94,7 +94,7 @@ flowchart LR
 
 目前支持两类调用协议：
 
-- **OpenAI-compatible**：适用于 OpenAI、DeepSeek、Ollama、NovelAI 预设及其他兼容 Chat Completions 的服务。
+- **OpenAI-compatible**：适用于 OpenAI、DeepSeek、Ollama 及其他兼容 Chat Completions 的服务。
 - **Gemini 原生协议**：适用于 Google Gemini 兼容端点。
 
 “自定义 API”指的是在上述协议范围内自定义地址、模型标识和凭据；它不是任意 HTTP 协议或可执行脚本编辑器。Anthropic、Azure、KoboldAI 原生协议等不同接口需要单独的适配器，不能仅靠替换 URL 保证兼容。
@@ -112,12 +112,6 @@ Model:     你的 Ollama 模型名，例如 qwen3:14b
 ```
 
 向量模型也应使用 `/v1`。不要把 Base URL 写成 `http://127.0.0.1:11434/api`：`/api` 是 Ollama 的原生接口路径，不是本应用当前使用的 OpenAI-compatible embedding 路径。
-
-### NovelAI（最小兼容支持）
-
-设置中可选择 **NovelAI** 预设，默认地址为 `https://text.novelai.net/oa`，协议为 OpenAI-compatible。请使用自己的 Persistent API Token，并按账户实际可用模型填写模型标识。
-
-本项目对该预设做了最小参数兼容：不向其发送标准 `response_format`，思考参数采用其兼容分支。由于维护者没有用户的 NovelAI Token，尚未进行真实账户的完整创作流程验证；遇到账号权限、模型名或接口差异时，请以 NovelAI 的账户和官方资料为准。
 
 ## 数据、隐私与边界
 

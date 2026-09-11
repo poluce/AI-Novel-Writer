@@ -27,7 +27,6 @@ export class OpenAIProvider implements ILLMProvider {
     opts: LLMGenerateOptions,
     stream: boolean,
   ): Record<string, unknown> {
-    const isNovelAI = model.provider === 'novelai'
     const body: Record<string, unknown> = {
       model: model.modelName,
       messages,
@@ -42,7 +41,7 @@ export class OpenAIProvider implements ILLMProvider {
       body.temperature = opts.temperature
     }
 
-    if (opts.reasoning?.adapter === 'openai-reasoning-effort' && !isNovelAI) {
+    if (opts.reasoning?.adapter === 'openai-reasoning-effort') {
       body.reasoning_effort = opts.reasoning.reasoningEffort
     }
 
@@ -53,13 +52,13 @@ export class OpenAIProvider implements ILLMProvider {
       }
     }
 
-    if (opts.responseFormat && !isNovelAI) {
+    if (opts.responseFormat) {
       body.response_format = opts.responseFormat
     }
 
     // The OpenAI streaming API only sends the final usage chunk when this is
-    // explicitly requested. Keep NovelAI's narrower compatibility payload.
-    if (stream && !isNovelAI) {
+    // explicitly requested.
+    if (stream) {
       body.stream_options = { include_usage: true }
     }
 
@@ -68,7 +67,7 @@ export class OpenAIProvider implements ILLMProvider {
 
   async generate(model: ModelProfile, messages: Array<{ role: string; content: string }>, opts: LLMGenerateOptions): Promise<LLMResponse> {
     try {
-      const url = resolveOpenAIChatCompletionsUrl(model.baseUrl, model.provider)
+      const url = resolveOpenAIChatCompletionsUrl(model.baseUrl)
       const body = this.buildRequestBody(model, messages, opts, false)
 
       const res = await fetch(url, {
@@ -131,7 +130,7 @@ export class OpenAIProvider implements ILLMProvider {
     }
 
     try {
-      const url = resolveOpenAIChatCompletionsUrl(model.baseUrl, model.provider)
+      const url = resolveOpenAIChatCompletionsUrl(model.baseUrl)
       const body = this.buildRequestBody(model, messages, opts, true)
 
       const res = await fetch(url, {

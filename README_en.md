@@ -108,7 +108,7 @@ When generating a plot outline, you can enter an explicit chapter range in “Ge
 
 The app currently supports two request protocols:
 
-- **OpenAI-compatible** — for OpenAI, DeepSeek, Ollama, the NovelAI preset, and other compatible Chat Completions services.
+- **OpenAI-compatible** — for OpenAI, DeepSeek, Ollama, and other compatible Chat Completions services.
 - **Native Gemini** — for Google Gemini-compatible endpoints.
 
 “Custom API” means a configurable URL, model identifier, and credential within those protocols. It is not an arbitrary HTTP protocol editor or a place to run user-supplied scripts. Protocols such as Anthropic Messages, Azure OpenAI, or native KoboldAI require dedicated adapters rather than a URL swap.
@@ -126,12 +126,6 @@ Model:     your Ollama model name, for example qwen3:14b
 ```
 
 Embedding models should also use `/v1`. Do not set the Base URL to `http://127.0.0.1:11434/api`: `/api` is Ollama's native path, not the OpenAI-compatible embedding path used by this application.
-
-### NovelAI (minimal compatibility support)
-
-Choose the **NovelAI** preset in settings. Its default address is `https://text.novelai.net/oa` and it uses the OpenAI-compatible protocol. Use your own Persistent API Token and enter a model identifier available to your account.
-
-The preset applies minimal parameter compatibility: it does not send standard `response_format`, and its thinking option follows the compatibility branch. The maintainer does not possess a user's NovelAI Token, so a complete real-account writing workflow has not been verified. Account permissions, model identifiers, and API behavior remain subject to NovelAI's own documentation and account response.
 
 ## Data, privacy, and boundaries
 

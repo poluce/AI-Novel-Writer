@@ -1,6 +1,4 @@
-import type { ModelProfile } from '../../src/shared/ipc-channels'
-
-export function resolveOpenAIChatCompletionsUrl(baseUrl: string, provider: ModelProfile['provider']): string {
+export function resolveOpenAIChatCompletionsUrl(baseUrl: string): string {
   const endpoint = new URL(baseUrl.trim())
   const configuredPath = endpoint.pathname.replace(/\/+$/u, '')
 
@@ -8,7 +6,7 @@ export function resolveOpenAIChatCompletionsUrl(baseUrl: string, provider: Model
     endpoint.pathname = configuredPath
   } else if (configuredPath.endsWith('/chat')) {
     endpoint.pathname = `${configuredPath}/completions`
-  } else if (!configuredPath || provider === 'novelai') {
+  } else if (!configuredPath) {
     endpoint.pathname = `${configuredPath}/v1/chat/completions`
   } else {
     endpoint.pathname = `${configuredPath}/chat/completions`
