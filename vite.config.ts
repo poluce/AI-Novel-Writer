@@ -29,7 +29,14 @@ export default defineConfig({
           // 该库构建默认输出 ESM）；CJS-only 的 better-sqlite3 在源码内经
           // createRequire(import.meta.url) 加载，无需 CommonJS 输出。
           rollupOptions: {
-            external: ['better-sqlite3', '@lancedb/lancedb', 'yauzl']
+            external: [
+              'better-sqlite3',
+              '@lancedb/lancedb',
+              'yauzl',
+              // Pi 是 ESM-only（exports 只有 "import"），主进程产物同为 ESM，
+              // 故走 external + 静态 import（P0 打包结论：不打包、不切格式）。
+              /^@earendil-works\/pi-(ai|agent-core)(\/|$)/,
+            ]
           }
         }
       }
