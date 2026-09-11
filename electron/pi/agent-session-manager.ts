@@ -57,9 +57,10 @@ export class AgentSessionManager {
     return { success: true }
   }
 
-  /** Abort every Agent session and every one-shot stream on the shared table. */
+  /** Abort every Agent session and every one-shot stream. Sessions are dropped. */
   abortAll(): void {
     for (const session of this.sessions.values()) session.abort()
+    this.sessions.clear()
     abortAllPiInFlight()
   }
 

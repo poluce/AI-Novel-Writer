@@ -44,6 +44,18 @@ export function abortAllPiInFlight(): void {
   for (const abortable of [...inFlight.values()]) abortable.abort()
 }
 
+let projectCloseHook: () => void = abortAllPiInFlight
+
+/** Agent IPC replaces this with session-manager.abortAll (also drops Agents). */
+export function setPiProjectCloseHook(hook: () => void): void {
+  projectCloseHook = hook
+}
+
+/** Called when the current project database is closing or switching. */
+export function abortPiOnProjectClose(): void {
+  projectCloseHook()
+}
+
 export function piInFlightCount(): number {
   return inFlight.size
 }
@@ -68,4 +80,5 @@ export function piOneShotActiveCount(): number {
 export function resetPiInFlightForTests(): void {
   inFlight.clear()
   oneShotActive = 0
+  projectCloseHook = abortAllPiInFlight
 }

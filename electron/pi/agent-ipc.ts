@@ -1,6 +1,7 @@
 import { ipcMain, BrowserWindow } from 'electron'
 
 import { AgentSessionManager } from './agent-session-manager'
+import { setPiProjectCloseHook } from './in-flight'
 
 import {
   readJsonFile,
@@ -51,6 +52,7 @@ export function registerAgentController(): void {
       mainWindow()?.webContents.send('agent:renderer-action', { action })
     },
   })
+  setPiProjectCloseHook(() => manager.abortAll())
 
   ipcMain.handle('agent:prompt', async (
     _event,

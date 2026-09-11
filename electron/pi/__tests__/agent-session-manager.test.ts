@@ -83,6 +83,15 @@ describe('AgentSessionManager', () => {
     await manager.prompt('conv-2', 'hi')
 
     manager.abortAll()
-    expect(manager.abort('conv-1')).toEqual({ success: true })
+    expect(manager.abort('conv-1')).toEqual({ success: false })
+  })
+
+  it('creates a new Agent after abortAll instead of keeping the old session', async () => {
+    const { manager } = buildManager()
+    await manager.prompt('conv-1', 'hi')
+    manager.abortAll()
+    await manager.prompt('conv-1', 'again')
+
+    expect(createPiModelsMock).toHaveBeenCalledTimes(2)
   })
 })

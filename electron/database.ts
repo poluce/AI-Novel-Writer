@@ -16,6 +16,7 @@ const require = createRequire(import.meta.url)
 const Database = require('better-sqlite3') as typeof import('better-sqlite3')
 import type BetterSqlite3 from 'better-sqlite3'
 import { ensureCharacterRosterSchema } from './repositories/character-roster-schema'
+import { abortPiOnProjectClose } from './pi/in-flight'
 
 let projectDb: BetterSqlite3.Database | null = null
 let currentProjectPath: string | null = null
@@ -39,6 +40,11 @@ export function initProjectDatabase(projectPath: string, importSourceSecret?: Bu
 
 /** 关闭项目数据库 */
 export function closeProjectDatabase(): void {
+  try {
+    abortPiOnProjectClose()
+  } catch (error) {
+    console.error('[Vela DB] 切书中止在途 AI 失败:', error)
+  }
   // Clear the process-visible identity before closing the native handle. If
   // the close itself throws, callers still fail closed instead of treating a
   // half-closed database as the active project.

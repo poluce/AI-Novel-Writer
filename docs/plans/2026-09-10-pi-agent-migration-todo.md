@@ -199,7 +199,7 @@
 - [ ] 模型执行租约：随 Agent 换层评估存废（密钥隔离语义必须保持）
 - [ ] 密钥隔离验证：渲染进程全程不接触 API Key
 - [ ] **IPC 通道重构**：Agent 换层后 `electron/preload.ts`、`src/shared/ipc-channels.ts` 的通道增删（新增 Agent 事件/意图通道，清理租约凭证参数）
-- [ ] 切书：abort 该项目全部在途 pi-ai（一次性 stream + 多轮 Agent）；**不要**切项目保活 Agent 实例
+- [x] 切书：关闭/切换项目数据库时 `abortPiOnProjectClose` 中止全部在途 pi-ai，并丢掉 Agent 实例（下次 prompt 新建）
 - [ ] 再打开同一项目：恢复该项目已存对话到**新** Agent（若已做持久化）；本次仍可不做磁盘持久化（见「不在本次范围」）
 
 ## 阶段 6：测试与验证（P6）

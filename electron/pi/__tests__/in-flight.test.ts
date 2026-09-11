@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   abortAllPiInFlight,
   abortPiInFlight,
+  abortPiOnProjectClose,
   acquirePiOneShotSlot,
   PiConcurrencyError,
   PI_MAX_ONE_SHOT,
@@ -10,6 +11,7 @@ import {
   piOneShotActiveCount,
   registerPiInFlight,
   resetPiInFlightForTests,
+  setPiProjectCloseHook,
 } from '../in-flight'
 
 afterEach(() => {
@@ -55,5 +57,13 @@ describe('pi in-flight registry', () => {
     slots[0]!()
     expect(() => acquirePiOneShotSlot()).not.toThrow()
     expect(piOneShotActiveCount()).toBe(PI_MAX_ONE_SHOT)
+  })
+
+  it('runs the project-close hook', () => {
+    const hook = vi.fn()
+    setPiProjectCloseHook(hook)
+    abortPiOnProjectClose()
+    expect(hook).toHaveBeenCalledOnce()
+    setPiProjectCloseHook(abortAllPiInFlight)
   })
 })
