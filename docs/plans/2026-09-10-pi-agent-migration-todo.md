@@ -59,7 +59,7 @@
 - [x] 删除全局 `generating` / `activeAbortController` / `pendingConfirmations` 单例；`@` 预填正文改为提示模型原生调工具（生成中状态由会话 `streaming` 推导；`mentionsToToolCalls` 已删）
 - [x] 删除 `runAgentLoop`、手写 observation、Agent 整轮 `output: 'visible-text'`（`agent-engine.ts` 已删）
 - [x] 助手 LLM 运输交给 pi-ai：已删除自研 OpenAI/Gemini SSE 解析与 `LLMFactory`；`<think>` 剥除仍留给工作流落盘层；保留 models.json / 租约 / 推理策略适配
-- [ ] **不要**把项目 `leaseId`、模型执行租约、写工具确认、workflow claims、恢复候选、自研 MCP、工作流 `parseJSON`、`generation-harness` 预算、领域工具语义、写作 Skill、React UI 当作本条遗产删除
+- [x] **未误删非遗产**：`leaseId`、模型执行租约、写工具确认、workflow claims、恢复候选、工作流 `parseJSON`、`generation-harness` 预算、领域工具、写作 Skill、React UI 均在。自研 MCP 客户端按 P3 换成官方 SDK，配置格式未改
 
 ## 已拍板
 
