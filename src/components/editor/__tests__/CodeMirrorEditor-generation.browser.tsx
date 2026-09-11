@@ -156,7 +156,7 @@ describe('CodeMirror editor AI generation boundary', () => {
     expect(invoke).toHaveBeenCalledWith(
       'llm:generate-stream',
       expect.any(String),
-      expect.objectContaining({ reasoningStage: 'review' }),
+      expect.objectContaining({ reasoningStage: 'review', submitTool: 'submit_text' }),
     )
     expect(invoke).toHaveBeenCalledWith('llm:close-execution-lease', 'editor-generation-lease')
   })

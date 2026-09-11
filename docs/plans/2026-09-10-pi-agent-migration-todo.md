@@ -175,12 +175,13 @@
   - [ ] `finalize-chapter` + 定稿后处理（章节要点）
   - [ ] `architecture`（情节大纲）
   - [ ] `directory`（章节蓝图）
-  - [ ] `analyze-style`（文风分析）
+  - [x] `analyze-style`（文风分析）
   - [x] `generate-field`（金手指/世界观/主角档案等逐字段）
   - [ ] `import-novel`（导入推断）
   - [ ] `planning-material`（规划资料 + 角色提取）
   - [ ] `legacy-character-roster-repair`
-- [ ] 非命令调用点替换：`plot-tree-generator`（剧情树）、`narrative-thread-candidate-generator`（叙事线索）、`CodeMirrorEditor` 内联 AI（选区润色）、`batch-chapter-workflow`（批量创作，1–10 章/暂停/取消语义不变）
+- [ ] 非命令调用点替换：`plot-tree-generator`（剧情树）、`narrative-thread-candidate-generator`（叙事线索）、`batch-chapter-workflow`（批量创作，1–10 章/暂停/取消语义不变）
+  - [x] `CodeMirrorEditor` 内联 AI（选区润色 → `submit_text`）
 - [ ] 结构化输出：**全部走工具调用**（报告类 + 正文）；正文工具参数返回后一次性显示，不做增量解析
 - [ ] 生成中 UI 状态：正文生成期间显示"生成中"进度状态（替代原有流式正文渲染）
 - [ ] 提示词模板改写：内置 38 个模板中的 JSON/XML 协议指令改为工具调用形式

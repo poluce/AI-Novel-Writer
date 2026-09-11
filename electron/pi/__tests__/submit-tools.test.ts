@@ -55,4 +55,9 @@ describe('submit contract tools', () => {
     expect(visibleTextFromSubmitArtifact('submit_field', { value: '金手指' }, '旁白')).toBe('金手指')
     expect(visibleTextFromSubmitArtifact('submit_field', undefined, '旁白')).toBe('旁白')
   })
+
+  it('maps style analysis and visible-text artifacts', () => {
+    expect(visibleTextFromSubmitArtifact('submit_style_analysis', { analysis: '节奏偏快' }, '')).toBe('节奏偏快')
+    expect(visibleTextFromSubmitArtifact('submit_text', { text: '润色后的句子' }, '')).toBe('润色后的句子')
+  })
 })

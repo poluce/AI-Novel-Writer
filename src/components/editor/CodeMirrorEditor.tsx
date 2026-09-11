@@ -318,6 +318,7 @@ export default function CodeMirrorEditor({
         purpose: `editor-ai-${action.key}`,
         reasoningStage: action.reasoningStage,
         output: 'visible-text',
+        submitTool: 'submit_text',
         messages: [
           { role: 'system', content: composePromptSystemRole(template, writingLanguage) },
           { role: 'user', content: renderPrompt(template, {

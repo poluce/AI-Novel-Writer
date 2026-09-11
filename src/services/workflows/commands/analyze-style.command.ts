@@ -104,7 +104,7 @@ export class AnalyzeWritingStyleCommand extends BaseWorkflowCommand<string> {
       finalPrompt,
       composePromptSystemRole(template, writingLanguage),
       callbacks,
-      { purpose: 'analyze-writing-style', reasoningStage: 'review' },
+      { purpose: 'analyze-writing-style', reasoningStage: 'review', submitTool: 'submit_style_analysis' },
       context,
     )
     this.assertNotCancelled(context)

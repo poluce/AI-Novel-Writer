@@ -162,12 +162,13 @@ describe('AnalyzeWritingStyleCommand with imported samples', () => {
       ],
     })
     const callLLM = vi
-      .spyOn(command as unknown as { callLLM: (prompt: string) => Promise<string> }, 'callLLM')
+      .spyOn(command as unknown as { callLLM: (...args: unknown[]) => Promise<string> }, 'callLLM')
       .mockResolvedValue('冷峻紧凑，场景切换迅速。')
 
     await command.execute({ step: {}, context, callbacks })
 
-    expect(callLLM.mock.calls[0][0]).toContain('雨声很急')
+    expect(String(callLLM.mock.calls[0]?.[0])).toContain('雨声很急')
+    expect(callLLM.mock.calls[0]?.[3]).toMatchObject({ submitTool: 'submit_style_analysis' })
     expect(invoke).not.toHaveBeenCalledWith('db:draft-get-max-finalized-chapter')
   })
 
