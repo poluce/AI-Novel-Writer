@@ -23,6 +23,8 @@ export interface ModelCapabilities {
   reasoning: boolean
   structuredOutput: boolean
   usage: boolean
+  /** Endpoint supports native function/tool calling (required by the Pi tool path). */
+  toolCalling?: boolean
 }
 
 /** Persisted profile fields needed to resolve effective built-in capabilities. */
@@ -90,6 +92,7 @@ export function createProviderCatalog(): ProviderPreset[] {
           reasoning: true,
           structuredOutput: true,
           usage: true,
+          toolCalling: true,
         },
         // https://docs.x.ai/developers/model-capabilities/text/reasoning
         reasoningMapping: {
@@ -115,6 +118,7 @@ export function createProviderCatalog(): ProviderPreset[] {
         reasoning: false,
         structuredOutput: false,
         usage: true,
+        toolCalling: false,
       },
     },
   },
@@ -133,6 +137,7 @@ export function createProviderCatalog(): ProviderPreset[] {
           reasoning: true,
           structuredOutput: true,
           usage: true,
+          toolCalling: true,
         },
         // https://api-docs.deepseek.com/guides/thinking_mode/
         reasoningMapping: {
@@ -151,6 +156,7 @@ export function createProviderCatalog(): ProviderPreset[] {
           reasoning: true,
           structuredOutput: true,
           usage: true,
+          toolCalling: true,
         },
         // https://api-docs.deepseek.com/guides/thinking_mode/
         reasoningMapping: {
@@ -195,6 +201,7 @@ export function createProviderCatalog(): ProviderPreset[] {
           reasoning: true,
           structuredOutput: true,
           usage: true,
+          toolCalling: true,
         },
         // https://ai.google.dev/gemini-api/docs/generate-content/thinking
         reasoningMapping: {
@@ -269,6 +276,7 @@ function validatedCapabilities(value: unknown): ModelCapabilities | undefined {
     || typeof candidate.reasoning !== 'boolean'
     || typeof candidate.structuredOutput !== 'boolean'
     || typeof candidate.usage !== 'boolean'
+    || typeof candidate.toolCalling !== 'boolean'
   ) return undefined
   return {
     contextWindowTokens: candidate.contextWindowTokens as number | null,
@@ -276,6 +284,7 @@ function validatedCapabilities(value: unknown): ModelCapabilities | undefined {
     reasoning: candidate.reasoning,
     structuredOutput: candidate.structuredOutput,
     usage: candidate.usage,
+    toolCalling: candidate.toolCalling,
   }
 }
 

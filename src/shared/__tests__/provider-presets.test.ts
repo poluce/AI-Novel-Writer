@@ -25,6 +25,7 @@ describe('provider catalog', () => {
         reasoning: true,
         structuredOutput: true,
         usage: true,
+        toolCalling: true,
       },
       reasoningMapping: {
         adapter: 'openai-reasoning-effort',
@@ -50,6 +51,7 @@ describe('provider catalog', () => {
       reasoning: true,
       structuredOutput: true,
       usage: true,
+      toolCalling: true,
     })
 
     expect(resolveModelProfileCapabilities({
@@ -80,6 +82,7 @@ describe('provider catalog', () => {
       reasoning: true,
       structuredOutput: true,
       usage: true,
+      toolCalling: true,
     })
 
     expect(resolveModelProfileReasoningMapping(legacy)).toEqual({
@@ -106,6 +109,7 @@ describe('provider catalog', () => {
         reasoning: true,
         structuredOutput: true,
         usage: true,
+        toolCalling: true,
       },
       reasoningMapping: {
         adapter: 'gemini-thinking-budget',
