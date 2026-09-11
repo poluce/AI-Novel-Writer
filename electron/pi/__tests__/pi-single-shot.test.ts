@@ -1,6 +1,12 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { streamSingleShot } from '../pi-single-shot'
+import { resetPiInFlightForTests } from '../in-flight'
+import {
+  SingleShotAbortedError,
+  UnexpectedSubmitToolError,
+  streamSingleShot,
+} from '../pi-single-shot'
+import { submitDraftTool } from '../submit-tools'
 
 vi.mock('../pi-models', () => ({
   createPiModels: vi.fn(),
@@ -10,27 +16,40 @@ import { createPiModels } from '../pi-models'
 
 const createPiModelsMock = createPiModels as ReturnType<typeof vi.fn>
 
+afterEach(() => {
+  resetPiInFlightForTests()
+})
+
+function mockStream(stream: AsyncGenerator<unknown>) {
+  createPiModelsMock.mockReturnValue({
+    models: { stream: vi.fn(() => stream) },
+    model: {},
+  })
+}
+
 describe('streamSingleShot', () => {
-  it('collects the submit tool arguments as the artifact', async () => {
+  it('collects validated submit tool arguments as the artifact', async () => {
     const stream = (async function* () {
-      yield { type: 'text_delta', contentIndex: 0, delta: '正文', partial: {} }
+      yield { type: 'text_delta', contentIndex: 0, delta: '旁白', partial: {} }
       yield {
         type: 'toolcall_end',
         contentIndex: 0,
-        toolCall: { type: 'toolCall', id: 'c1', name: 'submit_draft', arguments: { title: '标题', body: '正文' } },
+        toolCall: {
+          type: 'toolCall',
+          id: 'c1',
+          name: 'submit_draft',
+          arguments: { title: '标题', body: '正文' },
+        },
         partial: {},
       }
       yield { type: 'done', reason: 'toolUse', message: {} }
     })()
-    createPiModelsMock.mockReturnValue({
-      models: { stream: vi.fn(() => stream) },
-      model: {},
-    })
+    mockStream(stream)
 
-    const result = await streamSingleShot({} as never, 'sys', 'user', {} as never)
+    const result = await streamSingleShot({} as never, 'sys', 'user', submitDraftTool())
 
     expect(result.artifact).toEqual({ title: '标题', body: '正文' })
-    expect(result.text).toBe('正文')
+    expect(result.text).toBe('旁白')
   })
 
   it('returns undefined artifact when the model emits text only', async () => {
@@ -38,14 +57,51 @@ describe('streamSingleShot', () => {
       yield { type: 'text_delta', contentIndex: 0, delta: '纯文本', partial: {} }
       yield { type: 'done', reason: 'stop', message: {} }
     })()
-    createPiModelsMock.mockReturnValue({
-      models: { stream: vi.fn(() => stream) },
-      model: {},
-    })
+    mockStream(stream)
 
-    const result = await streamSingleShot({} as never, 'sys', 'user', {} as never)
+    const result = await streamSingleShot({} as never, 'sys', 'user', submitDraftTool())
 
     expect(result.artifact).toBeUndefined()
     expect(result.text).toBe('纯文本')
+  })
+
+  it('rejects a hallucinated tool name', async () => {
+    const stream = (async function* () {
+      yield {
+        type: 'toolcall_end',
+        contentIndex: 0,
+        toolCall: { type: 'toolCall', id: 'c1', name: 'read_file', arguments: { path: 'x' } },
+        partial: {},
+      }
+    })()
+    mockStream(stream)
+
+    await expect(streamSingleShot({} as never, 'sys', 'user', submitDraftTool()))
+      .rejects.toBeInstanceOf(UnexpectedSubmitToolError)
+  })
+
+  it('rejects submit arguments that fail the schema', async () => {
+    const stream = (async function* () {
+      yield {
+        type: 'toolcall_end',
+        contentIndex: 0,
+        toolCall: { type: 'toolCall', id: 'c1', name: 'submit_draft', arguments: { title: 1 } },
+        partial: {},
+      }
+    })()
+    mockStream(stream)
+
+    await expect(streamSingleShot({} as never, 'sys', 'user', submitDraftTool()))
+      .rejects.toThrow()
+  })
+
+  it('throws when the caller signal is already aborted', async () => {
+    const signal = AbortSignal.abort()
+    mockStream((async function* () {
+      yield { type: 'done', reason: 'stop', message: {} }
+    })())
+
+    await expect(streamSingleShot({} as never, 'sys', 'user', submitDraftTool(), { signal }))
+      .rejects.toBeInstanceOf(SingleShotAbortedError)
   })
 })

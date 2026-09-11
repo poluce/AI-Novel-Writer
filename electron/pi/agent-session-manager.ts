@@ -1,4 +1,5 @@
 import { AgentSession } from './agent-session'
+import { abortAllPiInFlight, registerPiInFlight } from './in-flight'
 import { createPiModels } from './pi-models'
 import { buildAgentTools, confirmationToolNames } from './tool-builder'
 
@@ -54,6 +55,12 @@ export class AgentSessionManager {
     return { success: true }
   }
 
+  /** Abort every Agent session and every one-shot stream on the shared table. */
+  abortAll(): void {
+    for (const session of this.sessions.values()) session.abort()
+    abortAllPiInFlight()
+  }
+
   private getOrCreate(conversationId: string, modelId?: string): AgentSession {
     const existing = this.sessions.get(conversationId)
     if (existing) return existing
@@ -74,6 +81,7 @@ export class AgentSessionManager {
       emit: (event) => this.options.emit(conversationId, event),
     })
     this.sessions.set(conversationId, session)
+    registerPiInFlight(`agent:${conversationId}`, session)
     return session
   }
 }

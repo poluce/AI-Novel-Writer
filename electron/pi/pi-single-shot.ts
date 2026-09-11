@@ -1,38 +1,113 @@
-import type { AgentTool } from '@earendil-works/pi-agent-core'
+import { randomUUID } from 'node:crypto'
 
+import type { AgentTool } from '@earendil-works/pi-agent-core'
+import { validateToolCall, type Tool } from '@earendil-works/pi-ai'
+
+import { registerPiInFlight } from './in-flight'
 import { createPiModels } from './pi-models'
 
 import type { ModelProfile } from '../../src/shared/ipc-channels'
 
 export interface SingleShotResult {
-  /** The submit_* tool arguments (the artifact), or undefined if the model returned text only. */
+  /** Validated submit_* arguments, or undefined when the model returned text only. */
   artifact: Record<string, unknown> | undefined
   /** Visible text accumulated from the stream (may be empty when the model only called the tool). */
   text: string
 }
 
+export interface StreamSingleShotOptions {
+  signal?: AbortSignal
+  /** Stable id for the shared in-flight table. Generated when omitted. */
+  inFlightId?: string
+}
+
+export class SingleShotAbortedError extends Error {
+  readonly code = 'CANCELLED' as const
+
+  constructor() {
+    super('Single-shot generation was aborted.')
+    this.name = 'SingleShotAbortedError'
+  }
+}
+
+export class UnexpectedSubmitToolError extends Error {
+  constructor(readonly toolName: string, readonly expected: string) {
+    super(`Model called "${toolName}"; expected "${expected}".`)
+    this.name = 'UnexpectedSubmitToolError'
+  }
+}
+
+function asPiTool(tool: AgentTool<any>): Tool {
+  return {
+    name: tool.name,
+    description: tool.description,
+    parameters: tool.parameters,
+  }
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) throw new SingleShotAbortedError()
+}
+
 /**
  * One-shot pi-ai streaming call with a forced submit_* tool. The model must
  * emit its artifact as the tool's arguments; no read tools, no Agent loop.
+ *
+ * pi-ai does not validate tool names on the streaming path, so this layer
+ * checks the expected submit_* name and runs `validateToolCall`.
  */
 export async function streamSingleShot(
   profile: ModelProfile,
   systemPrompt: string,
   userPrompt: string,
   submitTool: AgentTool<any>,
+  options: StreamSingleShotOptions = {},
 ): Promise<SingleShotResult> {
-  const { models, model } = createPiModels(profile)
-  const stream = models.stream(model, {
-    systemPrompt,
-    messages: [{ role: 'user', content: userPrompt, timestamp: Date.now() }],
-    tools: [submitTool],
-  }, { toolChoice: 'any' })
+  throwIfAborted(options.signal)
 
-  let text = ''
-  let artifact: Record<string, unknown> | undefined
-  for await (const event of stream) {
-    if (event.type === 'text_delta') text += event.delta
-    if (event.type === 'toolcall_end') artifact = event.toolCall.arguments
+  const { models, model } = createPiModels(profile)
+  const tools = [asPiTool(submitTool)]
+  const controller = new AbortController()
+  const onOuterAbort = () => controller.abort()
+  options.signal?.addEventListener('abort', onOuterAbort, { once: true })
+  const unregister = registerPiInFlight(options.inFlightId ?? `single-shot:${randomUUID()}`, controller)
+
+  try {
+    throwIfAborted(options.signal)
+    const stream = models.stream(model, {
+      systemPrompt,
+      messages: [{ role: 'user', content: userPrompt, timestamp: Date.now() }],
+      tools,
+    }, { toolChoice: 'any', signal: controller.signal })
+
+    let text = ''
+    let artifact: Record<string, unknown> | undefined
+    for await (const event of stream) {
+      throwIfAborted(options.signal)
+      if (event.type === 'text_delta') text += event.delta
+      if (event.type === 'toolcall_end') {
+        if (event.toolCall.name !== submitTool.name) {
+          throw new UnexpectedSubmitToolError(event.toolCall.name, submitTool.name)
+        }
+        artifact = validateToolCall(tools, event.toolCall) as Record<string, unknown>
+      }
+      if (event.type === 'error') {
+        if (event.reason === 'aborted' || controller.signal.aborted) {
+          throw new SingleShotAbortedError()
+        }
+        throw new Error(event.error.errorMessage || 'Single-shot generation failed.')
+      }
+    }
+    throwIfAborted(options.signal)
+    return { artifact, text }
+  } catch (error) {
+    if (error instanceof SingleShotAbortedError) throw error
+    if (controller.signal.aborted || options.signal?.aborted) {
+      throw new SingleShotAbortedError()
+    }
+    throw error
+  } finally {
+    unregister()
+    options.signal?.removeEventListener('abort', onOuterAbort)
   }
-  return { artifact, text }
 }

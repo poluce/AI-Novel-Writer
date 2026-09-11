@@ -164,10 +164,10 @@
 > 工作流编排（步骤、进度、暂停/取消、后处理、资源锁）**保持现状**。
 > 下列入口全部改为 **pi-ai 一次流式** + 强制 `submit_*`（或可见文本工具），**不要** `new Agent()`。
 
-- [ ] 共用：一次性生成走 pi-ai；切书/取消 abort 该次 stream（与 P2 Agent abort 同一张在途表）
-- [ ] **一次性调用骨架**：`pi-ai` 流式 + `tools`（仅提交合同工具）+ `toolChoice` 强制；命中 `submit_*` 即校验落盘，未命中按可见文本处理
-- [ ] **不挂读取工具**：避免模型中途停下等工具结果而破坏一次性语义（上下文继续由 command 预先组装）
-- [ ] 提交工具的 schema 与现有输出合同一一对应（字段、必填、上限），由 schema 取代提示词里的 JSON 说明
+- [x] 共用：一次性生成走 pi-ai；切书/取消 abort 该次 stream（与 P2 Agent abort 同一张在途表）——`electron/pi/in-flight.ts`；`streamSingleShot` 与 `AgentSessionManager` 共用；工作流入口尚未改走此层
+- [x] **一次性调用骨架**：`pi-ai` 流式 + `tools`（仅提交合同工具）+ `toolChoice` 强制；命中 `submit_*` 即 `validateToolCall`，错名拒绝，未命中按可见文本处理
+- [x] **不挂读取工具**：`streamSingleShot` 只接受一个 submit 工具；上下文继续由 command 预先组装
+- [ ] 提交工具的 schema 与现有输出合同一一对应（字段、必填、上限），由 schema 取代提示词里的 JSON 说明——核心 `submit_*` 已落地（`electron/pi/submit-tools.ts`），各 command 替换时再按上限收紧
 - [ ] 12 个工作流命令逐个替换 LLM 调用层（产物结构可按工具调用重定，但产出能力不得缺失）：
   - [ ] `generate-draft`（起草）
   - [ ] `review-chapter`（审稿）

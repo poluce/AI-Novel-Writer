@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { abortPiInFlight, resetPiInFlightForTests } from '../in-flight'
 import { AgentSessionManager } from '../agent-session-manager'
 
 vi.mock('../agent-session', () => ({
@@ -40,6 +41,10 @@ beforeEach(() => {
   buildToolsMock.mockClear()
 })
 
+afterEach(() => {
+  resetPiInFlightForTests()
+})
+
 describe('AgentSessionManager', () => {
   it('creates one session per conversation and reuses it', async () => {
     const { manager } = buildManager()
@@ -62,5 +67,21 @@ describe('AgentSessionManager', () => {
     const { manager } = buildManager()
     expect(manager.confirm('missing', 'call-1', true)).toEqual({ success: false })
     expect(manager.abort('missing')).toEqual({ success: false })
+  })
+
+  it('registers the session on the shared in-flight table', async () => {
+    const { manager } = buildManager()
+    await manager.prompt('conv-1', 'hi')
+
+    expect(abortPiInFlight('agent:conv-1')).toBe(true)
+  })
+
+  it('aborts every session from abortAll', async () => {
+    const { manager } = buildManager()
+    await manager.prompt('conv-1', 'hi')
+    await manager.prompt('conv-2', 'hi')
+
+    manager.abortAll()
+    expect(manager.abort('conv-1')).toEqual({ success: true })
   })
 })
