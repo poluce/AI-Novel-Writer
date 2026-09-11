@@ -28,6 +28,7 @@ import {
   countDraftUnits,
   previousChapterEnding,
   sanitizeDraftText,
+  recoverableDraftProse,
   type GenerateDraftCommandDependencies,
 } from '../generate-draft.command'
 
@@ -82,6 +83,13 @@ ${repeated}`)
     expect(text).toContain('林岚已经写下第一段正文')
     expect(text).toContain('周砚推门走进监控室')
     expect(text).not.toContain('</think>')
+  })
+
+  it('does not treat the generating placeholder as recoverable prose', () => {
+    expect(recoverableDraftProse('生成中…')).toBe('')
+    expect(recoverableDraftProse('Generating…')).toBe('')
+    expect(recoverableDraftProse('')).toBe('')
+    expect(recoverableDraftProse('<think>x</think>林岚推开门。')).toBe('林岚推开门。')
   })
 
   it('starts the previous-chapter window at a natural prose boundary', () => {
@@ -605,6 +613,23 @@ describe('GenerateDraftCommand generation runtime boundary', () => {
     await command.execute({ step: { id: 'draft-step' }, context, callbacks })
 
     expect(invoke.mock.calls.some(([channel]) => channel === 'db:recovery-candidate-record')).toBe(false)
+  })
+
+  it('does not create a recovery candidate when the submit tool returns no prose', async () => {
+    const runtime = fakeRuntime(() => {
+      throw Object.assign(new Error('connection reset'), { code: 'PROVIDER_REQUEST_FAILED' })
+    })
+    const { invoke, context, callbacks, command } = setup({ runtime, wordsTarget: 500 })
+
+    await expect(command.execute({
+      step: { id: 'draft-step' },
+      context,
+      callbacks,
+    })).rejects.toThrow('connection reset')
+
+    expect(invoke.mock.calls.some(([channel]) => channel === 'db:recovery-candidate-record')).toBe(false)
+    expect(callbacks.replaceText).toHaveBeenLastCalledWith('')
+    expect(JSON.stringify(vi.mocked(callbacks.log).mock.calls)).toContain('提交工具未返回可恢复正文')
   })
 
   it('uses the frozen English UI locale for draft start and save logs', async () => {

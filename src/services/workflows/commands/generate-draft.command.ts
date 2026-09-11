@@ -79,6 +79,18 @@ export function sanitizeDraftText(text: string): string {
   return deduped.join('\n\n').trim()
 }
 
+const GENERATING_PLACEHOLDERS = new Set(['生成中…', 'Generating…'])
+
+/**
+ * Recovery stores submit_draft body (or leftover stream prose), never the
+ * generating placeholder and never empty/tool-JSON debris without authored text.
+ */
+export function recoverableDraftProse(text: string): string {
+  const cleaned = sanitizeDraftText(text)
+  if (!cleaned || GENERATING_PLACEHOLDERS.has(cleaned)) return ''
+  return cleaned
+}
+
 const THINKING_TAGS = ['<think>', '</think>'] as const
 
 /**
@@ -769,8 +781,9 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
       ))
       return cleanDraftText
     } catch (error) {
-      if (!draftPersisted && recoverableDraftCandidate) {
-        callbacks.replaceText?.(recoverableDraftCandidate)
+      const recoverableProse = recoverableDraftProse(recoverableDraftCandidate)
+      if (!draftPersisted && recoverableProse) {
+        callbacks.replaceText?.(recoverableProse)
         const failureCode = recoveryFailureCode(error, context.cancelled)
         const failureReason = error instanceof Error ? error.message : String(error)
         try {
@@ -784,7 +797,7 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
               chapterTitle: this.chapterInfo.title,
               source: recoveryChapterSource(this.chapterInfo),
               sourceDraft: sourceDraft ? { id: sourceDraft.id, version: sourceDraft.version } : null,
-              visibleText: recoverableDraftCandidate,
+              visibleText: recoverableProse,
               failureCode,
               failureReason,
             },
@@ -812,6 +825,10 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
         }
       } else if (!draftPersisted) {
         callbacks.replaceText?.('')
+        callbacks.log(uiText(
+          '生成未能安全完成；提交工具未返回可恢复正文，未创建恢复候选。',
+          'Generation could not complete safely. The submit tool returned no recoverable prose, so no recovery candidate was created.',
+        ))
       }
       throw error
     }
