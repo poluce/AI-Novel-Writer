@@ -1,17 +1,11 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { createHash } from 'node:crypto'
 import { app, ipcMain } from 'electron'
 import type { AppPromptLoadReceipt, AppPromptTemplate } from '../../src/shared/ipc-channels'
 import type { WritingLanguage } from '../../src/shared/writing-language'
-import {
-  inspectWritingSkillMarkdown,
-  parseGitHubWritingSkillUrl,
-  type InstalledWritingSkill,
-  type RemoteWritingSkillInspection,
-} from '../../src/shared/writing-skills'
 import { mainText } from '../i18n'
 import { VELA_HOME, writeJsonFile } from '../utils/config-utils'
+import { inspectWritingSkill, installWritingSkill } from '../services/writing-skill-service'
 
 function text(zhCNText: string, enUSText: string): string {
   return mainText(app.getLocale(), zhCNText, enUSText)
@@ -56,7 +50,6 @@ function isPromptTemplate(value: unknown): value is AppPromptTemplate {
 }
 
 const WRITING_SKILL_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
-const MAX_WRITING_SKILL_BYTES = 64 * 1024
 
 function writingSkillDirectory(name: string): string {
   if (!WRITING_SKILL_NAME.test(name) || name === '.' || name === '..') {
@@ -96,96 +89,6 @@ function ensureOwnedSkillsRoot(): string {
   return canonicalRoot
 }
 
-function ensureOwnedSkillTarget(name: string): { directory: string; filePath: string } {
-  const canonicalRoot = ensureOwnedSkillsRoot()
-  const requestedDirectory = writingSkillDirectory(name)
-  if (fs.existsSync(requestedDirectory)) {
-    const directoryInfo = fs.lstatSync(requestedDirectory)
-    if (directoryInfo.isSymbolicLink() || !directoryInfo.isDirectory()) {
-      throw new Error(text('拒绝写入链接或非目录 Skill 目标', 'Refusing to write to a linked or non-directory skill target'))
-    }
-  } else {
-    fs.mkdirSync(requestedDirectory)
-  }
-  const directory = fs.realpathSync.native(requestedDirectory)
-  if (!isContainedPath(canonicalRoot, directory)) {
-    throw new Error(text('写作 Skill 目标超出应用目录', 'The writing skill target is outside the app directory'))
-  }
-  const filePath = path.join(directory, 'SKILL.md')
-  if (fs.existsSync(filePath)) {
-    const fileInfo = fs.lstatSync(filePath)
-    if (fileInfo.isSymbolicLink() || !fileInfo.isFile()) {
-      throw new Error(text('拒绝覆盖链接或非文件 SKILL.md', 'Refusing to overwrite a linked or non-file SKILL.md'))
-    }
-    const canonicalFile = fs.realpathSync.native(filePath)
-    if (!isContainedPath(directory, canonicalFile)) {
-      throw new Error(text('SKILL.md 超出 Skill 目录', 'SKILL.md is outside its skill directory'))
-    }
-  }
-  return { directory, filePath }
-}
-
-function githubRawUrl(owner: string, repo: string, ref: string, filePath: string): string {
-  const segments = [owner, repo, ref, ...filePath.split('/')].map(encodeURIComponent)
-  return `https://raw.githubusercontent.com/${segments.join('/')}`
-}
-
-async function fetchGitHubWritingSkill(sourceUrl: string): Promise<{
-  raw: string
-  inspection: RemoteWritingSkillInspection
-}> {
-  const location = parseGitHubWritingSkillUrl(sourceUrl)
-  let ref = location.ref
-  if (!ref) {
-    const repositoryResponse = await fetch(
-      `https://api.github.com/repos/${encodeURIComponent(location.owner)}/${encodeURIComponent(location.repo)}`,
-      {
-        headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'AI-Novel-Writer' },
-        redirect: 'error',
-        signal: AbortSignal.timeout(10_000),
-      },
-    )
-    if (!repositoryResponse.ok) throw new Error(`GitHub repository lookup failed (${repositoryResponse.status})`)
-    const repository = await repositoryResponse.json() as { default_branch?: unknown }
-    if (typeof repository.default_branch !== 'string' || !WRITING_SKILL_NAME.test(repository.default_branch)) {
-      throw new Error('GitHub returned an unsupported default branch name')
-    }
-    ref = repository.default_branch
-  }
-
-  const resolvedUrl = githubRawUrl(location.owner, location.repo, ref, location.path)
-  const response = await fetch(resolvedUrl, {
-    headers: { Accept: 'text/plain', 'User-Agent': 'AI-Novel-Writer' },
-    redirect: 'error',
-    signal: AbortSignal.timeout(10_000),
-  })
-  if (!response.ok) throw new Error(`SKILL.md download failed (${response.status})`)
-  const declaredLength = Number(response.headers.get('content-length') ?? 0)
-  if (declaredLength > MAX_WRITING_SKILL_BYTES) throw new Error('SKILL.md is larger than 64 KiB')
-  const raw = await response.text()
-  if (Buffer.byteLength(raw, 'utf8') > MAX_WRITING_SKILL_BYTES) {
-    throw new Error('SKILL.md is larger than 64 KiB')
-  }
-  const inspected = inspectWritingSkillMarkdown(raw)
-  const contentSha256 = createHash('sha256').update(raw, 'utf8').digest('hex')
-  const publicInspection = {
-    metadata: inspected.metadata,
-    compatible: inspected.compatible,
-    reasons: inspected.reasons,
-    suggestedStage: inspected.suggestedStage,
-    utf8Bytes: inspected.utf8Bytes,
-  }
-  return {
-    raw,
-    inspection: {
-      ...publicInspection,
-      sourceUrl,
-      resolvedUrl,
-      contentSha256,
-    },
-  }
-}
-
 function promptFilename(template: AppPromptTemplate): string {
   return `${template.key}${template.writingLanguage ? `.${template.writingLanguage}` : ''}`
 }
@@ -204,7 +107,6 @@ function promptLanguageFromFilename(filename: string): WritingLanguage | undefin
  * 任意 app-data 路径，也不借用外部文件授权。
  */
 export function registerAppDataController(): void {
-  const inspectedWritingSkills = new Map<string, Pick<RemoteWritingSkillInspection, 'contentSha256' | 'resolvedUrl'>>()
   ipcMain.handle('prompt:load-global', async (): Promise<AppPromptLoadReceipt> => {
     const promptsDirectory = path.join(VELA_HOME, 'prompts')
     if (!fs.existsSync(promptsDirectory)) return { templates: [], diagnostics: [] }
@@ -309,73 +211,11 @@ export function registerAppDataController(): void {
   })
 
   ipcMain.handle('skills:inspect-github', async (_event, sourceUrl: string) => {
-    try {
-      if (typeof sourceUrl !== 'string' || sourceUrl.length > 2_048) {
-        throw new Error(text('GitHub 地址无效', 'The GitHub URL is invalid'))
-      }
-      const { inspection } = await fetchGitHubWritingSkill(sourceUrl)
-      inspectedWritingSkills.set(sourceUrl, {
-        contentSha256: inspection.contentSha256,
-        resolvedUrl: inspection.resolvedUrl,
-      })
-      return { success: true, inspection }
-    } catch (error) {
-      if (typeof sourceUrl === 'string') inspectedWritingSkills.delete(sourceUrl)
-      return { success: false, error: error instanceof Error ? error.message : String(error) }
-    }
+    return inspectWritingSkill(sourceUrl)
   })
 
   ipcMain.handle('skills:install-github', async (_event, sourceUrl: string) => {
-    try {
-      if (typeof sourceUrl !== 'string' || sourceUrl.length > 2_048) {
-        throw new Error(text('GitHub 地址无效', 'The GitHub URL is invalid'))
-      }
-      const confirmedInspection = inspectedWritingSkills.get(sourceUrl)
-      if (!confirmedInspection) {
-        throw new Error(text(
-          '请先检查该 GitHub Writing Skill，再确认安装',
-          'Inspect this GitHub Writing Skill before confirming installation',
-        ))
-      }
-      inspectedWritingSkills.delete(sourceUrl)
-      // Refetch after confirmation. Renderer-provided inspection data is never trusted as install input.
-      const { raw, inspection } = await fetchGitHubWritingSkill(sourceUrl)
-      if (
-        inspection.contentSha256 !== confirmedInspection.contentSha256
-        || inspection.resolvedUrl !== confirmedInspection.resolvedUrl
-      ) {
-        throw new Error(text(
-          'Writing Skill 在检查后已发生变化，请重新检查',
-          'The Writing Skill changed after inspection; inspect it again',
-        ))
-      }
-      if (!inspection.compatible) {
-        throw new Error(text(
-          `该 Skill 不是自包含提示词：${inspection.reasons.join(', ')}`,
-          `This is not a self-contained prompt skill: ${inspection.reasons.join(', ')}`,
-        ))
-      }
-      const requestedDirectory = writingSkillDirectory(inspection.metadata.name)
-      if (fs.existsSync(requestedDirectory)) {
-        throw new Error(text(
-          `同名 Writing Skill 已安装：${inspection.metadata.name}`,
-          `A Writing Skill with this name is already installed: ${inspection.metadata.name}`,
-        ))
-      }
-      const { filePath } = ensureOwnedSkillTarget(inspection.metadata.name)
-      fs.writeFileSync(filePath, raw, { encoding: 'utf8', mode: 0o600 })
-      const skill: InstalledWritingSkill = {
-        name: inspection.metadata.name,
-        source: 'user',
-        version: inspection.metadata.version,
-        language: inspection.metadata.language,
-        compatible: true,
-        utf8Bytes: inspection.utf8Bytes,
-      }
-      return { success: true, skill }
-    } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : String(error) }
-    }
+    return installWritingSkill(sourceUrl)
   })
 
   ipcMain.handle('skills:uninstall-user', async (_event, name: string) => {
