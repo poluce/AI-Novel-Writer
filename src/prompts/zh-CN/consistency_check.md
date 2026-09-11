@@ -46,11 +46,8 @@
 ★【作者要求重点检查的维度（如有，这些维度必须优先、深入检查）】★：
 {{review_focus}}
 
-## 输出格式（JSON）
-
-请严格输出以下 JSON 格式：
-
-{"items":[{"category":"剧情连贯性","severity":"pass","description":"未发现与前文矛盾"},{"category":"剧情合理性","severity":"error","quote":"原文中的具体句子","description":"问题描述"},{"category":"角色状态","severity":"warning","quote":"原文句子","description":"轻微不一致说明"}],"summary":"一句话总体评价"}
+【交卷方式】
+请调用运行时提供的提交工具交卷。产物含 summary 与 items（category、severity、description，可选 quote）。不要在对话正文里粘贴 JSON、Markdown 或代码块。
 
 severity 取值：error=严重矛盾强烈建议修复, warning=轻微不一致酌情修复, pass=该维度通过无问题。
 全部 items 必须为 1–10 条；不要求每个检查维度单列一项，不得为覆盖类别而凑 pass 项，同一问题不得重复。每项 quote 不超过 160 字，description 不超过 200 字；summary 不超过 120 字。quote 字段在 pass 时可省略。

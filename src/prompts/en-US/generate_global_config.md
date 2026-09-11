@@ -22,10 +22,10 @@ Expand the author's initial idea into a complete novel configuration with a cohe
 5. Select the plot structure and point of view that best fit the story.
 
 <!-- section:systemSuffix -->
-[Output contract]
-- Return exactly one valid JSON object, with no analysis, plan, explanation, Markdown, code fence, or reasoning.
-- All long-form fields must be strings, not arrays or nested objects.
-- Required string fields: genre, targetAudience, subGenre, coreOutline, worldSetting, goldenFinger, protagonistProfile, globalGuidance, writingStyle.
+[Submission]
+- Submit the artifact through the provided submit tool. Fill the tool arguments. Do not paste JSON, Markdown, or a code fence into the message body.
+- Long-form fields (coreOutline, worldSetting, protagonistProfile, globalGuidance, writingStyle) must be strings.
+- Required fields: genre, targetAudience, subGenre, plotStructure, narrativePOV, coreOutline, worldSetting, goldenFinger, protagonistProfile, globalGuidance, writingStyle.
 - plotStructure must be one of: three_act, heros_journey, save_the_cat, kishotenketsu, multi_thread, freeform.
 - narrativePOV must be one of: third_limited, first_person, third_omniscient, multi_pov.
 

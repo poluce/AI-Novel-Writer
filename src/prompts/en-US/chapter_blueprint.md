@@ -21,9 +21,9 @@ Generate complete chapter blueprints from chapter 1 through chapter {{number_of_
 3. Give every chapter a material event change; do not add filler or chronological bookkeeping.
 4. End every chapter with a concrete variable that creates forward pressure.
 
-[JSON output contract]
-Return exactly one object with a blueprints array. Every item must contain chapterNumber, title, role, purpose, characters, relationships, keyEvents, and suspenseHook. relationships contains only relationships established in that chapter and is [] when empty. keyEvents must concisely state actions, reversals, consequences, and relevant use of the central advantage.
-Return JSON only, with no Markdown, preface, analysis, plan, code fence, or reasoning.
+[Submission]
+Submit the artifact through the provided submit tool as a blueprints array. Do not paste JSON, Markdown, or a code fence into the message body.
+Every item must contain chapterNumber, title, role, purpose, characters, relationships, keyEvents, and suspenseHook. relationships contains only relationships established in that chapter and is empty when none. keyEvents must concisely state actions, reversals, consequences, and relevant use of the central advantage.
 
 [Author pacing and style guidance — highest priority when present]
 {{pacing_guidance}}

@@ -27,31 +27,12 @@
 3. 避免水文与流水账：每一章都必须发生"实质性的事件变动"。
 4. 悬念钩子机制：每章结尾必须有一个让读者想连续翻页的变数。
 
-【输出格式规定】
-严格且仅按以下 JSON 数组格式输出每一章：
+【交卷方式】
+请调用运行时提供的提交工具交卷，产物为 blueprints 列表。不要在对话正文里粘贴 JSON、Markdown 或代码块。
 
-{
-  "blueprints": [
-    {
-      "chapterNumber": 1,
-      "title": "引人入胜的标题",
-      "role": "本章在全书结构中的功能，例如建置、发展、转折或高潮",
-      "purpose": "本章主角最想解决的一件事",
-      "characters": ["本章互动的要人A", "要人B"],
-      "relationships": [{ "from": "要人A", "to": "要人B", "relation": "本章可确认的关系；无则空数组" }],
-      "keyEvents": "主角做了什么，遭遇了什么反转，金手指怎么用的。100字左右具体说明",
-      "suspenseHook": "一句话说明结尾留了什么悬念"
-    },
-    {
-      "chapterNumber": 2
-    }
-  ]
-}
-
-要求：
-- 每章的 keyEvents 控制在 100-150 字以内，信息密度必须极高。
-- 每个对象必须包含完整的 chapterNumber、title、role、purpose、characters、relationships、keyEvents、suspenseHook；relationships 仅写本章可确认的角色关系，无则输出空数组。
-- 仅给出最终的 JSON 文本，不要任何客套解释、分析、计划、Markdown 或代码块。
+每章必须包含 chapterNumber、title、role、purpose、characters、relationships、keyEvents、suspenseHook。
+- keyEvents 控制在 100-150 字以内，信息密度必须极高。
+- relationships 仅写本章可确认的角色关系，无则空数组。
 
 ★【作者节奏/风格指导（如有，最高优先级）】★：
 {{pacing_guidance}}

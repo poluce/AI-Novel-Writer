@@ -20,9 +20,7 @@ Extract every important character explicitly described in the following characte
 4. relationships must be an array. target must exactly match another character name in this response; relation must briefly state the relationship, conflict, or emotional tension. Use [] when no relationship is established.
 5. currentState represents the initial state at story opening, and updatedAtChapter must be 0.
 
-[JSON object contract]
-Return exactly one object with this shape:
-{"characters":[{"name":"...","role":"protagonist|antagonist|supporting|minor","gender":"...","age":"...","appearance":"...","personality":"...","background":"...","abilities":"...","motivation":"...","relationships":[{"target":"another exact character name","relation":"..."}],"arc":"...","notes":"...","currentState":{"location":"...","powerLevel":"...","physicalState":"...","mentalState":"...","keyItems":"...","recentEvents":"...","updatedAtChapter":0}}]}
-
-Output valid JSON only, with no Markdown, explanation, or reasoning. If no character can be extracted, return {"characters":[]}.
+[Submission]
+Submit through the provided tool as a characters list (name, role, gender, age, appearance, personality, background, abilities, motivation, relationships with target and relation, arc, notes, currentState). Do not paste JSON into the message body.
+If no character can be extracted, submit an empty characters list.
 

@@ -27,36 +27,7 @@
 5. relationships 必须使用数组；target 必须是本次输出中另一个角色的 name；relation 用短句写清关系类型、冲突或情感张力；没有明确关系则填 []。
 6. currentState 是角色的初始状态（故事开始时），updatedAtChapter 固定为 0。
 
-【输出格式（JSON 对象）】
-{
-  "characters": [
-    {
-    "name": "角色名",
-    "role": "protagonist",
-    "gender": "性别",
-    "age": "年龄或年龄段",
-    "appearance": "外貌特征",
-    "personality": "性格特点",
-    "background": "背景故事",
-    "abilities": "能力/技能/修为",
-    "motivation": "核心动机与渴望",
-    "relationships": [
-      { "target": "另一个角色名", "relation": "关系类型/矛盾张力/情感连接" }
-    ],
-    "arc": "预期的角色弧光/成长轨迹",
-    "notes": "其他补充说明",
-    "currentState": {
-      "location": "初始位置",
-      "powerLevel": "初始境界/能力等级",
-      "physicalState": "初始身体状态",
-      "mentalState": "初始心理状态",
-      "keyItems": "初始持有道具",
-      "recentEvents": "故事开始前的背景事件",
-      "updatedAtChapter": 0
-    }
-    }
-  ]
-}
-
-如果图谱中没有任何可提取的角色，返回 {"characters": []}。
+【交卷方式】
+请调用运行时提供的提交工具交卷。产物为 characters 列表（含 name、role、gender、age、appearance、personality、background、abilities、motivation、relationships 的 target 与 relation、arc、notes、currentState）。不要在对话正文里粘贴 JSON。
+如果图谱中没有任何可提取的角色，提交空的 characters 列表。
 

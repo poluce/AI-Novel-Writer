@@ -19,9 +19,7 @@ Update character state records from this chapter.
 3. currentState may contain location, powerLevel, physicalState, mentalState, keyItems, recentEvents, and updatedAtChapter. Set updatedAtChapter to {{chapter_number}}.
 4. Preserve every character name exactly as written in the manuscript or existing records.
 
-[JSON output contract]
-Return exactly one JSON object:
-{"updates":[{"name":"exact existing name","currentState":{"location":"...","powerLevel":"...","physicalState":"...","mentalState":"...","keyItems":"...","recentEvents":"...","updatedAtChapter":{{chapter_number}}}}],"newCharacters":[{"name":"exact new name","role":"protagonist|antagonist|supporting|minor","currentState":{"location":"...","powerLevel":"...","physicalState":"...","mentalState":"...","keyItems":"...","recentEvents":"...","updatedAtChapter":{{chapter_number}}}}]}
-
-If nothing changed and no important character was introduced, return {"updates":[],"newCharacters":[]}. Output JSON only, with no Markdown or explanation.
+[Submission]
+Submit through the provided tool. Include updates and newCharacters. currentState may contain location, powerLevel, physicalState, mentalState, keyItems, recentEvents, and updatedAtChapter.
+If nothing changed and no important character was introduced, submit empty updates and newCharacters. Do not paste JSON into the message body.
 

@@ -231,12 +231,12 @@ describe('built-in model-neutral prompt contract', () => {
     expect(EDITABLE_PROMPT_KEYS).not.toContain('chapter_blueprint')
     expect(EDITABLE_PROMPT_KEYS).not.toContain('extract_initial_characters')
   })
-  it('keeps character-card extraction compatible with JSON-object response mode', () => {
+  it('keeps character-card extraction on the submit-tool contract', () => {
     const text = promptText('extract_initial_characters')
 
-    expect(text).toContain('【输出格式（JSON 对象）】')
-    expect(text).toContain('"characters": [')
-    expect(text).toContain('返回 {"characters": []}')
+    expect(text).toContain('提交工具')
+    expect(text).toContain('characters')
+    expect(text).toContain('空的 characters 列表')
   })
 
   it('keeps system roles free of overclaiming slogan identities', () => {

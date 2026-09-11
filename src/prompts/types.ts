@@ -18,7 +18,7 @@ export interface PromptTemplate {
   description: string
   /** 模板内容（支持 {{变量}} 插值） */
   content: string
-  /** 不可编辑的系统约束（输出格式、JSON schema 等），渲染时自动追加到 content 末尾 */
+  /** 不可编辑的系统约束（提交工具字段语义等），渲染时自动追加到 content 末尾 */
   systemSuffix?: string
   /** LLM system message 角色定位（由模板统一定义，command 不再硬编码） */
   systemRole?: string

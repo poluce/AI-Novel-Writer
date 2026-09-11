@@ -35,55 +35,12 @@
 
 ---
 
-请严格按照以下 JSON 格式返回分析结果：
+【交卷方式】
+请调用运行时提供的提交工具交卷。产物含 novelConfig、architectureFiles、characterCards。不要在对话正文里粘贴 JSON。
 
-{
-  "novelConfig": {
-    "genre": "主类型（玄幻/仙侠/都市/科幻/历史/悬疑/游戏/军事/奇幻/武侠/现实/其他）",
-    "targetAudience": "受众（男频/女频/通用）",
-    "subGenre": "细分类型及标签",
-    "plotStructure": "故事结构（three_act/heros_journey/save_the_cat/kishotenketsu/multi_thread/freeform）",
-    "narrativePOV": "叙事视角（third_limited/first_person/third_omniscient/multi_pov）",
-    "coreOutline": "核心大纲（150字以上，含主线目标、核心冲突、故事走向）",
-    "worldSetting": "世界观背景与力量体系",
-    "goldenFinger": "主角金手指/核心能力体系",
-    "protagonistProfile": "主角人设（性格、背景、核心驱动力）",
-    "globalGuidance": "根据已有内容归纳的全局写作风格与节奏要求"
-  },
-  "architectureFiles": {
-    "premise": "核心故事前提文本（200字以内的高度浓缩核心）",
-    "characters": "已知主要角色的关系网与动力学分析",
-    "worldbuilding": "世界观矩阵（力量体系、阶层结构、重要场景）",
-    "synopsis": "已知的情节走向分析（含已完成的部分和推测的后续走向）"
-  },
-  "characterCards": [
-    {
-      "name": "角色名",
-      "role": "protagonist/antagonist/supporting/minor",
-      "gender": "性别",
-      "age": "年龄或阶段",
-      "appearance": "外貌描写",
-      "personality": "性格特征",
-      "background": "背景故事",
-      "abilities": "能力/技能",
-      "motivation": "核心动机",
-      "relationships": [
-        { "target": "另一个角色名", "relation": "关系类型/矛盾张力/情感连接" }
-      ],
-      "arc": "已知成长轨迹",
-      "notes": "其他注意事项",
-      "currentState": {
-        "location": "最后已知位置",
-        "powerLevel": "当前境界/能力等级",
-        "physicalState": "当前身体状态",
-        "mentalState": "当前心理状态",
-        "keyItems": "当前持有的关键道具",
-        "recentEvents": "最近发生的重要事件",
-        "updatedAtChapter": 0
-      }
-    }
-  ]
-}
+novelConfig 含 genre、targetAudience、subGenre、plotStructure、narrativePOV、coreOutline、worldSetting、goldenFinger、protagonistProfile、globalGuidance。
+architectureFiles 含 premise、characters、worldbuilding、synopsis。
+characterCards 的关系用 target 与 relation，并含 currentState。
 
 要求：
 1. characterCards 仅包含主角和重要配角（3-8人），不要填写次要龙套

@@ -32,28 +32,11 @@
 2. 伏笔强制回收与释放：如果前面章节留下了危机，这里必须引爆或解决。
 3. 避免水文：每一章都必须有实质性进展。
 
-【输出格式规定】
-严格且仅按以下 JSON 数组格式输出每一章：
+【交卷方式】
+请调用运行时提供的提交工具交卷，产物为 blueprints 列表。不要在对话正文里粘贴 JSON、Markdown 或代码块。
 
-{
-  "blueprints": [
-    {
-      "chapterNumber": n,
-      "title": "引人入胜的标题",
-      "role": "本章在全书结构中的功能，例如建置、发展、转折或高潮",
-      "purpose": "本章主角最想解决的一件事",
-      "characters": ["本章互动的要人A", "要人B"],
-      "relationships": [{ "from": "要人A", "to": "要人B", "relation": "本章可确认的关系；无则空数组" }],
-      "keyEvents": "具体发生了什么，金手指怎么运作的。100字左右",
-      "suspenseHook": "结尾留的钩子"
-    }
-  ]
-}
-
-要求：
 - 严格遵循上下文连贯，不要前后矛盾。
-- 每个对象必须包含完整的 chapterNumber、title、role、purpose、characters、relationships、keyEvents、suspenseHook；relationships 仅写本章可确认的角色关系，无则输出空数组。
-- 仅给出最终的 JSON 文本，不要解释、分析、计划、Markdown 或代码块。
+- 每章必须包含 chapterNumber、title、role、purpose、characters、relationships、keyEvents、suspenseHook；relationships 仅写本章可确认的角色关系，无则空数组。
 
 ★【作者节奏/风格指导（如有，最高优先级）】★：
 {{pacing_guidance}}

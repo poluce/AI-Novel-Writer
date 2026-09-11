@@ -24,8 +24,8 @@ Build a dramatically coherent core cast from the story premise.
 5. Connect every character through unavoidable pressure from scarce resources, survival, institutions, or conflicting beliefs.
 6. Avoid flat saints, irrational antagonists, and characters who exist only as tools unless the author explicitly requests them.
 
-[Output contract]
-Return exactly one JSON object with "schemaVersion":1 and "entries":[...]. Every relationship must target another character in the same entries array. Do not output Markdown, a preface, a code fence, or reasoning; the runtime supplies the complete immutable field contract.
+[Submission]
+Submit through the provided tool. The artifact has schemaVersion 1 and an entries array. Every relationship must target another character in the same entries array. Do not paste JSON, Markdown, or a code fence into the message body.
 
 [Reference works]
 {{reference_works}}

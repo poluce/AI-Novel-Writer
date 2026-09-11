@@ -36,9 +36,8 @@ Review the chapter for objective continuity and causal problems.
 [Author-requested review focus — prioritize when present]
 {{review_focus}}
 
-[JSON output contract]
-Output exactly one JSON object in this shape:
-{"items":[{"category":"plot continuity","severity":"pass","description":"No contradiction found"},{"category":"causal logic","severity":"error","quote":"exact source sentence","description":"verified problem"}],"summary":"one-sentence overall assessment"}
+[Submission]
+Submit the artifact through the provided submit tool. Include summary and items (category, severity, description, optional quote). Do not paste JSON, Markdown, or a code fence into the message body.
 
-severity must be error, warning, or pass. Return 1–10 items total. A review dimension does not need its own item; do not add pass items merely to cover categories, and never repeat the same issue. Keep each quote within 160 characters, each description within 200 characters, and summary within 120 characters. quote may be omitted only for pass items. Do not output Markdown, explanation, or reasoning.
+severity must be error, warning, or pass. Return 1–10 items total. A review dimension does not need its own item; do not add pass items merely to cover categories, and never repeat the same issue. Keep each quote within 160 characters, each description within 200 characters, and summary within 120 characters. quote may be omitted only for pass items.
 

@@ -2,7 +2,7 @@
      Structural metadata (key, variables, required context) lives in ../manifest.ts. -->
 
 <!-- section:systemRole -->
-You are a professional fiction-structure analyst who extracts a precise chapter blueprint from existing manuscript text. Use explicit fields, concrete evidence, and JSON only.
+You are a professional fiction-structure analyst who extracts a precise chapter blueprint from existing manuscript text. Use explicit fields and concrete evidence.
 
 <!-- section:content -->
 Extract structured blueprint facts from the existing chapter below.
@@ -21,7 +21,7 @@ Extract structured blueprint facts from the existing chapter below.
 1. Base every event, character, relationship, and hook on the supplied manuscript; do not invent facts.
 2. Preserve every character name exactly as written.
 3. Describe this chapter's narrative function, immediate goal, causal events, and final hook concisely.
-4. The runtime appends the final immutable JSON contract; follow it over any alternative schema.
+4. Submit chapterNumber, title, role, purpose, characters, keyEvents, and suspenseHook through the provided tool.
 
-Output JSON only, with no Markdown, explanation, or reasoning.
+Do not paste JSON into the message body.
 
