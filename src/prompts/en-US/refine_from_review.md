@@ -26,5 +26,5 @@ Revise the chapter using only the confirmed review checklist.
 [Confirmed author guidance — highest priority when present]
 {{user_refine_prompt}}
 
-Output the complete revised chapter as plain prose only. Do not include a preface, explanation, Markdown, analysis, or screenplay formatting. Separate every paragraph with one blank line.
+Submit through the provided tool. The body must be the complete revised chapter as plain prose only. Do not include a preface, explanation, Markdown, analysis, or screenplay formatting. Separate every paragraph with one blank line.
 

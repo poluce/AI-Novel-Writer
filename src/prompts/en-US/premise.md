@@ -36,7 +36,7 @@ State the immediate visible threat and the deeper hidden truth or long-term myst
 2. Express the protagonist's concrete desire or obsession.
 3. Include both a visible opponent and a deeper crisis.
 4. Follow the project-wide writing guidance.
-5. Use only the requested Markdown headings and content; add no explanation.
+5. Submit through the provided tool using only the requested Markdown headings and content; add no explanation.
 
 [Reference works]
 {{reference_works}}

@@ -46,9 +46,9 @@ Use these only to understand later turning points. Do not reveal or advance them
 [Author guidance for this step — highest priority when present]
 {{user_guidance}}
 
-[Output contract]
+[Submission]
 - Cover only the chapter brief and stop once its conflict is complete. Do not advance later blueprints.
-- Output plain manuscript prose only, without headings, Markdown, analysis, plans, or screenplay formatting.
+- Submit through the provided tool. The body must be plain manuscript prose only, without headings, Markdown, analysis, plans, or screenplay formatting.
 - Separate every paragraph with one blank line and use quotation marks consistently for dialogue.
 - If the target length cannot fit in one response, stop at a natural paragraph boundary without asking the user to continue.
 - Keep character voices distinct and avoid generic paragraph summaries, destiny metaphors, or unrelated philosophical conclusions.

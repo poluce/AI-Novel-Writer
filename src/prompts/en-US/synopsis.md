@@ -32,7 +32,7 @@ Produce a complete outline made of structural turning points rather than chapter
 4. Respect the information limits and suspense opportunities of {{narrative_pov}}.
 5. Treat explicit author facts in the story premise, character dynamics, and world system as causal constraints. Never omit, weaken, or reverse them.
 6. Preserve the project-wide writing guidance.
-7. Return only the plot architecture, with no analysis or explanation.
+7. Submit through the provided tool. The body is only the plot architecture, with no analysis or explanation.
 
 <!-- section:systemSuffix -->
 [Author guidance for this step — highest priority when present]

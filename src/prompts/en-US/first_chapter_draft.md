@@ -41,9 +41,9 @@ Use these only to understand later turning points. Do not reveal or advance them
 [Author guidance for this step — highest priority when present]
 {{user_guidance}}
 
-[Output contract]
+[Submission]
 - Write approximately {{word_number}} words and cover only the chapter brief. End at the state or hook specified there; when none is specified, end naturally without advancing later blueprints or adding filler.
-- Output plain manuscript prose only. Do not use Markdown, headings, analysis, plans, or screenplay formatting.
+- Submit through the provided tool. The body must be plain manuscript prose only. Do not use Markdown, headings, analysis, plans, or screenplay formatting.
 - Separate every paragraph with one blank line. Use standard quotation marks consistently for dialogue.
 - If the target length cannot fit in one response, stop at a natural paragraph boundary without asking the user to continue.
 - Keep each character's voice distinct. Avoid paragraph-ending summaries, generic destiny metaphors, and unrelated philosophical conclusions.

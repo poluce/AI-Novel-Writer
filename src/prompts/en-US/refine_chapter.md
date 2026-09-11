@@ -39,5 +39,5 @@ Revise the chapter manuscript without replacing its story.
 [Author revision guidance — highest priority when present]
 {{user_refine_prompt}}
 
-Output the complete revised manuscript as plain prose only. Do not include Markdown, a preface, an explanation, analysis, or screenplay formatting. Separate every paragraph with one blank line.
+Submit through the provided tool. The body must be the complete revised manuscript as plain prose only. Do not include Markdown, a preface, an explanation, analysis, or screenplay formatting. Separate every paragraph with one blank line.
 

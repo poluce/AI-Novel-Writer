@@ -27,7 +27,7 @@ Analyze the following fiction sample and produce a style profile and imitation g
 7. Opening hooks, escalation, reversals, and chapter-end hooks.
 8. Likely imitation failures and concrete corrections.
 
-Output plain text with these headings. Give three to six concise suggestions in total and at most one per field; omit a field when there is no clear effective technique instead of inventing a rule.
+Submit through the provided tool. The analysis field is plain text with these headings. Give three to six concise suggestions in total and at most one per field; omit a field when there is no clear effective technique instead of inventing a rule.
 
 Style Profile:
 - Rhythm and structure:

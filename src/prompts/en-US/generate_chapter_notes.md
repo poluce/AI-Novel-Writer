@@ -11,7 +11,7 @@ Generate precise structured chapter notes for the following manuscript.
 Chapter {{chapter_number}}: {{chapter_title}}
 {{chapter_content}}
 
-Return exactly this Markdown structure and no additional explanation:
+Submit through the provided tool. The body uses exactly this structure and no additional explanation:
 
 # Chapter {{chapter_number}} Notes
 
