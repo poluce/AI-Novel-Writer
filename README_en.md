@@ -113,6 +113,8 @@ The app currently supports two request protocols:
 
 “Custom API” means a configurable URL, model identifier, and credential within those protocols. It is not an arbitrary HTTP protocol editor or a place to run user-supplied scripts. Protocols such as Anthropic Messages, Azure OpenAI, or native KoboldAI require dedicated adapters rather than a URL swap.
 
+Writing generation requires **native function / tool calling**. Structured results and chapter prose are submitted once through tools; the app no longer parses JSON or XML out of the model’s visible text. Project files, model profiles, and prompt overlays stay in the same locations. If an old custom prompt still says “output JSON only,” restore the built-in default in Settings.
+
 ### Ollama
 
 Use Ollama through its OpenAI-compatible service:

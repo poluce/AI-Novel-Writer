@@ -99,6 +99,8 @@ flowchart LR
 
 “自定义 API”指的是在上述协议范围内自定义地址、模型标识和凭据；它不是任意 HTTP 协议或可执行脚本编辑器。Anthropic、Azure、KoboldAI 原生协议等不同接口需要单独的适配器，不能仅靠替换 URL 保证兼容。
 
+写作生成要求模型支持**原生 function / tool calling**。结构化结果和章节正文通过提交工具一次性返回，不再从模型纯文本里解析 JSON 或 XML。项目文件、模型配置和提示词覆盖的存放位置不变；若旧的自定义提示词仍要求“只输出 JSON”，请在设置中恢复为内置默认。
+
 ### Ollama
 
 推荐通过 Ollama 的 OpenAI-compatible 服务接入：

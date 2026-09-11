@@ -218,9 +218,9 @@
 
 ## 阶段 7：文档与发布（P7）
 
-- [ ] README 更新：更新模型能力要求、**说明实现方式变化**（旧文本协议不再识别；旧提示词覆盖若含旧协议指令需调整或重置为默认；用户数据与项目文件照常读取）。NovelAI 章节不在此任务删除，见 [`2026-09-11-remove-novelai.md`](2026-09-11-remove-novelai.md)
-- [ ] `docs/product-domain.md` 术语补充（稳定术语源）
-- [ ] 新增 ADR：记录"Pi 底层替换 + 原生工具调用 + 能力门控"决策
+- [x] README 更新：更新模型能力要求、**说明实现方式变化**（旧文本协议不再识别；旧提示词覆盖若含旧协议指令需调整或重置为默认；用户数据与项目文件照常读取）。NovelAI 章节不在此任务删除，见 [`2026-09-11-remove-novelai.md`](2026-09-11-remove-novelai.md)
+- [x] `docs/product-domain.md` 术语补充（稳定术语源）
+- [x] 新增 ADR：[`0018-pi-native-tool-calling-replaces-text-protocols.md`](../adr/0018-pi-native-tool-calling-replaces-text-protocols.md)
 - [ ] 发布资产与资格脚本适配：`run-continuity-calibration.mjs`、`real-provider-generation-qualification.mjs`、release smoke
 - [ ] electron-builder 依赖包含/排除检查
 - [ ] **CI 工作流适配**（`.github/workflows/pr-ci.yml` 等）：Node 版本与依赖安装步骤
