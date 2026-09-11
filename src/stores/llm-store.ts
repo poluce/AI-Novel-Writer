@@ -11,6 +11,7 @@ import type {
   TokenUsage,
 } from '../shared/ipc-channels'
 import type { CreativeStrategy, GenerationReasoningStage } from '../shared/reasoning-types'
+import type { SubmitToolName } from '../shared/submit-contract'
 import { projectSessionContextFromProject } from '../shared/project-session-context'
 import { useProjectStore } from './project-store'
 
@@ -57,7 +58,7 @@ interface LLMState {
     messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
     callbacks: StreamCallbacks,
     modelId?: string,
-    options?: { responseFormat?: { type: string }; maxTokens?: number; purpose?: string; projectSession?: import('../shared/ipc-channels').ProjectSessionContext; modelExecutionLeaseId?: string; creativeStrategy?: CreativeStrategy; reasoningStage?: GenerationReasoningStage }
+    options?: { responseFormat?: { type: string }; maxTokens?: number; purpose?: string; projectSession?: import('../shared/ipc-channels').ProjectSessionContext; modelExecutionLeaseId?: string; creativeStrategy?: CreativeStrategy; reasoningStage?: GenerationReasoningStage; submitTool?: SubmitToolName }
   ) => Promise<string>
   /** 取消生成 */
   cancelGeneration: (requestId: string) => Promise<void>
@@ -247,6 +248,7 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
         stream: true,
         responseFormat: options?.responseFormat as { type: 'json_object' | 'text' } | undefined,
         maxTokens: options?.maxTokens,
+        ...(options?.submitTool ? { submitTool: options.submitTool } : {}),
       })
     } catch (error) {
       cleanup()

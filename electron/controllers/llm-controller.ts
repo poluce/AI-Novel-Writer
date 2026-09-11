@@ -19,6 +19,9 @@ import {
   ModelExecutionLeaseRegistry,
 } from '../services/model-execution-lease'
 import { ModelDiscoveryService } from '../services/model-discovery-service'
+import { isSubmitToolName } from '../../src/shared/submit-contract'
+import { SingleShotAbortedError, streamSingleShot } from '../pi/pi-single-shot'
+import { createSubmitTool, visibleTextFromSubmitArtifact } from '../pi/submit-tools'
 
 interface ActiveStream {
   controller: AbortController
@@ -56,6 +59,14 @@ function saveModelConfigs(models: ModelProfile[]) {
 function getModelConfig(modelId: string): ModelProfile | null {
   const models = loadModelConfigs()
   return models.find((m) => m.id === modelId) ?? null
+}
+
+function splitGenerationMessages(messages: LLMRequest['messages']): { systemPrompt: string; userPrompt: string } {
+  const systemPrompt = messages.filter(message => message.role === 'system').map(message => message.content).join('\n\n')
+  const userPrompt = messages.filter(message => message.role !== 'system').map(message => (
+    message.role === 'assistant' ? `Assistant:\n${message.content}` : message.content
+  )).join('\n\n')
+  return { systemPrompt, userPrompt }
 }
 
 function applyProxyConfig() {
@@ -205,6 +216,36 @@ export function registerLLMController() {
       recordCancelled: () => recordOnce({ success: false, error: 'cancelled' }),
     })
     const win = BrowserWindow.fromWebContents(event.sender)
+
+    if (isSubmitToolName(request.submitTool)) {
+      const submitTool = request.submitTool
+      const { systemPrompt, userPrompt } = splitGenerationMessages(request.messages)
+      void streamSingleShot(model, systemPrompt, userPrompt, createSubmitTool(submitTool), {
+        signal: abortController.signal,
+        inFlightId: `llm:${requestId}`,
+        maxTokens: generationParameters.maxTokens,
+      }).then(result => {
+        const fullText = visibleTextFromSubmitArtifact(submitTool, result.artifact, result.text)
+        recordOnce({ success: true })
+        win?.webContents.send('llm:stream-done', {
+          requestId,
+          fullText,
+          finishReason: 'stop' satisfies LLMFinishReason,
+        })
+      }).catch(error => {
+        if (error instanceof SingleShotAbortedError || abortController.signal.aborted) {
+          recordOnce({ success: false, error: 'cancelled' })
+          win?.webContents.send('llm:stream-error', { requestId, error: 'cancelled' })
+          return
+        }
+        const message = error instanceof Error ? error.message : String(error)
+        recordOnce({ success: false, error: message })
+        win?.webContents.send('llm:stream-error', { requestId, error: message })
+      }).finally(() => {
+        activeStreams.delete(requestId)
+      })
+      return { requestId, started: true }
+    }
 
     const provider = LLMFactory.getProvider(model)
     

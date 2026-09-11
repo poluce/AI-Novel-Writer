@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   handlers: new Map<string, IpcHandler>(),
   generate: vi.fn(),
   generateStream: vi.fn(),
+  streamSingleShot: vi.fn(),
   send: vi.fn(),
   logCall: vi.fn(),
   assertCurrentProjectContext: vi.fn(),
@@ -35,6 +36,17 @@ vi.mock('../../utils/config-utils', () => ({
 vi.mock('../../llm/llm-factory', () => ({
   LLMFactory: {
     getProvider: vi.fn(() => ({ generate: mocks.generate, generateStream: mocks.generateStream })),
+  },
+}))
+
+vi.mock('../../pi/pi-single-shot', () => ({
+  streamSingleShot: (...args: unknown[]) => mocks.streamSingleShot(...args),
+  SingleShotAbortedError: class SingleShotAbortedError extends Error {
+    readonly code = 'CANCELLED' as const
+    constructor() {
+      super('Single-shot generation was aborted.')
+      this.name = 'SingleShotAbortedError'
+    }
   },
 }))
 
@@ -650,5 +662,32 @@ describe('llm project statistics', () => {
       success: false,
       errorMessage: '响应流包含损坏的 JSON 数据',
     }))
+  })
+
+  it('uses pi-ai one-shot when submitTool is set and does not call LLMFactory streaming', async () => {
+    const handler = mocks.handlers.get('llm:generate-stream')
+    if (!handler) throw new Error('Missing llm:generate-stream handler')
+    mocks.streamSingleShot.mockResolvedValue({ artifact: { value: '金手指内容' }, text: '' })
+
+    await expect(handler({ sender: {} }, 'field-stream', {
+      modelId: deepSeekModel.id,
+      messages: [
+        { role: 'system', content: 'sys' },
+        { role: 'user', content: '生成金手指' },
+      ],
+      purpose: 'generate-field-goldenFinger',
+      submitTool: 'submit_field',
+    })).resolves.toEqual({ requestId: 'field-stream', started: true })
+
+    await mocks.streamSingleShot.mock.results[0]?.value
+    await Promise.resolve()
+
+    expect(mocks.generateStream).not.toHaveBeenCalled()
+    expect(mocks.streamSingleShot).toHaveBeenCalledOnce()
+    expect(mocks.send).toHaveBeenCalledWith('llm:stream-done', {
+      requestId: 'field-stream',
+      fullText: '金手指内容',
+      finishReason: 'stop',
+    })
   })
 })

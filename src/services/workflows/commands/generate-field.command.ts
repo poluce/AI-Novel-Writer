@@ -104,7 +104,7 @@ export class GenerateFieldCommand extends BaseWorkflowCommand<string> {
           requestPrompt,
           systemPrompt,
           callbacks,
-          { purpose, reasoningStage: 'planning', writingSkillStage: 'planning' },
+          { purpose, reasoningStage: 'planning', writingSkillStage: 'planning', submitTool: 'submit_field' },
           context,
         )
       } catch (error) {

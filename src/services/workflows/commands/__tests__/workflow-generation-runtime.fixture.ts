@@ -64,6 +64,7 @@ export function createWorkflowRuntimeDependencies(
               reasoningStage: request.reasoningStage,
               maxTokens: request.plan.maxOutputTokens,
               responseFormat: request.plan.responseFormat,
+              ...(request.submitTool ? { submitTool: request.submitTool } : {}),
             },
           ).catch(reject)
         }),

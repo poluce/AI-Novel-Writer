@@ -4,6 +4,7 @@ import type {
   ProjectSessionContext,
 } from '../../shared/ipc-channels'
 import type { CreativeStrategy, GenerationReasoningStage } from '../../shared/reasoning-types'
+import type { SubmitToolName } from '../../shared/submit-contract'
 import { projectSessionContextFromProject } from '../../shared/project-session-context'
 import { ipc } from '../ipc-client'
 import { useLLMStore } from '../../stores/llm-store'
@@ -31,6 +32,7 @@ export interface LeaseCompletionRequest {
   messages: readonly GenerationMessage[]
   plan: Readonly<PhysicalGenerationPlan>
   signal: AbortSignal
+  submitTool?: SubmitToolName
   onChunk?: (chunk: string) => void
 }
 
@@ -205,6 +207,7 @@ function createDefaultEnvironment(): GenerationRuntimeEnvironment {
             reasoningStage: request.reasoningStage,
             maxTokens: request.plan.maxOutputTokens,
             responseFormat: request.plan.responseFormat,
+            ...(request.submitTool ? { submitTool: request.submitTool } : {}),
           },
         ).then(id => {
           requestId = id
@@ -343,6 +346,7 @@ export async function createGenerationRuntime(
           messages: request.messages,
           plan: request.plan,
           signal: request.signal,
+          ...(request.submitTool ? { submitTool: request.submitTool } : {}),
           onChunk: request.onChunk,
         })
       },

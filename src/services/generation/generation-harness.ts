@@ -5,6 +5,7 @@ import type {
   TokenUsage,
 } from '../../shared/ipc-channels'
 import type { CreativeStrategy, GenerationReasoningStage } from '../../shared/reasoning-types'
+import type { SubmitToolName } from '../../shared/submit-contract'
 
 export type GenerationOutput = 'visible-text' | 'structured-data'
 
@@ -22,6 +23,8 @@ export interface GenerationTask {
   messages: readonly GenerationMessage[]
   /** Optional byte-exact safety policy for protected structured prompts. */
   promptBudget?: PromptBudgetPolicy
+  /** One-shot submit_* contract; omitted means legacy visible-text completion. */
+  submitTool?: SubmitToolName
   /** Physical request controls belong exclusively to this module's plan. */
   maxTokens?: never
   maxOutputTokens?: never
@@ -147,6 +150,8 @@ export interface PhysicalGenerationRequest {
   messages: readonly GenerationMessage[]
   plan: Readonly<PhysicalGenerationPlan>
   signal: AbortSignal
+  /** One-shot submit_* contract forwarded to the main-process pi-ai path. */
+  submitTool?: SubmitToolName
   /** Provisional provider text. Callers must reconcile it with the terminal completion. */
   onChunk?: (chunk: string) => void
 }
@@ -682,6 +687,7 @@ export function createGenerationHarness(dependencies: {
                 messages: task.messages.map(message => Object.freeze({ ...message })),
                 plan,
                 signal: controller.signal,
+                ...(task.submitTool ? { submitTool: task.submitTool } : {}),
                 onChunk: options?.onChunk,
               }),
               terminationPromise,

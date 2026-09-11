@@ -176,7 +176,7 @@
   - [ ] `architecture`（情节大纲）
   - [ ] `directory`（章节蓝图）
   - [ ] `analyze-style`（文风分析）
-  - [ ] `generate-field`（金手指/世界观/主角档案等逐字段）
+  - [x] `generate-field`（金手指/世界观/主角档案等逐字段）
   - [ ] `import-novel`（导入推断）
   - [ ] `planning-material`（规划资料 + 角色提取）
   - [ ] `legacy-character-roster-repair`

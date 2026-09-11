@@ -1,6 +1,8 @@
 import type { AgentTool } from '@earendil-works/pi-agent-core'
 import { Type, type TSchema } from '@earendil-works/pi-ai'
 
+import type { SubmitToolName } from '../../src/shared/submit-contract'
+
 /**
  * Submit-contract tools for one-shot pi-ai calls. The model returns the
  * artifact as tool arguments; schema replaces prompt-level JSON/XML contracts.
@@ -215,4 +217,35 @@ export function submitTextTool(): AgentTool<ReturnType<typeof textSchema>> {
     'Submit a visible-text artifact. Use this when the product expects prose rather than a structured record.',
     textSchema(),
   )
+}
+
+export function createSubmitTool(name: SubmitToolName): AgentTool<any> {
+  switch (name) {
+    case 'submit_draft': return submitDraftTool()
+    case 'submit_revision': return submitRevisionTool()
+    case 'submit_finalization': return submitFinalizationTool()
+    case 'submit_review': return submitReviewTool()
+    case 'submit_outline': return submitOutlineTool()
+    case 'submit_blueprint': return submitBlueprintTool()
+    case 'submit_field': return submitFieldTool()
+    case 'submit_style_analysis': return submitStyleAnalysisTool()
+    case 'submit_text': return submitTextTool()
+  }
+}
+
+/** Map a submit artifact onto the string the existing command layer consumes. */
+export function visibleTextFromSubmitArtifact(
+  name: SubmitToolName,
+  artifact: Record<string, unknown> | undefined,
+  text: string,
+): string {
+  if (!artifact) return text
+  if (name === 'submit_field' && typeof artifact.value === 'string') return artifact.value
+  if (name === 'submit_text' && typeof artifact.text === 'string') return artifact.text
+  if (name === 'submit_style_analysis' && typeof artifact.analysis === 'string') return artifact.analysis
+  if ((name === 'submit_draft' || name === 'submit_revision' || name === 'submit_finalization')
+    && typeof artifact.body === 'string') {
+    return artifact.body
+  }
+  return text || JSON.stringify(artifact)
 }

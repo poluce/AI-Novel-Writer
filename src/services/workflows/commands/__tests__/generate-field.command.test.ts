@@ -72,6 +72,12 @@ describe('GenerateFieldCommand project identity', () => {
     const authorText = 'The academy bell rings only when a student disappears.'
     const addition = 'Its mechanism is tied to the sealed observatory beneath the library.'
     const observedPrompts: string[] = []
+    const generateStream = vi.fn(async (messages, streamCallbacks, _modelId, options) => {
+      observedPrompts.push(messages.map((message: { content: string }) => message.content).join('\n'))
+      void options
+      streamCallbacks.onDone?.(addition, undefined, 'stop')
+      return 'field-request'
+    })
     useProjectStore.setState({
       currentProject: {
         ...project(projectAPath),
@@ -85,11 +91,7 @@ describe('GenerateFieldCommand project identity', () => {
     })
     useLLMStore.setState({
       defaultModelId: 'model-1',
-      generateStream: vi.fn(async (messages, streamCallbacks) => {
-        observedPrompts.push(messages.map((message: { content: string }) => message.content).join('\n'))
-        streamCallbacks.onDone?.(addition, undefined, 'stop')
-        return 'field-request'
-      }),
+      generateStream,
     })
 
     await new GenerateFieldCommand('worldSetting').execute({
@@ -99,6 +101,7 @@ describe('GenerateFieldCommand project identity', () => {
     })
 
     expect(observedPrompts.join('\n')).toContain(authorText)
+    expect(generateStream.mock.calls[0]?.[3]).toMatchObject({ submitTool: 'submit_field' })
     expect(useProjectStore.getState().currentProject?.novelConfig.worldSetting)
       .toBe(`${authorText}\n\n${addition}`)
   })
@@ -130,7 +133,10 @@ describe('GenerateFieldCommand project identity', () => {
     })
 
     const [prompt, systemPrompt] = callLlm.mock.calls[0]!
-    expect(callLlm.mock.calls[0]?.[3]).toMatchObject({ writingSkillStage: 'planning' })
+    expect(callLlm.mock.calls[0]?.[3]).toMatchObject({
+      writingSkillStage: 'planning',
+      submitTool: 'submit_field',
+    })
     expect(`${systemPrompt}\n${prompt}`).not.toMatch(/[\u3400-\u9fff]/u)
     expect(prompt).toContain(longOutline)
     expect(String(prompt)).toContain(longOutline.slice(500))

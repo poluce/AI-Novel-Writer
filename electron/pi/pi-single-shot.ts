@@ -19,6 +19,8 @@ export interface StreamSingleShotOptions {
   signal?: AbortSignal
   /** Stable id for the shared in-flight table. Generated when omitted. */
   inFlightId?: string
+  /** Intent-level output cap from the generation harness. */
+  maxTokens?: number
 }
 
 export class SingleShotAbortedError extends Error {
@@ -78,7 +80,11 @@ export async function streamSingleShot(
       systemPrompt,
       messages: [{ role: 'user', content: userPrompt, timestamp: Date.now() }],
       tools,
-    }, { toolChoice: 'any', signal: controller.signal })
+    }, {
+      toolChoice: 'any',
+      signal: controller.signal,
+      ...(options.maxTokens !== undefined ? { maxTokens: options.maxTokens } : {}),
+    })
 
     let text = ''
     let artifact: Record<string, unknown> | undefined

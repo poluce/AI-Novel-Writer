@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  createSubmitTool,
   submitBlueprintTool,
   submitDraftTool,
   submitFieldTool,
@@ -10,6 +11,7 @@ import {
   submitRevisionTool,
   submitStyleAnalysisTool,
   submitTextTool,
+  visibleTextFromSubmitArtifact,
 } from '../submit-tools'
 
 describe('submit contract tools', () => {
@@ -43,5 +45,14 @@ describe('submit contract tools', () => {
   it('keeps the blueprint batch contract on the schema', () => {
     const schema = submitBlueprintTool().parameters as { properties?: Record<string, unknown> }
     expect(schema.properties).toHaveProperty('blueprints')
+  })
+
+  it('resolves submit_field by name', () => {
+    expect(createSubmitTool('submit_field').name).toBe('submit_field')
+  })
+
+  it('prefers the field artifact value over visible text', () => {
+    expect(visibleTextFromSubmitArtifact('submit_field', { value: '金手指' }, '旁白')).toBe('金手指')
+    expect(visibleTextFromSubmitArtifact('submit_field', undefined, '旁白')).toBe('旁白')
   })
 })

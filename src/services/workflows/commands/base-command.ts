@@ -23,6 +23,7 @@ import {
 } from '../bounded-completion'
 import { workflowUiText, workflowWritingLanguage } from '../workflow-project-session'
 import type { WritingSkillStage } from '../../../shared/writing-skills'
+import type { SubmitToolName } from '../../../shared/submit-contract'
 
 export interface CommandExecuteParams {
   step: unknown
@@ -43,6 +44,8 @@ type WorkflowLLMOptions = {
   promptBudget?: PromptBudgetPolicy
   /** Explicit workflow-writing stage. Reasoning strategy never selects a writing skill. */
   writingSkillStage?: WritingSkillStage
+  /** One-shot submit_* contract; omitted means legacy visible-text completion. */
+  submitTool?: SubmitToolName
 }
 
 export function injectWritingSkillIntoTask(
@@ -407,6 +410,7 @@ export abstract class BaseWorkflowCommand<TResult = string> {
           { role: 'user', content: prompt },
         ],
         ...(options?.promptBudget ? { promptBudget: options.promptBudget } : {}),
+        ...(options?.submitTool ? { submitTool: options.submitTool } : {}),
       }
       const injection = writingSkillStage && context
         ? injectWritingSkillIntoTask(baseTask, context, writingSkillStage)

@@ -8,6 +8,7 @@ import type {
   GenerationReasoningStage,
   ReasoningOverride,
 } from './reasoning-types'
+import type { SubmitToolName } from './submit-contract'
 import type { EmbeddingOptions } from './embedding-options'
 import type { ModelCapabilities } from './provider-presets'
 import type { ModelProviderResourceId } from './model-provider-resources'
@@ -594,6 +595,8 @@ export interface LLMRequest {
   maxTokens?: number
   stream?: boolean
   responseFormat?: { type: 'json_object' | 'text' }
+  /** When set, main process uses pi-ai one-shot + this submit_* tool instead of LLMFactory. */
+  submitTool?: SubmitToolName
 }
 
 export type ModelExecutionCapabilityEvidenceSource =
