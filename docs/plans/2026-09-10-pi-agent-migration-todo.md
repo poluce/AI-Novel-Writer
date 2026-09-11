@@ -72,6 +72,37 @@
   - 本次范围仍是同一时间只开一部书
 - **审稿默认仍是一次性 pi-ai**。升为带记忆的审稿 Agent 属后续产品，不在本次把 `review-chapter` 包成空工具 Agent
 
+### 调用层用法细则（单次 / 多轮）
+
+**单次调用**（起草、审稿交卷、修稿、定稿后处理、架构/蓝图、单字段、导入、规划资料、角色表修复、剧情树、叙事线索候选、编辑器选区 AI）
+
+- API：`pi-ai` 的流式补全（`models.streamSimple` 或带 `tools` 的流式变体）。**一次请求一次响应，不建 `Agent`、不建循环**
+- 工具集：**只挂提交合同工具**（`submit_draft` / `submit_review` / `submit_revision` / `submit_finalization` …），**不挂读取工具**——一旦挂上读取工具，模型会调用后停下等结果，一次性语义即被破坏。上下文仍由 command 预先组装（与现状一致）
+- 输出：命中 `submit_*` 即校验落盘；未命中按可见文本处理（提示词已要求强制提交）
+- 取消：切书 / 取消任务 = abort 该次 stream（`AbortSignal`）
+- 记账：每次调用照旧写 `llm_calls`；**不产生会话历史**
+- 为什么不用 Agent：Agent 自带循环与状态，一次性用不上；包成 Agent 只会多出一个"为切书好杀"而存在的对象（见上条拍板）
+
+**多轮对话**（助手会话；日后若要跨次记忆的审稿会话）
+
+- API：`pi-agent-core` 的 `Agent`，**每会话一个长驻实例**；`agent.prompt()` 追加一轮，`messages` 由实例持有
+- 循环：工具 → 结果 → 再回答由 Agent 内部完成，这正是用它的理由
+- 上下文注入：`transformContext` 取代现在的"每轮重建 system prompt + 手动裁 16 条"
+- 上下文缓存：实例常驻 + `agent.sessionId` = 会话 ID，让供应商前缀缓存可命中
+- 工具确认：`beforeToolCall` 内 await 现有确认 UI；写工具须 `executionMode: 'sequential'`
+- 取消：`agent.abort()`；`agent.waitForIdle()` 用于收尾
+- 事件：`message_update`（流式文本）/ `tool_execution_*`（工具卡片）→ 经 IPC 送 UI
+- 历史重建：`agent.state.messages = [...]` 可直接灌入已存历史（会话恢复用）
+- 实例位置：按 P0 结论（倾向主进程，Agent 状态可经 Pi 会话后端持久化）
+
+**多会话**（本期范围外，但架构先留好）
+
+- 多会话 = `Map<conversationId, Agent>`：每个对话一个实例，互不共享状态
+- 只有当前打开项目的会话需要活实例；切书时该项目的多轮实例按"上下文缓存"策略保活或休眠
+- 一次性调用天然无状态，多会话并存对它没有额外要求
+
+**共同点**：传输层都走 `pi-ai`；模型配置、推理策略、生成预算、密钥隔离沿用现有机制。
+
 ## 阶段 0：调研与 PoC（P0）
 
 - [ ] 通读 pi-ai（一次流式 + tools）与 pi-agent-core（仅多轮）：Agent 类、事件流、`beforeToolCall`/`afterToolCall`/`transformContext`/`shouldStopAfterTurn`、`toolExecution: parallel`（写工具须 sequential）
@@ -81,8 +112,9 @@
 - [ ] **MCP 配置兼容核查**：`~/.vela/mcp_config.json` 在官方 SDK 下是否仍兼容（stdio/SSE 两类传输）
 - [ ] **打包适配验证**：Pi 包是 ESM，而 `vite.config.ts` 主进程输出 CJS（better-sqlite3/LanceDB/yauzl 为 external）——确认 external 策略或输出格式调整
 - [ ] **Agent 运行位置验证**：渲染进程（现状，SQLite 不可达）vs 主进程（SQLite 直连）
-- [ ] 最小 PoC：一个 Pi Agent 实例 + 一个自定义工具 + 事件流订阅
-- [ ] PoC 验证 `beforeToolCall` 阻塞 + 现有确认 UI 的对接
+- [ ] 最小 PoC（多轮）：一个 Pi Agent 实例 + 一个自定义工具 + 事件流订阅 + `beforeToolCall` 确认
+- [ ] 最小 PoC（单次）：pi-ai 一次流式 + `tools` 强制 `submit_*`，验证「模型调用提交工具并把参数当产物」这条主路径
+- [ ] 验证单次路径下模型仍可能调用未挂载工具时的行为（应报错而非静默降级）
 
 ## 阶段 1：依赖与清理（P1）
 
@@ -119,6 +151,9 @@
 > 下列入口全部改为 **pi-ai 一次流式** + 强制 `submit_*`（或可见文本工具），**不要** `new Agent()`。
 
 - [ ] 共用：一次性生成走 pi-ai；切书/取消 abort 该次 stream（与 P2 Agent abort 同一张在途表）
+- [ ] **一次性调用骨架**：`pi-ai` 流式 + `tools`（仅提交合同工具）+ `toolChoice` 强制；命中 `submit_*` 即校验落盘，未命中按可见文本处理
+- [ ] **不挂读取工具**：避免模型中途停下等工具结果而破坏一次性语义（上下文继续由 command 预先组装）
+- [ ] 提交工具的 schema 与现有输出合同一一对应（字段、必填、上限），由 schema 取代提示词里的 JSON 说明
 - [ ] 12 个工作流命令逐个替换 LLM 调用层（产物结构可按工具调用重定，但产出能力不得缺失）：
   - [ ] `generate-draft`（起草）
   - [ ] `review-chapter`（审稿）
