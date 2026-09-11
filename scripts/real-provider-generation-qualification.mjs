@@ -753,7 +753,9 @@ async function loadProductRuntime(repositoryRoot) {
         contents: [
           "export { createGenerationRuntime } from './src/services/generation/generation-runtime.ts'",
           "export { createStructuredBatchExecutor } from './src/services/workflows/structured-batch-executor.ts'",
-          "export { LLMFactory } from './electron/llm/llm-factory.ts'",
+          "export { streamSingleShot } from './electron/pi/pi-single-shot.ts'",
+          "export { createSubmitTool, visibleTextFromSubmitArtifact } from './electron/pi/submit-tools.ts'",
+          "export { toPiSamplingParams } from './electron/pi/pi-stream-options.ts'",
           "export { resolveGenerationParameters } from './electron/llm/generation-parameter-policy.ts'",
           "export { createModelExecutionLeaseReceipt } from './electron/services/model-execution-lease.ts'",
           "export { parseBlueprintSemanticResponseText, validateBlueprintSemanticItem } from './src/shared/blueprint-semantic-contract.ts'",
@@ -809,36 +811,47 @@ function dryRunCompletion(fixture) {
   }
 }
 
+function splitGenerationMessages(messages) {
+  const systemPrompt = messages
+    .filter(message => message.role === 'system')
+    .map(message => message.content)
+    .join('\n\n')
+  const userPrompt = messages
+    .filter(message => message.role !== 'system')
+    .map(message => (message.role === 'assistant' ? `Assistant:\n${message.content}` : message.content))
+    .join('\n\n')
+  return { systemPrompt, userPrompt }
+}
+
 function realProviderCompletion(productRuntime, profile) {
-  const provider = productRuntime.LLMFactory.getProvider(profile)
-  return request => new Promise((resolve, reject) => {
-    let settled = false
-    const succeed = (content, usage, finishReason) => {
-      if (settled) return
-      settled = true
-      resolve({ content, usage, finishReason })
-    }
-    const fail = () => {
-      if (settled) return
-      settled = true
-      reject(new QualificationFailure('PROVIDER_REQUEST_FAILED'))
-    }
+  return async request => {
     try {
       const parameters = productRuntime.resolveGenerationParameters(profile, {
         maxTokens: request.plan.maxOutputTokens,
         responseFormat: request.plan.responseFormat,
       })
-      Promise.resolve(provider.generateStream(profile, [...request.messages], {
-        ...parameters,
-        signal: request.signal,
-        onChunk: () => {},
-        onDone: succeed,
-        onError: fail,
-      })).catch(fail)
+      const submitToolName = request.purpose === 'qualification-blueprints' ? 'submit_json' : 'submit_draft'
+      const { systemPrompt, userPrompt } = splitGenerationMessages(request.messages)
+      const result = await productRuntime.streamSingleShot(
+        profile,
+        systemPrompt,
+        userPrompt,
+        productRuntime.createSubmitTool(submitToolName),
+        {
+          signal: request.signal,
+          maxTokens: parameters.maxTokens,
+          temperature: parameters.temperature,
+          samplingParams: productRuntime.toPiSamplingParams(parameters),
+        },
+      )
+      return {
+        content: productRuntime.visibleTextFromSubmitArtifact(submitToolName, result.artifact, result.text),
+        finishReason: result.finishReason,
+      }
     } catch {
-      fail()
+      throw new QualificationFailure('PROVIDER_REQUEST_FAILED')
     }
-  })
+  }
 }
 
 export function qualificationBlueprintContractInstruction(manifest, items) {
@@ -863,6 +876,7 @@ function blueprintContract(productRuntime, fixture) {
       return {
         purpose: 'qualification-blueprints',
         output: 'structured-data',
+        submitTool: 'submit_json',
         messages: [
           {
             role: 'system',
@@ -893,6 +907,7 @@ function draftTask(fixture, accumulatedDraft) {
   return {
     purpose: 'qualification-draft',
     output: 'visible-text',
+    submitTool: 'submit_draft',
     messages: [
       {
         role: 'system',
