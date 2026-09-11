@@ -669,4 +669,39 @@ describe('llm project statistics', () => {
       finishReason: 'stop',
     })
   })
+
+  it('forwards the harness output budget to submit_draft and never emits apiKey to the renderer', async () => {
+    const handler = mocks.handlers.get('llm:generate-stream')
+    if (!handler) throw new Error('Missing llm:generate-stream handler')
+    mocks.streamSingleShot.mockResolvedValue({
+      artifact: { body: '林岚推开门。'.repeat(500) },
+      text: '',
+      finishReason: 'stop',
+    })
+
+    await expect(handler({ sender: {} }, 'draft-stream', {
+      modelId: deepSeekModel.id,
+      messages: [
+        { role: 'system', content: 'sys' },
+        { role: 'user', content: '写第三章' },
+      ],
+      purpose: 'chapter-draft',
+      submitTool: 'submit_draft',
+      maxTokens: 8192,
+    })).resolves.toEqual({ requestId: 'draft-stream', started: true })
+
+    await mocks.streamSingleShot.mock.results[0]?.value
+    await Promise.resolve()
+
+    expect(mocks.streamSingleShot).toHaveBeenCalledWith(
+      expect.objectContaining({ id: deepSeekModel.id }),
+      'sys',
+      '写第三章',
+      expect.objectContaining({ name: 'submit_draft' }),
+      expect.objectContaining({ maxTokens: 8192 }),
+    )
+    const sent = JSON.stringify(mocks.send.mock.calls)
+    expect(sent).not.toContain('apiKey')
+    expect(sent).not.toContain(deepSeekModel.apiKey)
+  })
 })

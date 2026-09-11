@@ -22,6 +22,7 @@ import type {
 } from '../../../generation/generation-harness'
 import { EN_US_BUILTIN_PROMPTS } from '../../../prompt-language'
 import { BUILTIN_PROMPTS } from '../../../prompt-templates'
+import { WORKFLOW_GENERATION_BUDGETS } from '../base-command'
 import {
   DRAFT_GENERATION_BUDGET,
   GenerateDraftCommand,
@@ -100,6 +101,14 @@ ${repeated}`)
 
     expect(ending).toHaveLength(completeEnding.length)
     expect(ending).toBe(completeEnding)
+  })
+
+  it('keeps the same per-attempt output cap as other text workflows for long chapters', () => {
+    expect(DRAFT_GENERATION_BUDGET.maxRequestedOutputTokensPerAttempt)
+      .toBe(WORKFLOW_GENERATION_BUDGETS.text.maxRequestedOutputTokensPerAttempt)
+    expect(DRAFT_GENERATION_BUDGET.maxRequestedOutputTokensPerAttempt).toBe(8192)
+    expect(countDraftUnits('字'.repeat(3000))).toBe(3000)
+    expect(3000).toBeLessThan(DRAFT_GENERATION_BUDGET.maxRequestedOutputTokensPerAttempt)
   })
 })
 

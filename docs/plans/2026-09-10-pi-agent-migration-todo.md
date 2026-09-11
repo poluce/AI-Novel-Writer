@@ -184,20 +184,20 @@
   - [x] `plot-tree-generator`（剧情树 → `submit_json`）
   - [x] `narrative-thread-candidate-generator`（叙事线索 → `submit_json`）
   - [x] `CodeMirrorEditor` 内联 AI（选区润色 → `submit_text`）
-- [ ] 结构化输出：**全部走工具调用**（报告类 + 正文）；正文工具参数返回后一次性显示，不做增量解析
+- [x] 结构化输出：**全部走工具调用**（报告类 + 正文）；正文工具参数返回后一次性显示，不做增量解析
 - [x] 生成中 UI 状态：正文生成期间显示"生成中"进度状态（替代原有流式正文渲染）——起草步骤用占位文案；完成后一次性替换；编辑器选区 AI 本就等完整结果
 - [x] 提示词模板改写：内置目录模板的 JSON/XML「正文交卷」指令已改为提交工具；内部 JSON 修复/重试提示词仍服务 parseJSON 遗产路径，不与本条捆删
 - [x] **用户覆盖文件继续读取**：`~/.vela/prompts/`、`.vela/prompts/` 照常加载；设置页「恢复默认」可去掉旧 JSON/XML 交卷覆盖
 - [x] 失败恢复语义适配：`recovery_candidates` 只保存可恢复的 `submit_draft` 正文（含截断）；生成中占位与空工具参数不建候选，不比原文流式碎片更差
-- [ ] 生成预算与重试策略保持（`WORKFLOW_GENERATION_BUDGETS`）
-- [ ] 正文工具参数体积核查：长章节（3000+ 字）在工具参数中的表现（受模型单次输出上限约束，与文本路径同一预算）
+- [x] 生成预算与重试策略保持（`WORKFLOW_GENERATION_BUDGETS` / `DRAFT_GENERATION_BUDGET` 经 harness → `maxTokens` → pi-ai）
+- [x] 正文工具参数体积核查：长章节 3000 字低于每轮 8192 token 上限，与文本路径同一 `maxRequestedOutputTokensPerAttempt`
 
 ## 阶段 5：主进程与安全（P5）
 
 - [x] **并发闸门**：一次性 pi-ai 请求全局上限 4（`acquirePiOneShotSlot`）；空闲 Agent 会话不占名额。每供应商细分仍待评估
 - [ ] 项目会话租约：简化为"主进程内部会话状态比对"，渲染层只发意图；`leaseId` 机制评估移除
 - [ ] 模型执行租约：随 Agent 换层评估存废（密钥隔离语义必须保持）
-- [ ] 密钥隔离验证：渲染进程全程不接触 API Key
+- [x] 密钥隔离验证：渲染进程 `llm:generate-stream` 不带 apiKey；stream-done 事件不含密钥
 - [ ] **IPC 通道重构**：Agent 换层后 `electron/preload.ts`、`src/shared/ipc-channels.ts` 的通道增删（新增 Agent 事件/意图通道，清理租约凭证参数）
 - [x] 切书：关闭/切换项目数据库时 `abortPiOnProjectClose` 中止全部在途 pi-ai，并丢掉 Agent 实例（下次 prompt 新建）
 - [ ] 再打开同一项目：恢复该项目已存对话到**新** Agent（若已做持久化）；本次仍可不做磁盘持久化（见「不在本次范围」）
