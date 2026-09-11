@@ -291,6 +291,7 @@ describe('RefineDraftCommand bounded visible completion', () => {
     })
 
     expect(completeWithLease).toHaveBeenCalledTimes(1)
+    expect(completeWithLease.mock.calls[0]?.[0].submitTool).toBe('submit_revision')
     const request = completeWithLease.mock.calls[0]?.[0].messages
       .map(message => message.content).join('\n') ?? ''
     expect(request).toContain(style)
@@ -741,6 +742,7 @@ describe('RefineFromReviewCommand bounded visible completion', () => {
     const prompt = completeWithLease.mock.calls[0]?.[0].messages
       .map(message => message.content)
       .join('\n') ?? ''
+    expect(completeWithLease.mock.calls[0]?.[0].submitTool).toBe('submit_revision')
     expect(previewBrief).toContain('[Confirmed review items included in this revision]')
     expect(previewBrief).toContain('[Confirmed author guidance]')
     expect(prompt).toContain(previewBrief)

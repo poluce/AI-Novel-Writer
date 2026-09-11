@@ -298,6 +298,7 @@ function buildCompactBlueprintTask(input: {
   return {
     purpose: `chapter-blueprint-directory:compact-single:chapter-${input.chapterNumber}`,
     output: 'structured-data',
+    submitTool: 'submit_blueprint',
     messages: [
       { role: 'system', content: systemRole },
       { role: 'user', content: prompt },
@@ -457,6 +458,7 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
         return {
           purpose: 'chapter-blueprint-directory',
           output: 'structured-data',
+          submitTool: 'submit_blueprint',
           messages: [
             {
               role: 'system',

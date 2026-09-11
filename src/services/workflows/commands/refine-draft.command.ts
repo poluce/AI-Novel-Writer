@@ -85,7 +85,7 @@ export class RefineDraftCommand extends BaseWorkflowCommand<string> {
       promptBuilder.getSystemRole(),
       callbacks,
       { mode: 'append-visible-text', maxContinuations: 3 },
-      { purpose: 'refine-draft', reasoningStage: 'review', writingSkillStage: 'refinement' },
+      { purpose: 'refine-draft', reasoningStage: 'review', writingSkillStage: 'refinement', submitTool: 'submit_revision' },
       context,
     )
     this.assertNotCancelled(context)

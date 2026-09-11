@@ -869,6 +869,7 @@ describe('GenerateDirectoryCommand', () => {
       attempt += 1
       const range = taskRange(task)
       observed.push({ range, purpose: task.purpose })
+      expect(task.submitTool).toBe('submit_blueprint')
       if (task.purpose.includes(':compact-single:')) {
         const prompt = task.messages.find(message => message.role === 'user')?.content ?? ''
         expect(prompt).toContain(authorGuidance)
