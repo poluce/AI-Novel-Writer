@@ -5,6 +5,7 @@ import type {
   StreamFn,
 } from '@earendil-works/pi-agent-core'
 import type { Model } from '@earendil-works/pi-ai'
+import { logFailure, logInfo } from '../../src/shared/fail-log'
 
 import type { ModelProfile } from '../../src/shared/ipc-channels'
 import type { PiToolCallInfo } from '../../src/shared/agent-events'
@@ -50,6 +51,21 @@ export interface PiAgentHandle {
  * normalized callback contract (text deltas, tool cards, confirmation,
  * completion, done/error).
  */
+function assistantPlainText(message: AgentMessage | undefined): string {
+  if (!message || message.role !== 'assistant' || !Array.isArray(message.content)) return ''
+  return message.content
+    .filter((block): block is { type: 'text'; text: string } => (
+      typeof block === 'object'
+      && block !== null
+      && 'type' in block
+      && block.type === 'text'
+      && 'text' in block
+      && typeof block.text === 'string'
+    ))
+    .map(block => block.text)
+    .join('')
+}
+
 export function createPiAgent(options: CreatePiAgentOptions): PiAgentHandle {
   const { callbacks } = options
   const confirmationNames = options.confirmationToolNames ?? new Set<string>()
@@ -92,8 +108,16 @@ export function createPiAgent(options: CreatePiAgentOptions): PiAgentHandle {
           fullText += ev.delta
           callbacks.onTextChunk(ev.delta)
         } else if (ev.type === 'error') {
+          logFailure('Agent', 'stream error event', undefined, {
+            errorMessage: ev.error.errorMessage,
+            stopReason: ev.error.stopReason,
+          })
           callbacks.onError(ev.error.errorMessage ?? '生成失败')
         }
+        break
+      }
+      case 'message_end': {
+        if (!fullText) fullText = assistantPlainText(event.message)
         break
       }
       case 'tool_execution_start': {
@@ -117,6 +141,25 @@ export function createPiAgent(options: CreatePiAgentOptions): PiAgentHandle {
         break
       }
       case 'agent_end': {
+        const lastAssistant = [...event.messages].reverse().find(message => message.role === 'assistant')
+        if (!fullText) fullText = assistantPlainText(lastAssistant)
+        const stopReason = lastAssistant && 'stopReason' in lastAssistant ? lastAssistant.stopReason : undefined
+        const errorMessage = lastAssistant && 'errorMessage' in lastAssistant
+          ? lastAssistant.errorMessage
+          : undefined
+        logInfo('Agent', 'agent_end', {
+          fullTextChars: fullText.length,
+          stopReason,
+          messageCount: event.messages.length,
+        })
+        if (stopReason === 'error' || stopReason === 'aborted') {
+          logFailure('Agent', 'agent ended with encoded stream failure', undefined, {
+            stopReason,
+            errorMessage,
+          })
+          callbacks.onError(errorMessage || '生成失败')
+          break
+        }
         callbacks.onDone(fullText)
         break
       }

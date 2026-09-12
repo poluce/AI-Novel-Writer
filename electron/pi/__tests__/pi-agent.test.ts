@@ -65,6 +65,34 @@ describe('createPiAgent', () => {
     expect(doneText).toBe('The sum is 19.')
   })
 
+  it('surfaces encoded stream failures instead of an empty successful turn', async () => {
+    const faux = fauxProvider()
+    const models = createModels()
+    models.setProvider(faux.provider)
+    faux.setResponses([
+      fauxAssistantMessage('', { stopReason: 'error', errorMessage: 'upstream 401' }),
+    ])
+    let error = ''
+    let done = false
+    const handle = createPiAgent({
+      model: faux.getModel(),
+      streamFn: models.streamSimple.bind(models),
+      systemPrompt: 'x',
+      tools: [],
+      callbacks: {
+        onTextChunk: () => {},
+        onToolCallStart: () => {},
+        onToolCallConfirmRequired: async () => true,
+        onToolCallComplete: () => {},
+        onDone: () => { done = true },
+        onError: (message) => { error = message },
+      },
+    })
+    await handle.prompt('hi')
+    expect(done).toBe(false)
+    expect(error).toBe('upstream 401')
+  })
+
   it('blocks a confirmed write tool when the user declines', async () => {
     const faux = fauxProvider()
     const models = createModels()

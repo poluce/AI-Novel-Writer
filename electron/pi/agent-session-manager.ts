@@ -35,7 +35,14 @@ export class AgentSessionManager {
     editorSnapshot?: AgentEditorSnapshot,
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      logInfo('Agent', 'prompt start', { conversationId, modelId, chars: input.length })
+      const profile = this.options.resolveModel(modelId)
+      logInfo('Agent', 'prompt start', {
+        conversationId,
+        modelId,
+        modelName: profile?.modelName,
+        provider: profile?.provider,
+        chars: input.length,
+      })
       const session = this.getOrCreate(conversationId, modelId)
       session.setEditorSnapshot(editorSnapshot)
       session.setTools(buildAgentTools(this.options.resolveLanguage(conversationId), this.options.rendererAction))

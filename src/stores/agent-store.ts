@@ -444,19 +444,16 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         set({ activeRequestId: null })
         return
       }
-      updateAssistantMsg(m => {
-        if (!m.streaming) return m
-        return {
-          ...m,
-          streaming: false,
-          content: m.content.trim()
-            ? m.content
-            : text(
-              '生成结束但没有返回正文。请查看 ~/.vela/logs/vela.log',
-              'Generation finished with no text. See ~/.vela/logs/vela.log',
-            ),
-        }
-      })
+      updateAssistantMsg(m => ({
+        ...m,
+        streaming: false,
+        content: m.content.trim()
+          ? m.content
+          : text(
+            '生成结束但没有返回正文。请查看 ~/.vela/logs/vela.log',
+            'Generation finished with no text. See ~/.vela/logs/vela.log',
+          ),
+      }))
       set({ activeRequestId: null })
     } catch (error) {
       logFailure('Agent', 'renderer prompt threw', error, { conversationId: convId, modelId })
@@ -564,6 +561,10 @@ if (typeof window !== 'undefined') {
         }))
         break
       case 'done':
+        logInfo('Agent', 'renderer received done', {
+          conversationId,
+          chars: event.fullText.length,
+        })
         updateActiveAssistantMsg(m => ({ ...m, content: event.fullText, streaming: false }))
         useAgentStore.setState(state => ({
           activeRequestId: null,
@@ -573,6 +574,10 @@ if (typeof window !== 'undefined') {
         }))
         break
       case 'error':
+        logFailure('Agent', 'renderer received error event', undefined, {
+          conversationId,
+          message: event.message,
+        })
         updateActiveAssistantMsg(m => ({ ...m, content: event.message, streaming: false }))
         useAgentStore.setState({ activeRequestId: null })
         break
