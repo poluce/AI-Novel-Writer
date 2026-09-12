@@ -1,4 +1,4 @@
-import { X, FileText, Settings, Users, ArrowLeftRight, MoreHorizontal, BookOpen, History, ClipboardCheck, Globe, Save, ChevronLeft, ChevronRight, PenTool, Check, FolderOpen } from 'lucide-react'
+import { X, FileText, Settings, Users, ArrowLeftRight, MoreHorizontal, BookOpen, History, ClipboardCheck, Globe, Save, ChevronLeft, ChevronRight, PenTool, Check } from 'lucide-react'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { ContextMenu, type ContextMenuEntry } from '../ui/ContextMenu'
 import {
@@ -18,7 +18,7 @@ import NarrativeThreadEditor from '../editor/NarrativeThreadEditor'
 import ThreeWayMerge from '../editor/ThreeWayMerge'  // 保留引用以防其他入口使用
 import WelcomePage from '../pages/WelcomePage'
 import KnowledgeOverview from '../pages/KnowledgeOverview'
-import { EmptyState } from '../ui/EmptyState'
+import { OpenProjectFirstPage } from './OpenProjectFirstPage'
 import { useProjectStore } from '../../stores/project-store'
 import { registerEditorExitSaveHandler, useEditorStore, type EditorTab } from '../../stores/editor-store'
 import { discardAndCloseEditorTab } from '../../stores/editor-discard'
@@ -163,6 +163,7 @@ export default function EditorArea({ onNewProject: _onNewProject }: EditorAreaPr
   const closeTab = useEditorStore(s => s.closeTab)
   const setActiveTab = useEditorStore(s => s.setActiveTab)
   const sidebarView = useLayoutStore((s) => s.sidebarView)
+  const activeRailItem = useLayoutStore((s) => s.activeRailItem)
 
 
 
@@ -437,20 +438,20 @@ export default function EditorArea({ onNewProject: _onNewProject }: EditorAreaPr
     )
   }
 
-  // 未打开项目时：首页仍是欢迎页；项目/蓝图/角色/小说/世界/剧情统一提示先打开项目。
+  // 未打开项目时：首页仍是欢迎页；蓝图与小说用同一套「请先打开项目」页。
   if (!currentProject) {
-    return (
-      <div
-        className="skin-workspace-page w-full h-full flex flex-col overflow-hidden"
-        style={{ backgroundColor: 'var(--color-editor-bg)' }}
-      >
-        <EmptyState
-          icon={<FolderOpen size={36} style={{ color: 'var(--color-text-muted)' }} />}
-          message={text('请先打开项目', 'Open a project first')}
-          opacity={0.4}
-        />
-      </div>
-    )
+    const emptyTitle = activeRailItem === 'blueprint'
+      ? text('章节蓝图', 'Chapter blueprint')
+      : activeRailItem === 'characters'
+        ? text('角色', 'Cast')
+        : activeRailItem === 'world'
+          ? text('世界观', 'World building')
+          : activeRailItem === 'plot-tree'
+            ? text('剧情树', 'Plot tree')
+            : activeRailItem === 'project'
+              ? text('项目', 'Project')
+              : text('知识库', 'Knowledge base')
+    return <OpenProjectFirstPage title={emptyTitle} />
   }
 
   // 侧栏为「角色管理」时，中间区域固定展示角色编辑器（跳过 Tab 系统）

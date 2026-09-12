@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-  Database, BookOpen, FileText,
+  Database, FileText,
   Search, RefreshCw, Layers, Zap, Server, Activity, Trash2, AlertTriangle, Upload,
 } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
-import { EmptyState } from '../ui/EmptyState'
 import { useProjectStore } from '../../stores/project-store'
+import { OpenProjectFirstPage } from '../panels/OpenProjectFirstPage'
 import { cn } from '../../lib/utils'
 import { toast } from '../ui/Toast'
 import { confirm } from '../ui/Confirm'
@@ -143,26 +143,7 @@ export default function KnowledgeOverview() {
   const rebuildPresentation = getVectorRebuildPresentation(vectorRebuildStatus)
 
   if (!currentProject) {
-    return (
-      <div className="skin-workspace-page h-full flex flex-col overflow-hidden bg-[var(--color-bg)]">
-        <div
-          className="flex items-center justify-between gap-2 px-3 h-9 flex-shrink-0"
-          style={{
-            borderBottom: '1px solid var(--color-border)',
-            backgroundColor: 'var(--color-editor-bg)',
-          }}
-        >
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-xs font-medium truncate text-[var(--color-text-secondary)]">
-              {text('知识库', 'Knowledge base')}
-            </span>
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto relative">
-          <EmptyState icon={<BookOpen size={36} />} message={text('请先打开项目', 'Open a project first')} opacity={0.4} />
-        </div>
-      </div>
-    )
+    return <OpenProjectFirstPage title={text('知识库', 'Knowledge base')} />
   }
 
   /** 语义检索 */
