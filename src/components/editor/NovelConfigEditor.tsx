@@ -309,16 +309,7 @@ function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
                 />
               </Field>
             </div>
-          </Section>
-
-          <Section
-            title={text('质量与连续性', 'Quality and continuity')}
-            desc={text(
-              '控制叙事线索多久未推进后显示沉寂提醒；逾期状态仍按目标章节即时计算。',
-              'Controls when an unadvanced narrative thread shows a dormant reminder. Overdue state is still computed from its target chapters.',
-            )}
-          >
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 items-end">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 items-end mt-4">
               <Field label={text('沉寂提醒阈值（章）', 'Dormant reminder threshold (chapters)')} htmlFor="narrative-thread-dormant-threshold">
                 <Input
                   id="narrative-thread-dormant-threshold"
