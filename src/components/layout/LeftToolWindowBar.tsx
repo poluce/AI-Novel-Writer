@@ -156,7 +156,11 @@ export default function LeftToolWindowBar() {
           label={text('世界', 'World')}
           active={activeRailItem === 'world'}
           title={text('世界观', 'World building')}
-          onClick={() => setSidebarView('knowledge', 'world')}
+          onClick={() => {
+            setSidebarView('project', 'world')
+            if (!hasOpenProject) return
+            openBuiltinEditor('world-building-editor', text('故事架构', 'Story architecture'), 'world-building')
+          }}
         />
         <LeftNavButton
           icon={GitBranch}
