@@ -6,8 +6,11 @@
  */
 
 import { useState, useEffect } from 'react'
+import { BookOpen } from 'lucide-react'
 import { useLayoutStore } from '../../stores/layout-store'
+import { useProjectStore } from '../../stores/project-store'
 import { ContextMenu } from '../ui/ContextMenu'
+import { EmptyState } from '../ui/EmptyState'
 import KnowledgePanel from './KnowledgePanel'
 import HomeSidebarPanel from './sidebar/HomeSidebarPanel'
 import ProjectTree from './sidebar/ProjectTree'
@@ -21,6 +24,8 @@ import { useLocaleStore } from '../../stores/locale-store'
 /** 左侧面板 */
 export default function Sidebar() {
   const sidebarView = useLayoutStore(s => s.sidebarView)
+  const activeRailItem = useLayoutStore(s => s.activeRailItem)
+  const currentProject = useProjectStore(s => s.currentProject)
   const text = useLocaleStore(s => s.text)
   // 全局右键菜单状态
   const [sidebarMenu, setSidebarMenu] = useState<SidebarMenuState | null>(null)
@@ -36,7 +41,12 @@ export default function Sidebar() {
     project:    text('项目结构', 'Project'),
     knowledge:  text('知识库', 'Knowledge'),
     characters: text('角色管理', 'Characters'),
+    blueprint:  text('章节蓝图', 'Chapter blueprint'),
+    world:      text('世界观', 'World building'),
+    'plot-tree': text('剧情树', 'Plot tree'),
   }
+  const headerTitle = viewTitles[activeRailItem] ?? viewTitles[sidebarView]
+  const workspaceNeedsProject = !currentProject && activeRailItem !== 'home' && activeRailItem !== 'project'
 
   return (
     <div
@@ -47,13 +57,21 @@ export default function Sidebar() {
       }}
     >
       <div className="panel-header">
-        <span>{viewTitles[sidebarView]}</span>
+        <span>{headerTitle}</span>
       </div>
       <div className="flex-1 overflow-y-auto py-1">
-        {sidebarView === 'home'       && <HomeSidebarPanel />}
-        {sidebarView === 'project'    && <ProjectTree />}
-        {sidebarView === 'knowledge'  && <KnowledgePanel />}
-        {sidebarView === 'characters' && <CharactersView />}
+        {sidebarView === 'home' && <HomeSidebarPanel />}
+        {workspaceNeedsProject && (
+          <EmptyState
+            icon={<BookOpen size={36} />}
+            message={text('请先打开项目', 'Open a project first')}
+            className="pb-[15vh]"
+            opacity={0.4}
+          />
+        )}
+        {!workspaceNeedsProject && sidebarView === 'project' && <ProjectTree />}
+        {!workspaceNeedsProject && sidebarView === 'knowledge' && <KnowledgePanel />}
+        {!workspaceNeedsProject && sidebarView === 'characters' && <CharactersView />}
       </div>
 
       {/* 动态右键菜单 */}

@@ -57,5 +57,8 @@ describe('LeftToolWindowBar', () => {
     const empty = readFileSync(resolve(process.cwd(), 'src/components/panels/OpenProjectFirstPage.tsx'), 'utf8')
     expect(rail).toContain('if (!hasOpenProject) return')
     expect(empty).toContain("text('请先打开项目', 'Open a project first')")
+    const sidebar = readFileSync(resolve(process.cwd(), 'src/components/panels/Sidebar.tsx'), 'utf8')
+    expect(sidebar).toContain('workspaceNeedsProject')
+    expect(sidebar).toContain("activeRailItem !== 'project'")
   })
 })
