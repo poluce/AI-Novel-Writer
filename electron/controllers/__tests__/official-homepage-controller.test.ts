@@ -20,7 +20,7 @@ vi.mock('electron', () => ({
 
 import { registerOfficialHomepageController } from '../official-homepage-controller'
 
-const OFFICIAL_HOMEPAGE_URL = 'https://github.com/EthanYoQ/AI-Novel-Writer'
+const OFFICIAL_HOMEPAGE_URL = 'https://github.com/poluce/AI-Novel-Writer'
 
 function handler(channel: string): IpcHandler {
   const registered = mocks.handlers.get(channel)

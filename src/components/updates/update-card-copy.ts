@@ -26,7 +26,7 @@ export function getUpdateErrorMessage(error: UpdateError | undefined, text: Upda
 
   switch (error?.code) {
     case 'UPDATES_DISABLED':
-      return text('更新检查仅在已安装的 Windows 或 macOS 应用中可用。', 'Update checks are available in the installed Windows or macOS app only.')
+      return text('更新检查仅在已安装的 Windows 应用中可用。', 'Update checks are available in the installed Windows app only.')
     case 'DOWNLOAD_FAILED':
       return text('更新包暂时无法下载。请稍后重试。', 'The update could not be downloaded right now. Please try again later.')
     case 'DOWNLOAD_NOT_READY':
@@ -64,7 +64,7 @@ export function getUpdateCardCopy(
       return { title: text('已是最新版本', 'You are up to date'), description: text('当前安装的版本已经是最新正式版。', 'The installed version is already the latest stable release.') }
     case 'available':
       return state.updateAction === 'open-release'
-        ? { title: text('发现新版本', 'New version found'), description: text(`${version} 已可获取。打开下载页可获取适用于 macOS 的安装包。`, `${version} is available. Open the download page to get the macOS installer.`) }
+        ? { title: text('发现新版本', 'New version found'), description: text(`${version} 已可获取。打开下载页可获取 Windows 安装包。`, `${version} is available. Open the download page to get the Windows installer.`) }
         : { title: text('发现新版本', 'New version found'), description: text(`${version} 已可获取。点击“下载更新”后将在后台准备安装包。`, `${version} is available. Select “Download update” to prepare the installer in the background.`) }
     case 'downloading':
       return { title: text('正在下载更新', 'Downloading update'), description: text(`${version} 正在后台下载，您可以继续创作。`, `${version} is downloading in the background. You can keep writing.`) }

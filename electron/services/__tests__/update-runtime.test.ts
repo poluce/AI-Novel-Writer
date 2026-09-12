@@ -13,8 +13,8 @@ describe('isWindowsUpdateRuntimeEnabled', () => {
 })
 
 describe('isMacUpdateReminderEnabled', () => {
-  it('enables release reminders only in a packaged macOS app without a development server', () => {
-    expect(isMacUpdateReminderEnabled(true, undefined, 'darwin')).toBe(true)
+  it('never enables macOS in-app update reminders', () => {
+    expect(isMacUpdateReminderEnabled(true, undefined, 'darwin')).toBe(false)
     expect(isMacUpdateReminderEnabled(false, undefined, 'darwin')).toBe(false)
     expect(isMacUpdateReminderEnabled(true, 'http://127.0.0.1:5173', 'darwin')).toBe(false)
     expect(isMacUpdateReminderEnabled(true, undefined, 'win32')).toBe(false)

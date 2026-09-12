@@ -75,7 +75,7 @@ export function UpdateSection() {
     <div className="writer-panel-card flex flex-col items-stretch gap-3 px-4 py-3" style={{ borderColor: 'var(--color-border)' }}>
       <div className="min-w-0">
         <div className="flex items-center gap-2"><RefreshCw size={16} style={{ color: 'var(--color-accent)' }} /><span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{text('应用更新', 'App updates')}</span></div>
-        <p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>{presentation.kind === 'disabled' ? text('更新检查仅在已安装的 Windows 或 macOS 应用中可用。', 'Update checks are available in the installed Windows or macOS app only.') : text('检查 GitHub Release 中的新正式版。', 'Check GitHub Releases for new stable versions.')}</p>
+        <p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>{presentation.kind === 'disabled' ? text('更新检查仅在已安装的 Windows 应用中可用。', 'Update checks are available in the installed Windows app only.') : text('检查 GitHub Release 中的新正式版。', 'Check GitHub Releases for new stable versions.')}</p>
       </div>
       <div className="flex flex-wrap items-center justify-start gap-2" data-testid="update-entry-actions">
         <Button type="button" size="lg" variant="outline" onClick={() => void handleOfficialHomepageClick()} className="text-sm" title={text('在默认浏览器中打开官方主页', 'Open the official homepage in your default browser')}>

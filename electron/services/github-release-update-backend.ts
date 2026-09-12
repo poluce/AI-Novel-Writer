@@ -1,8 +1,8 @@
 import type { UpdateBackend } from './update-service'
 import { logFailure } from '../../src/shared/fail-log'
 
-export const GITHUB_LATEST_RELEASE_API = 'https://api.github.com/repos/EthanYoQ/AI-Novel-Writer/releases/latest'
-export const GITHUB_LATEST_RELEASE_PAGE = 'https://github.com/EthanYoQ/AI-Novel-Writer/releases/latest'
+export const GITHUB_LATEST_RELEASE_API = 'https://api.github.com/repos/poluce/AI-Novel-Writer/releases/latest'
+export const GITHUB_LATEST_RELEASE_PAGE = 'https://github.com/poluce/AI-Novel-Writer/releases/latest'
 
 interface ReleaseResponse {
   ok: boolean

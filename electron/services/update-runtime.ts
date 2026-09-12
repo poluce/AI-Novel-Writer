@@ -11,11 +11,11 @@ export function isWindowsUpdateRuntimeEnabled(
 }
 
 export function isMacUpdateReminderEnabled(
-  isPackaged: boolean,
-  devServerUrl: string | undefined,
-  platform = process.platform,
+  _isPackaged: boolean,
+  _devServerUrl: string | undefined,
+  _platform = process.platform,
 ): boolean {
-  return platform === 'darwin' && isPackaged && !devServerUrl
+  return false
 }
 
 /**

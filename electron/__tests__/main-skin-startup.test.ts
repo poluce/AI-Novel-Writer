@@ -62,7 +62,7 @@ vi.mock('../i18n', () => ({ mainT: () => 'AI Novel Writer' }))
 vi.mock('../controllers/update-controller', () => ({ registerUpdateController: vi.fn() }))
 vi.mock('../services/electron-updater-adapter', () => ({ createElectronUpdaterBackend: vi.fn() }))
 vi.mock('../services/github-release-update-backend', () => ({
-  GITHUB_LATEST_RELEASE_PAGE: 'https://github.com/EthanYoQ/AI-Novel-Writer/releases/latest',
+  GITHUB_LATEST_RELEASE_PAGE: 'https://github.com/poluce/AI-Novel-Writer/releases/latest',
   createGitHubReleaseUpdateBackend: mocks.createGitHubReleaseUpdateBackend,
 }))
 vi.mock('../services/update-preferences-store', () => ({
@@ -136,21 +136,14 @@ describe('interactive Electron startup', () => {
     expect(mocks.BrowserWindow).toHaveBeenCalledOnce()
   })
 
-  it('wires packaged macOS reminders to metadata checks and one fixed Releases page', async () => {
-    mocks.isMacUpdateReminderEnabled.mockReturnValue(true)
+  it('does not enable in-app updates when only macOS reminders would have applied', async () => {
+    mocks.isMacUpdateReminderEnabled.mockReturnValue(false)
 
     await import('../main')
     await vi.waitFor(() => expect(mocks.startUpdateRuntime).toHaveBeenCalled())
 
-    const options = mocks.startUpdateRuntime.mock.calls[0]![0] as {
-      openRelease(): Promise<void>
-    }
-    expect(options).toMatchObject({
-      updateRuntimeEnabled: true,
-      updateAction: 'open-release',
-      createBackend: mocks.createGitHubReleaseUpdateBackend,
+    expect(mocks.startUpdateRuntime.mock.calls[0]![0]).toMatchObject({
+      updateRuntimeEnabled: false,
     })
-    await options.openRelease()
-    expect(mocks.openExternal).toHaveBeenCalledWith('https://github.com/EthanYoQ/AI-Novel-Writer/releases/latest')
   })
 })
