@@ -214,15 +214,22 @@ export default function CharacterEditor({ projectKey }: { projectKey: string }) 
             </>
           ) : selectedCard ? (
             <>
-              {viewMode === 'state' ? (
-                <Button variant="outline" size="sm" onClick={() => setViewMode('edit')} title={text('返回基础设定', 'Return to core profile')}>
-                  <Users size={12} /> {text('基础设定', 'Core profile')}
-                </Button>
-              ) : (
-                <Button variant="outline" size="sm" onClick={() => setViewMode('state')} title={text('查看当前进展/状态', 'View current state')}>
-                  <ClipboardList size={13} /> {text('当前状态', 'Current state')}
-                </Button>
-              )}
+              <Button
+                variant={viewMode === 'edit' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setViewMode('edit')}
+                title={text('基础设定', 'Core profile')}
+              >
+                <Users size={12} /> {text('基础设定', 'Core profile')}
+              </Button>
+              <Button
+                variant={viewMode === 'state' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setViewMode('state')}
+                title={text('查看当前进展/状态', 'View current state')}
+              >
+                <ClipboardList size={13} /> {text('当前状态', 'Current state')}
+              </Button>
               <Button variant="outline" size="sm" onClick={() => setViewMode('graph')} title={text('查看全员关系网', 'View all character relationships')}>
                 <Network size={12} /> {text('关系图谱', 'Relationship graph')}
               </Button>
