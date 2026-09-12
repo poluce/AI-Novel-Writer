@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import LeftToolWindowBar from '../LeftToolWindowBar'
@@ -48,5 +50,12 @@ describe('LeftToolWindowBar', () => {
 
     expect(source).toContain('剧情树')
     expect(source).not.toContain('配置模型 API')
+  })
+
+  it('does not open blueprint or plot-tree editors until a project is open', () => {
+    const rail = readFileSync(resolve(process.cwd(), 'src/components/layout/LeftToolWindowBar.tsx'), 'utf8')
+    const editor = readFileSync(resolve(process.cwd(), 'src/components/panels/EditorArea.tsx'), 'utf8')
+    expect(rail).toContain('if (!hasOpenProject) return')
+    expect(editor).toContain("text('请先打开项目', 'Open a project first')")
   })
 })

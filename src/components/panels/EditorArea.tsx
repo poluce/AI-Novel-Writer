@@ -1,4 +1,4 @@
-import { X, FileText, Settings, Users, ArrowLeftRight, MoreHorizontal, BookOpen, History, ClipboardCheck, Globe, Save, ChevronLeft, ChevronRight, PenTool, Check } from 'lucide-react'
+import { X, FileText, Settings, Users, ArrowLeftRight, MoreHorizontal, BookOpen, History, ClipboardCheck, Globe, Save, ChevronLeft, ChevronRight, PenTool, Check, FolderOpen } from 'lucide-react'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { ContextMenu, type ContextMenuEntry } from '../ui/ContextMenu'
 import {
@@ -18,6 +18,7 @@ import NarrativeThreadEditor from '../editor/NarrativeThreadEditor'
 import ThreeWayMerge from '../editor/ThreeWayMerge'  // 保留引用以防其他入口使用
 import WelcomePage from '../pages/WelcomePage'
 import KnowledgeOverview from '../pages/KnowledgeOverview'
+import { EmptyState } from '../ui/EmptyState'
 import { useProjectStore } from '../../stores/project-store'
 import { registerEditorExitSaveHandler, useEditorStore, type EditorTab } from '../../stores/editor-store'
 import { discardAndCloseEditorTab } from '../../stores/editor-discard'
@@ -153,7 +154,7 @@ interface EditorAreaProps {
 }
 
 /** 中间主编辑区 */
-export default function EditorArea({ onNewProject }: EditorAreaProps) {
+export default function EditorArea({ onNewProject: _onNewProject }: EditorAreaProps) {
   const text = useLocaleStore(s => s.text)
   const currentProject = useProjectStore((s) => s.currentProject)
   const tabs = useEditorStore(s => s.tabs)
@@ -436,6 +437,22 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
     )
   }
 
+  // 未打开项目时：首页仍是欢迎页；项目/蓝图/角色/小说/世界/剧情统一提示先打开项目。
+  if (!currentProject) {
+    return (
+      <div
+        className="skin-workspace-page w-full h-full flex flex-col overflow-hidden"
+        style={{ backgroundColor: 'var(--color-editor-bg)' }}
+      >
+        <EmptyState
+          icon={<FolderOpen size={36} style={{ color: 'var(--color-text-muted)' }} />}
+          message={text('请先打开项目', 'Open a project first')}
+          opacity={0.4}
+        />
+      </div>
+    )
+  }
+
   // 侧栏为「角色管理」时，中间区域固定展示角色编辑器（跳过 Tab 系统）
   if (sidebarView === 'characters') {
     return (
@@ -443,7 +460,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
         className="skin-workspace-page w-full h-full flex flex-col overflow-hidden"
         style={{ backgroundColor: 'var(--color-editor-bg)' }}
       >
-        <CharacterEditor projectKey={currentProject?.path ?? ''} />
+        <CharacterEditor projectKey={currentProject.path} />
       </div>
     )
   }
@@ -451,24 +468,6 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
   // 侧栏为「知识库」时，中间区域固定展示向量数据库查询界面（跳过 Tab 系统）
   if (sidebarView === 'knowledge') {
     return <KnowledgeOverview />
-  }
-
-  // 未打开项目时显示欢迎页
-  if (!currentProject) {
-    return (
-      <WelcomePage
-        onNewProject={onNewProject}
-        onOpenProject={async () => {
-          const folder = await ipc.invoke('dialog:select-folder')
-          if (folder) {
-            useProjectStore.getState().openProject(folder)
-          }
-        }}
-        onImportNovel={() => {
-          useLayoutStore.getState().openImportNovel()
-        }}
-      />
-    )
   }
 
   // 有项目但没有打开的 Tab

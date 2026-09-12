@@ -13,6 +13,8 @@ import {
 } from 'lucide-react'
 import { useLayoutStore, type SidebarView, type BottomTab } from '../../stores/layout-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
+import { useProjectStore } from '../../stores/project-store'
+import { useEditorStore } from '../../stores/editor-store'
 import { openBuiltinEditor } from '../panels/sidebar/sidebar-file-openers'
 import { useLocaleStore } from '../../stores/locale-store'
 
@@ -75,7 +77,20 @@ export default function LeftToolWindowBar() {
   const setBottomTab = useLayoutStore(s => s.setBottomTab)
   const openSettings = useLayoutStore(s => s.openSettings)
   const currentRun = useWorkflowStore(s => s.currentRun)
+  const hasOpenProject = useProjectStore(s => Boolean(s.currentProject))
   const text = useLocaleStore(s => s.text)
+
+  const openProjectWorkspace = () => {
+    setSidebarView('project')
+    const project = useProjectStore.getState().currentProject
+    if (!project) return
+    useEditorStore.getState().openFile({
+      id: 'config',
+      name: text('小说配置', 'Novel configuration'),
+      type: 'config',
+      projectKey: project.path,
+    })
+  }
 
   /** Home 按钮是否激活 */
   const homeActive = activeRailItem === 'home'
@@ -115,7 +130,10 @@ export default function LeftToolWindowBar() {
               label={label}
               active={isActive}
               title={label}
-              onClick={() => setSidebarView(id)}
+              onClick={() => {
+                if (id === 'project') openProjectWorkspace()
+                else setSidebarView(id)
+              }}
             />
           )
         })}
@@ -129,6 +147,7 @@ export default function LeftToolWindowBar() {
           title={text('章节蓝图', 'Chapter blueprint')}
           onClick={() => {
             setSidebarView('project', 'blueprint')
+            if (!hasOpenProject) return
             openBuiltinEditor('chapter-card-editor', text('章节蓝图', 'Chapter blueprint'), 'chapter-card')
           }}
         />
@@ -146,6 +165,7 @@ export default function LeftToolWindowBar() {
           title={text('剧情树', 'Plot tree')}
           onClick={() => {
             setSidebarView('project', 'plot-tree')
+            if (!hasOpenProject) return
             openBuiltinEditor(
               'narrative-thread-editor',
               text('剧情树与叙事线索', 'Plot tree & narrative threads'),
