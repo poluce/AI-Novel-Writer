@@ -11,8 +11,8 @@ import type { ModelProfile } from '../../src/shared/ipc-channels'
 import { assertGenerationModelSupportsTools } from '../../src/shared/tool-calling-gate'
 import { logInfo } from '../../src/shared/fail-log'
 
-/** Custom Gemini-compatible proxies reject 65536; 32768 is accepted. */
-const GEMINI_MAX_OUTPUT_TOKENS = 32_768
+/** Custom Gemini-compatible proxies reject 65536; 65530 stays under that ceiling. */
+const GEMINI_MAX_OUTPUT_TOKENS = 65_530
 
 export function resolveGeminiBaseUrl(baseUrl: string): string {
   const trimmed = baseUrl.replace(/\/+$/, '')

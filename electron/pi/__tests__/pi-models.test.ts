@@ -80,7 +80,7 @@ describe('createPiModels', () => {
         usage: true,
       },
     }))
-    expect(model.maxTokens).toBe(32_768)
+    expect(model.maxTokens).toBe(65_530)
   })
 
   it('derives context window and max tokens from verified capabilities when present', () => {
