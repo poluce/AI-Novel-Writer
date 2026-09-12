@@ -197,16 +197,6 @@ function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
           {/* 基本信息 */}
           <Section title={text('基本信息', 'Basic information')}>
             <div className="grid grid-cols-3 gap-4">
-              <Field label={text('写作语言', 'Writing language')} htmlFor="project-writing-language">
-                <NativeSelect
-                  id="project-writing-language"
-                  value={resolveWritingLanguage(config.writingLanguage)}
-                  onChange={(e) => update('writingLanguage', e.target.value as WritingLanguage)}
-                >
-                  <option value="zh-CN">{text('简体中文', 'Simplified Chinese')}</option>
-                  <option value="en-US">English</option>
-                </NativeSelect>
-              </Field>
               <Field label={text('类型', 'Genre')}>
                 <NativeSelect value={config.genre} onChange={(e) => update('genre', e.target.value)}>
                   <option value="" disabled>{text('请选择类型', 'Select a genre')}</option>
@@ -302,6 +292,16 @@ function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
               </Field>
             </div>
             <div className="grid grid-cols-4 gap-4 mt-4 items-end">
+              <Field label={text('写作语言', 'Writing language')} htmlFor="project-writing-language">
+                <NativeSelect
+                  id="project-writing-language"
+                  value={resolveWritingLanguage(config.writingLanguage)}
+                  onChange={(e) => update('writingLanguage', e.target.value as WritingLanguage)}
+                >
+                  <option value="zh-CN">{text('简体中文', 'Simplified Chinese')}</option>
+                  <option value="en-US">English</option>
+                </NativeSelect>
+              </Field>
               <Field label={text('沉寂提醒阈值（章）', 'Dormant reminder threshold (chapters)')} htmlFor="narrative-thread-dormant-threshold">
                 <div className="flex items-center gap-1.5">
                   <Input
