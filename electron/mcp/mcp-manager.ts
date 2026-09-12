@@ -15,6 +15,7 @@ import { join } from 'path'
 import { isDeepStrictEqual } from 'node:util'
 import { VELA_HOME } from '../utils/config-utils'
 import { openMcpSdkSession, type McpSdkSession } from './mcp-sdk-session'
+import { logFailure } from '../../src/shared/fail-log'
 import type {
   MCPConfigLoadResult,
   MCPConnectionStatus,
@@ -228,8 +229,11 @@ class MCPManagerImpl {
       runtime.status = 'connected'
       this.notifyStatusChange(config.id, 'connected')
       this.notifyToolsChange()
-    } catch {
-      await runtime.session?.close().catch(() => {})
+    } catch (error) {
+      logFailure('MCP', 'server connect failed', error, { serverId: config.id, transport: config.transport })
+      await runtime.session?.close().catch((closeError) => {
+        logFailure('MCP', 'session close after connect failure also failed', closeError, { serverId: config.id })
+      })
       runtime.session = undefined
       runtime.status = 'error'
       runtime.error = 'MCP 服务器连接失败'
@@ -248,7 +252,8 @@ class MCPManagerImpl {
         inputSchema: tool.inputSchema ?? { type: 'object', properties: {} },
         serverId: runtime.config.id,
       }))
-    } catch {
+    } catch (error) {
+      logFailure('MCP', 'tools/list failed', error, { serverId: runtime.config.id })
       runtime.tools = []
     }
   }
@@ -264,7 +269,8 @@ class MCPManagerImpl {
         mimeType: resource.mimeType,
         serverId: runtime.config.id,
       }))
-    } catch {
+    } catch (error) {
+      logFailure('MCP', 'resources/list failed', error, { serverId: runtime.config.id })
       runtime.resources = []
     }
   }
@@ -290,6 +296,7 @@ class MCPManagerImpl {
         .join('\n')
       return { success: true, content: textParts }
     } catch (error) {
+      logFailure('MCP', 'tools/call failed', error, { serverId, toolName })
       return { success: false, content: '', error: String(error) }
     }
   }

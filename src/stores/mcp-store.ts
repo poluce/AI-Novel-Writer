@@ -7,6 +7,7 @@
 
 import { create } from 'zustand'
 import { ipc } from '../services/ipc-client'
+import { logFailure } from '../shared/fail-log'
 import { toolRegistry } from '../services/agent/tool-registry'
 import type {
   MCPResourceDescription,
@@ -138,8 +139,8 @@ export const useMCPStore = create<MCPState>()((set, get) => ({
       const tools = await ipc.invoke('mcp:list-tools') as unknown[]
       const resources = await ipc.invoke('mcp:list-resources') as unknown[]
       set({ tools: tools as MCPToolData[], resources: resources as MCPResourceData[] })
-    } catch {
-      // 静默处理
+    } catch (error) {
+      logFailure('MCP', 'refresh tools/resources failed', error)
     }
   },
 

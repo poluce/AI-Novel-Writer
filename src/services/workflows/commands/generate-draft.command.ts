@@ -39,6 +39,7 @@ import type { NarrativeThreadView } from '../../../shared/narrative-thread'
 import { promptLanguageText } from '../../prompt-language'
 import { countDraftUnits } from '../../../shared/draft-units'
 import type { RecoveryChapterSource } from '../../../shared/recovery-candidate'
+import { logFailure } from '../../../shared/fail-log'
 import { CHARACTER_STATE_TEXT_FIELDS } from '../../../shared/character-roster'
 import {
   assembleChapterMaterials,
@@ -369,7 +370,11 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
           `Chapter ${b.chapterNumber}: ${b.title} — ${b.keyEvents}`,
         )).join('\n')
       }
-    } catch { /* 忽略 */ }
+    } catch (error) {
+      logFailure('Draft', 'failed to load upcoming blueprints for context', error, {
+        chapterNumber: this.chapterInfo.chapterNumber,
+      })
+    }
 
     const isFirstChapter = this.chapterInfo.chapterNumber === 1
     const templateKey = isFirstChapter ? 'first_chapter_draft' : 'next_chapter_draft'
@@ -750,7 +755,11 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
       try {
         const { useDraftStore } = await import('../../../stores/draft-store')
         await useDraftStore.getState().loadAllDrafts(expectedProjectPath, projectSession)
-      } catch { /* 忽略 */ }
+      } catch (error) {
+        logFailure('Draft', 'failed to refresh draft list after save', error, {
+          chapterNumber: this.chapterInfo.chapterNumber,
+        })
+      }
 
       try {
         if (!sameProjectSessionContext(
@@ -773,7 +782,11 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
           savedContent: cleanDraftText,
           projectKey: expectedProjectPath,
         })
-      } catch { /* 忽略 */ }
+      } catch (error) {
+        logFailure('Draft', 'failed to open saved draft in the editor', error, {
+          chapterNumber: this.chapterInfo.chapterNumber,
+        })
+      }
 
       callbacks.log(uiText(
         `草稿已自动入库保存为版本 v${nextVersion}（${countDraftUnits(cleanDraftText)} 字）`,

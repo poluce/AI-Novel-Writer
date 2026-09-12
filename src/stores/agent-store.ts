@@ -11,6 +11,7 @@ import { captureAgentEditorSnapshot } from '../services/agent/editor-snapshot'
 import { createAgentExecutionContext } from '../services/agent/tools/project-context'
 import { writingLanguageText } from '../shared/writing-language'
 import { ipc } from '../services/ipc-client'
+import { logFailure } from '../shared/fail-log'
 import type { PiToolCallInfo, RendererAction } from '../shared/agent-events'
 import { useLocaleStore } from './locale-store'
 import { useProjectStore } from './project-store'
@@ -426,6 +427,11 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         captureAgentEditorSnapshot(),
       )
       if (!result.success) {
+        logFailure('Agent', 'renderer prompt returned failure', undefined, {
+          conversationId: convId,
+          modelId,
+          error: result.error,
+        })
         updateAssistantMsg(m => ({
           ...m,
           content: text('生成失败，请重试。', 'Generation failed. Please try again.'),
@@ -433,7 +439,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         }))
         set({ activeRequestId: null })
       }
-    } catch {
+    } catch (error) {
+      logFailure('Agent', 'renderer prompt threw', error, { conversationId: convId, modelId })
       updateAssistantMsg(m => ({
         ...m,
         content: text('生成失败，请重试。', 'Generation failed. Please try again.'),

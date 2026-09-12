@@ -13,6 +13,7 @@ import {
   writingLanguageText,
   type WritingLanguage,
 } from '../../../src/shared/writing-language'
+import { logFailure } from '../../../src/shared/fail-log'
 
 const Schema = Type.Object({
   file_path: Type.String(),
@@ -56,7 +57,8 @@ export function createReadFileTool(
         const capability = createSecureFileCapability(projectPath, fullPath)
         const content = await windowsSafeFileSystem.readText(capability)
         return { content: [{ type: 'text', text: content }], details: {} }
-      } catch {
+      } catch (error) {
+        logFailure('AgentTool', 'read_file failed', error, { filePath })
         throw new Error(text('文件读取失败', 'Could not read the file'))
       }
     },

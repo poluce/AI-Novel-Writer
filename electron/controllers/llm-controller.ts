@@ -20,6 +20,7 @@ import {
 import { ModelDiscoveryService } from '../services/model-discovery-service'
 import { isSubmitToolName } from '../../src/shared/submit-contract'
 import { assertGenerationModelSupportsTools } from '../../src/shared/tool-calling-gate'
+import { logFailure } from '../../src/shared/fail-log'
 import { SingleShotAbortedError, streamSingleShot, type StreamSingleShotOptions } from '../pi/pi-single-shot'
 import { toPiSamplingParams } from '../pi/pi-stream-options'
 import { createSubmitTool, visibleTextFromSubmitArtifact } from '../pi/submit-tools'
@@ -130,7 +131,9 @@ function applyProxyConfig() {
       delete process.env.http_proxy
       delete process.env.https_proxy
     }
-  } catch { /* 忽略 */ }
+  } catch (error) {
+    logFailure('LLM', 'apply proxy config failed', error)
+  }
 }
 
 function recordProviderOutcome(

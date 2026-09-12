@@ -13,6 +13,7 @@ import {
 } from '../../security/windows-safe-file-system'
 import { projectFactWorkflowForFilePath } from '../../../src/services/project-fact-targets'
 import type { FileWriteCommitState } from '../../../src/shared/ipc-channels'
+import { logFailure } from '../../../src/shared/fail-log'
 import {
   writingLanguageText,
   type WritingLanguage,
@@ -81,6 +82,7 @@ export function createWriteFileTool(
         await windowsSafeFileSystem.writeTextAtomically(capability, content)
       } catch (error) {
         const commitState = atomicWriteFailureCommitState(error) ?? 'not_committed'
+        logFailure('AgentTool', 'write_file failed', error, { filePath, commitState })
         if (commitState === 'unknown') {
           return {
             content: [{ type: 'text', text: text(

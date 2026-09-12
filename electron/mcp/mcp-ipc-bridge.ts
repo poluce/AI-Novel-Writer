@@ -7,6 +7,7 @@
 
 import { ipcMain } from 'electron'
 import { mcpManager } from './mcp-manager'
+import { logFailure } from '../../src/shared/fail-log'
 
 /**
  * 注册所有 MCP IPC 处理器
@@ -19,7 +20,8 @@ export function registerMCPHandlers(): void {
       const result = await mcpManager.loadConfig()
       if (result.status === 'error') return { success: false, ...result }
       return { success: true, ...result }
-    } catch {
+    } catch (error) {
+      logFailure('MCP', 'load-config IPC failed', error)
       return {
         success: false,
         status: 'error' as const,
@@ -34,7 +36,8 @@ export function registerMCPHandlers(): void {
     try {
       await mcpManager.connect(serverId)
       return { success: true }
-    } catch {
+    } catch (error) {
+      logFailure('MCP', 'connect IPC failed', error, { serverId })
       return { success: false, error: 'MCP 服务器连接失败' }
     }
   })

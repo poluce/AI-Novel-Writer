@@ -11,6 +11,7 @@
  */
 
 import { ipc } from '../ipc-client'
+import { logFailure } from '../../shared/fail-log'
 import { useProjectStore } from '../../stores/project-store'
 import type { ProjectSessionContext } from '../../shared/ipc-channels'
 import {
@@ -132,8 +133,8 @@ class SkillRegistryImpl {
         target.set(skill.skillId, skill)
         count++
       }
-    } catch {
-      // 用户目录不可用时不影响内置或项目 Skill。
+    } catch (error) {
+      logFailure('Skill', 'load user skills failed', error)
     }
     return count
   }

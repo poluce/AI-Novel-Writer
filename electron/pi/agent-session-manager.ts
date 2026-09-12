@@ -6,6 +6,7 @@ import { buildAgentTools, confirmationToolNames } from './tool-builder'
 import type { AgentEditorSnapshot, PiAgentEvent, RendererActionSink } from '../../src/shared/agent-events'
 import type { ModelProfile } from '../../src/shared/ipc-channels'
 import type { WritingLanguage } from '../../src/shared/writing-language'
+import { logFailure } from '../../src/shared/fail-log'
 
 export interface AgentSessionManagerOptions {
   /** Resolve a persisted model profile for a turn (modelId may be undefined). */
@@ -40,6 +41,7 @@ export class AgentSessionManager {
       await session.prompt(input)
       return { success: true }
     } catch (error) {
+      logFailure('Agent', 'prompt failed', error, { conversationId, modelId })
       return { success: false, error: error instanceof Error ? error.message : String(error) }
     }
   }
