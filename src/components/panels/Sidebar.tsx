@@ -42,7 +42,7 @@ export default function Sidebar() {
     knowledge:  text('知识库', 'Knowledge'),
     characters: text('角色管理', 'Characters'),
     blueprint:  text('章节蓝图', 'Chapter blueprint'),
-    world:      text('世界观', 'World building'),
+    world:      text('故事架构', 'Story architecture'),
     'plot-tree': text('剧情树', 'Plot tree'),
   }
   const headerTitle = viewTitles[activeRailItem] ?? viewTitles[sidebarView]

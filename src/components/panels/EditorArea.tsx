@@ -445,7 +445,7 @@ export default function EditorArea({ onNewProject: _onNewProject }: EditorAreaPr
       : activeRailItem === 'characters'
         ? text('角色', 'Cast')
         : activeRailItem === 'world'
-          ? text('世界观', 'World building')
+          ? text('故事架构', 'Story architecture')
           : activeRailItem === 'plot-tree'
             ? text('剧情树', 'Plot tree')
             : activeRailItem === 'project'

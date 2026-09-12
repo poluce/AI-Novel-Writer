@@ -152,9 +152,9 @@ export default function LeftToolWindowBar() {
         />
         <LeftNavButton
           icon={Globe2}
-          label={text('世界', 'World')}
+          label={text('架构', 'Architecture')}
           active={activeRailItem === 'world'}
-          title={text('世界观', 'World building')}
+          title={text('故事架构', 'Story architecture')}
           onClick={() => {
             setSidebarView('project', 'world')
             if (!hasOpenProject) return
