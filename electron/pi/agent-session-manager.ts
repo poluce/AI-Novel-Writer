@@ -40,6 +40,7 @@ export class AgentSessionManager {
         conversationId,
         modelId,
         modelName: profile?.modelName,
+        protocol: profile?.protocol,
         provider: profile?.provider,
         chars: input.length,
       })

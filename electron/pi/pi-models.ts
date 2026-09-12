@@ -9,6 +9,30 @@ import { openAICompletionsApi } from '@earendil-works/pi-ai/api/openai-completio
 
 import type { ModelProfile } from '../../src/shared/ipc-channels'
 import { assertGenerationModelSupportsTools } from '../../src/shared/tool-calling-gate'
+import { logInfo } from '../../src/shared/fail-log'
+
+const GEMINI_THINKING_SUFFIX = /-(minimal|low|medium|high|none)$/i
+
+export interface GeminiModelIdentity {
+  id: string
+  thinkingLevel?: 'minimal' | 'low' | 'medium' | 'high'
+}
+
+/** Custom UIs often encode thinking as `gemini-3.1-pro-low`. Google wants `gemini-3.1-pro`. */
+export function resolveGeminiModelIdentity(modelName: string): GeminiModelIdentity {
+  const match = modelName.match(GEMINI_THINKING_SUFFIX)
+  if (!match) return { id: modelName }
+  const thinkingLevel = match[1].toLowerCase() as NonNullable<GeminiModelIdentity['thinkingLevel']> | 'none'
+  const id = modelName.slice(0, -match[0].length)
+  if (!id || thinkingLevel === 'none') return { id: id || modelName }
+  return { id, thinkingLevel }
+}
+
+export function resolveGeminiBaseUrl(baseUrl: string): string {
+  const trimmed = baseUrl.replace(/\/+$/, '')
+  if (/\/v\d+[a-z]*$/i.test(trimmed)) return trimmed
+  return `${trimmed}/v1beta`
+}
 
 /** Zeroed cost table — the app keeps its own `llm_calls` accounting. */
 const ZERO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
@@ -36,9 +60,15 @@ export interface PiModelRuntime {
 export function createPiModels(profile: ModelProfile): PiModelRuntime {
   assertGenerationModelSupportsTools(profile)
   const isGemini = profile.protocol === 'gemini'
-  const baseUrl = isGemini
-    ? `${profile.baseUrl.replace(/\/+$/, '')}/v1beta`
-    : profile.baseUrl
+  const geminiIdentity = isGemini ? resolveGeminiModelIdentity(profile.modelName) : { id: profile.modelName }
+  const baseUrl = isGemini ? resolveGeminiBaseUrl(profile.baseUrl) : profile.baseUrl
+  if (isGemini && geminiIdentity.id !== profile.modelName) {
+    logInfo('LLM', 'stripped Gemini thinking suffix from model id', {
+      configured: profile.modelName,
+      resolved: geminiIdentity.id,
+      thinkingLevel: geminiIdentity.thinkingLevel,
+    })
+  }
 
   const model = (isGemini
     ? {
@@ -54,7 +84,7 @@ export function createPiModels(profile: ModelProfile): PiModelRuntime {
   }
 
   const piModel: PiChatModel = {
-    id: profile.modelName,
+    id: geminiIdentity.id,
     name: profile.modelName,
     api: model.api,
     provider: profile.provider,

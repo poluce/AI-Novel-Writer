@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { createPiModels } from '../pi-models'
+import { createPiModels, resolveGeminiBaseUrl, resolveGeminiModelIdentity } from '../pi-models'
 
 import type { ModelProfile } from '../../../src/shared/ipc-channels'
 
@@ -19,6 +19,27 @@ function profile(overrides: Partial<ModelProfile> = {}): ModelProfile {
     ...overrides,
   }
 }
+
+describe('resolveGeminiModelIdentity', () => {
+  it('keeps official ids unchanged', () => {
+    expect(resolveGeminiModelIdentity('gemini-2.5-flash')).toEqual({ id: 'gemini-2.5-flash' })
+  })
+
+  it('splits a thinking suffix used by custom Gemini UIs', () => {
+    expect(resolveGeminiModelIdentity('gemini-3.1-pro-low')).toEqual({
+      id: 'gemini-3.1-pro',
+      thinkingLevel: 'low',
+    })
+  })
+})
+
+describe('resolveGeminiBaseUrl', () => {
+  it('appends v1beta for an antigravity-style custom root', () => {
+    expect(resolveGeminiBaseUrl('https://proxy.example.com/antigravity')).toBe(
+      'https://proxy.example.com/antigravity/v1beta',
+    )
+  })
+})
 
 describe('createPiModels', () => {
   it('maps a gemini profile to the google-generative-ai API with a /v1beta base URL', () => {
@@ -47,6 +68,19 @@ describe('createPiModels', () => {
     const { model } = createPiModels(profile({ baseUrl: 'https://proxy.example.com/antigravity/' }))
 
     expect(model.baseUrl).toBe('https://proxy.example.com/antigravity/v1beta')
+  })
+
+  it('does not double-append /v1beta when the custom base already includes a version path', () => {
+    const { model } = createPiModels(profile({
+      baseUrl: 'https://proxy.example.com/antigravity/v1beta',
+    }))
+    expect(model.baseUrl).toBe('https://proxy.example.com/antigravity/v1beta')
+  })
+
+  it('sends gemini-3.1-pro-low as gemini-3.1-pro to Google-compatible proxies', () => {
+    const { model } = createPiModels(profile({ modelName: 'gemini-3.1-pro-low' }))
+    expect(model.id).toBe('gemini-3.1-pro')
+    expect(model.name).toBe('gemini-3.1-pro-low')
   })
 
   it('derives context window and max tokens from verified capabilities when present', () => {
