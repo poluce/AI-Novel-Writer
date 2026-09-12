@@ -10,6 +10,7 @@ import type { ToolArtifact } from '../services/agent/tool-registry'
 import { captureAgentEditorSnapshot } from '../services/agent/editor-snapshot'
 import { createAgentExecutionContext } from '../services/agent/tools/project-context'
 import { writingLanguageText } from '../shared/writing-language'
+import { projectSessionContextFromProject } from '../shared/project-session-context'
 import { ipc } from '../services/ipc-client'
 import { logFailure, logInfo } from '../shared/fail-log'
 import type { PiToolCallInfo, RendererAction } from '../shared/agent-events'
@@ -523,11 +524,38 @@ function handleRendererAction(action: RendererAction): void {
         projectKey: useProjectStore.getState().currentProject?.path ?? '',
       })
       break
-    case 'start_workflow':
-    case 'refresh_project_config':
-    case 'refresh_blueprint':
-      // TODO(P2): 触发渲染端工作流 / 刷新项目配置 / 刷新蓝图
+    case 'start_workflow': {
+      const project = useProjectStore.getState().currentProject
+      const session = projectSessionContextFromProject(project)
+      if (!session) {
+        logFailure('Agent', 'start_workflow skipped: no open project', undefined, {
+          workflow: action.workflow,
+        })
+        break
+      }
+      void import('../services/workflows/creative-workflow-launcher').then(({ launchCreativeWorkflow }) => {
+        const chapterWorkflows = new Set(['generate_draft', 'review', 'refine', 'finalize'])
+        const intent = chapterWorkflows.has(action.workflow)
+          ? { workflow: action.workflow, chapterNumber: action.chapterNumber as number }
+          : { workflow: action.workflow }
+        return launchCreativeWorkflow(intent as import('../services/workflows/creative-workflow-launcher').CreativeIntent, session)
+      }).catch((error) => {
+        logFailure('Agent', 'start_workflow launch failed', error, {
+          workflow: action.workflow,
+          chapterNumber: action.chapterNumber,
+        })
+      })
       break
+    }
+    case 'refresh_project_config':
+    case 'refresh_blueprint': {
+      const project = useProjectStore.getState().currentProject
+      if (!project) break
+      void useProjectStore.getState().refreshFileTree(project.path).catch((error) => {
+        logFailure('Agent', `${action.type} refresh failed`, error)
+      })
+      break
+    }
   }
 }
 

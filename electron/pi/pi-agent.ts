@@ -51,6 +51,21 @@ export interface PiAgentHandle {
  * normalized callback contract (text deltas, tool cards, confirmation,
  * completion, done/error).
  */
+function toolResultErrorText(result: unknown): string {
+  if (!result || typeof result !== 'object') return '工具执行失败'
+  const record = result as {
+    details?: unknown
+    content?: Array<{ type?: string; text?: string }>
+  }
+  if (typeof record.details === 'string' && record.details.trim()) return record.details
+  const text = (record.content ?? [])
+    .filter(block => block.type === 'text' && typeof block.text === 'string')
+    .map(block => block.text)
+    .join('\n')
+    .trim()
+  return text || '工具执行失败'
+}
+
 function assistantPlainText(message: AgentMessage | undefined): string {
   if (!message || message.role !== 'assistant' || !Array.isArray(message.content)) return ''
   return message.content
@@ -128,6 +143,7 @@ export function createPiAgent(options: CreatePiAgentOptions): PiAgentHandle {
           status: 'running',
         }
         toolCalls.set(event.toolCallId, call)
+        logInfo('AgentTool', 'start', { toolName: event.toolName, toolCallId: event.toolCallId })
         callbacks.onToolCallStart(call)
         break
       }
@@ -136,7 +152,16 @@ export function createPiAgent(options: CreatePiAgentOptions): PiAgentHandle {
         if (!call) break
         call.status = event.isError ? 'failed' : 'completed'
         call.result = event.result?.details
-        if (event.isError) call.error = String(event.result?.details ?? '工具执行失败')
+        if (event.isError) {
+          call.error = toolResultErrorText(event.result)
+          logFailure('AgentTool', 'failed', undefined, {
+            toolName: event.toolName,
+            toolCallId: event.toolCallId,
+            error: call.error,
+          })
+        } else {
+          logInfo('AgentTool', 'completed', { toolName: event.toolName, toolCallId: event.toolCallId })
+        }
         callbacks.onToolCallComplete(call)
         break
       }
