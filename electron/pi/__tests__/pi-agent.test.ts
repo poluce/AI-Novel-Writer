@@ -100,6 +100,37 @@ describe('createPiAgent', () => {
     expect(toolCompletes[0].status).toBe('failed')
   })
 
+  it('requires confirmation for mcp__ tools even when they are not listed', async () => {
+    const mcpTool: AgentTool<typeof AddSchema, { sum: number }> = {
+      ...addTool,
+      name: 'mcp__docs__search',
+    }
+    const faux = fauxProvider()
+    const models = createModels()
+    models.setProvider(faux.provider)
+    faux.setResponses([
+      fauxAssistantMessage([fauxToolCall('mcp__docs__search', { a: 1, b: 2 })]),
+      fauxAssistantMessage('ok'),
+    ])
+    let confirmations = 0
+    const handle = createPiAgent({
+      model: faux.getModel(),
+      streamFn: models.streamSimple.bind(models),
+      systemPrompt: 'Docs.',
+      tools: [mcpTool],
+      callbacks: {
+        onTextChunk: () => {},
+        onToolCallStart: () => {},
+        onToolCallConfirmRequired: async () => { confirmations++; return false },
+        onToolCallComplete: () => {},
+        onDone: () => {},
+        onError: () => {},
+      },
+    })
+    await handle.prompt('search')
+    expect(confirmations).toBe(1)
+  })
+
   it('stops after an unknown write commit instead of letting the model retry', async () => {
     const WriteSchema = Type.Object({ file_path: Type.String(), content: Type.String() })
     const writeTool: AgentTool<typeof WriteSchema, { commitState: 'unknown' }> = {

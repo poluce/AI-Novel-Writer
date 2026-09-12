@@ -23,8 +23,10 @@ import { buildMcpAgentTools } from './tools/mcp.tool'
 import { truncateToolText } from './tool-result'
 
 function withTruncatedResult(tool: AgentTool<any>): AgentTool<any> {
+  const sequential = confirmationToolNames().has(tool.name) || tool.name.startsWith('mcp__')
   return {
     ...tool,
+    ...(sequential ? { executionMode: 'sequential' as const } : {}),
     execute: async (id, params, signal) => {
       const result = await tool.execute(id, params, signal)
       return {

@@ -65,9 +65,12 @@ export function createPiAgent(options: CreatePiAgentOptions): PiAgentHandle {
     },
     streamFn: withLlmCallAccounting(options.streamFn),
     transformContext: options.transformContext,
+    toolExecution: 'sequential',
     beforeToolCall: async (ctx) => {
       const call = toolCalls.get(ctx.toolCall.id)
-      if (!call || !confirmationNames.has(ctx.toolCall.name)) return undefined
+      const needsConfirm = confirmationNames.has(ctx.toolCall.name)
+        || ctx.toolCall.name.startsWith('mcp__')
+      if (!call || !needsConfirm) return undefined
       call.status = 'waiting_confirm'
       const confirmed = await callbacks.onToolCallConfirmRequired(call)
       if (!confirmed) {

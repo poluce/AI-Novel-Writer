@@ -16,7 +16,6 @@ import type {
 
 type MCPToolData = MCPToolDescription
 type MCPResourceData = MCPResourceDescription
-import type { AgentTool } from '../services/agent/tool-registry'
 
 // ===== Store 状态 =====
 
@@ -145,39 +144,8 @@ export const useMCPStore = create<MCPState>()((set, get) => ({
   },
 
   registerMCPToolsToRegistry: () => {
-    const { tools } = get()
-
-    // 先清理旧的 MCP Tool
+    // MCP tools execute in the main-process Pi Agent (`mcp__server__name`)
+    // with confirmation + sequential mode. Do not register a renderer execute path.
     toolRegistry.unregisterBySource('mcp')
-
-    // 将每个 MCP Tool 注册为 AgentTool
-    for (const mcpTool of tools) {
-      const agentTool: AgentTool = {
-        name: `mcp__${mcpTool.serverId}__${mcpTool.name}`,
-        description: mcpTool.description || `MCP Tool: ${mcpTool.name}`,
-        source: 'mcp',
-        inputSchema: {
-          type: 'object',
-          properties: (mcpTool.inputSchema as { properties?: Record<string, unknown> })?.properties as Record<string, { type: string; description: string }> ?? {},
-          required: (mcpTool.inputSchema as { required?: string[] })?.required,
-        },
-        requiresConfirmation: true, // MCP Tool 默认需要确认（保守策略）
-        isReadOnly: false,
-        userFacingName: `${mcpTool.name} (${mcpTool.serverId})`,
-        execute: async (args) => {
-          const result = await ipc.invoke('mcp:call-tool', mcpTool.serverId, mcpTool.name, args)
-          return {
-            success: result.success,
-            content: result.content,
-            error: result.error,
-          }
-        },
-      }
-      toolRegistry.register(agentTool)
-    }
-
-    if (tools.length > 0) {
-      console.log(`[MCP] 已注册 ${tools.length} 个 MCP Tool 到 ToolRegistry`)
-    }
   },
 }))

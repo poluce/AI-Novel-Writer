@@ -12,6 +12,7 @@ import { NativeSelect } from '../ui/NativeSelect'
 import { cn } from '../../lib/utils'
 import { useLocaleStore } from '../../stores/locale-store'
 import ReasoningPolicySettings from './ReasoningPolicySettings'
+import { generationModelLacksToolCalling, toolCallingRequiredMessage } from '../../shared/tool-calling-gate'
 
 /** 模型设置面板 — 在侧边栏 settings 视图中展示 */
 export default function ModelSettings() {
@@ -116,6 +117,11 @@ export default function ModelSettings() {
                   {text('默认', 'Default')}
                 </span>
               )}
+              {generationModelLacksToolCalling(model) && (
+                <span className="ml-2 px-1.5 py-0.5 rounded text-[0.7rem] bg-[var(--color-error)]/15 text-[var(--color-error-text)]">
+                  {text('无工具调用', 'No tool calling')}
+                </span>
+              )}
             </div>
           </div>
         ))}
@@ -144,6 +150,7 @@ function ModelForm({
   saving: boolean
 }) {
   const text = useLocaleStore(s => s.text)
+  const locale = useLocaleStore(s => s.locale)
   const testConnection = useLLMStore(s => s.testConnection)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean, error?: string } | null>(null)
@@ -174,8 +181,15 @@ function ModelForm({
     setTimeout(() => setTestResult(null), 3000)
   }
 
+  const lacksToolCalling = generationModelLacksToolCalling(model)
+
   return (
     <div className="p-3 rounded-lg space-y-3 bg-[var(--color-panel)] border border-[var(--color-accent)]">
+      {lacksToolCalling && (
+        <div className="text-xs rounded-lg px-3 py-2 bg-[var(--color-error)]/10 text-[var(--color-error-text)]">
+          {toolCallingRequiredMessage(locale === 'en-US' ? 'en-US' : 'zh-CN')}
+        </div>
+      )}
       <div>
         <Label>{text('名称', 'Name')}</Label>
         <Input value={model.name} onChange={(e) => update('name', e.target.value)} placeholder={text('如：GPT-4o 主力', 'e.g. Primary GPT-4o')} />

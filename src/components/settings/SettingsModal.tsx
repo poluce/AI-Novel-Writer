@@ -30,6 +30,7 @@ import { Switch } from '../ui/Switch'
 import { APP_BRAND } from '../../shared/brand'
 import { useLayoutStore, type SettingsSection } from '../../stores/layout-store'
 import { useLocaleStore } from '../../stores/locale-store'
+import { generationModelLacksToolCalling, toolCallingRequiredMessage } from '../../shared/tool-calling-gate'
 import type { Locale } from '../../i18n/types'
 import { alertError } from '../ui/AlertDialog'
 import {
@@ -436,6 +437,7 @@ function ModelForm({
   presets: ProviderPreset[]
 }) {
   const text = useLocaleStore(s => s.text)
+  const locale = useLocaleStore(s => s.locale)
   const [showKey, setShowKey] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   // 标记"模型标识"是否使用自定义输入模式
@@ -654,6 +656,11 @@ function ModelForm({
       <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
         {model.name ? text(`编辑：${model.name}`, `Edit: ${model.name}`) : text('新建模型配置', 'New model configuration')}
       </h3>
+      {generationModelLacksToolCalling(model) && (
+        <div className="text-xs rounded-lg px-3 py-2 bg-[var(--color-error)]/10 text-[var(--color-error-text)]">
+          {toolCallingRequiredMessage(locale === 'en-US' ? 'en-US' : 'zh-CN')}
+        </div>
+      )}
 
       {/* 显示名称 */}
       <div>

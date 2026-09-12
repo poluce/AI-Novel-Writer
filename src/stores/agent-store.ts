@@ -1,13 +1,11 @@
 import { create } from 'zustand'
 import type { ToolCallInfo } from '../shared/agent-ui-types'
-import { registerBuiltinTools } from '../services/agent/tools'
 import { skillRegistry, type LoadedSkill } from '../services/agent/skill-registry'
 import {
   getAllMentionTargets,
   getAllSlashCommands,
   parseSlashCommand,
 } from '../services/agent/intent-router'
-import { toolRegistry } from '../services/agent/tool-registry'
 import type { ToolArtifact } from '../services/agent/tool-registry'
 import { captureAgentEditorSnapshot } from '../services/agent/editor-snapshot'
 import { createAgentExecutionContext } from '../services/agent/tools/project-context'
@@ -120,7 +118,6 @@ const generateTitle = (content: string): string => {
 /** 生成 /help 命令的帮助文本 */
 const generateHelpText = (locale: Locale): string => {
   const text = (zhCN: string, enUS: string) => locale === 'en-US' ? enUS : zhCN
-  const toolCount = toolRegistry.listAll().length
   const skillCount = skillRegistry.listAll().length
   const commands = getAllSlashCommands(locale)
   const lines: string[] = [
@@ -139,8 +136,8 @@ const generateHelpText = (locale: Locale): string => {
     '',
     text('### 可用工具', '### Available tools'),
     text(
-      `当前已加载 **${toolCount}** 个工具、**${skillCount}** 个 Skill。`,
-      `Currently loaded: **${toolCount}** tools and **${skillCount}** skills.`,
+      `读写与工作流工具在主进程执行。当前已加载 **${skillCount}** 个 Skill。`,
+      `Read, write, and workflow tools run in the main process. Currently loaded: **${skillCount}** skills.`,
     ),
     '',
     text('### Skill 命令', '### Skill commands'),
@@ -193,8 +190,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
 
   initializeTools: () => {
     if (get().toolsInitialized) return
-    registerBuiltinTools()
-    // 加载 Skill（内置 + 用户 + 项目级）
+    // Generation tools live in the main-process Pi Agent. Renderer only loads Skills for /commands.
     skillRegistry.loadAll().catch(e => console.warn('[Agent] Skill 加载失败:', e))
     set({ toolsInitialized: true })
   },

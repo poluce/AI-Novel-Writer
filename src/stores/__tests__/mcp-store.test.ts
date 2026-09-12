@@ -80,7 +80,7 @@ describe('renderer MCP trust boundary', () => {
     expect(useMCPStore.getState()).toMatchObject({ loading: false, error: null })
   })
 
-  it('keeps the existing human-confirmation requirement for every registered MCP tool', () => {
+  it('does not register MCP tools on the renderer registry', () => {
     useMCPStore.setState({
       tools: [{
         name: 'write_remote',
@@ -92,10 +92,7 @@ describe('renderer MCP trust boundary', () => {
 
     useMCPStore.getState().registerMCPToolsToRegistry()
 
-    expect(mocks.register).toHaveBeenCalledWith(expect.objectContaining({
-      name: 'mcp__safe-id__write_remote',
-      requiresConfirmation: true,
-      isReadOnly: false,
-    }))
+    expect(mocks.register).not.toHaveBeenCalled()
+    expect(mocks.unregisterBySource).toHaveBeenCalledWith('mcp')
   })
 })
