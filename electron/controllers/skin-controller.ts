@@ -12,6 +12,7 @@ import type {
   SkinState,
 } from '../../src/shared/skin-types'
 import { mainText } from '../i18n'
+import { logFailure } from '../../src/shared/fail-log'
 import {
   MAX_SKIN_INPUT_BYTES,
   skinService,
@@ -112,7 +113,8 @@ function assetResponse(result: SkinServiceAssetResult): SkinReadCustomAssetRespo
 function safeState(service: SkinControllerService): SkinState {
   try {
     return service.getState()
-  } catch {
+  } catch (error) {
+    logFailure('Skin', 'getState failed; using classic', error)
     return CLASSIC_STATE
   }
 }
@@ -123,7 +125,8 @@ function safeOperation(
 ): SkinExecuteResponse {
   try {
     return operationResponse(operation())
-  } catch {
+  } catch (error) {
+    logFailure('Skin', 'IPC operation threw', error)
     return failure(safeState(service), 'SKIN_SERVICE_UNAVAILABLE')
   }
 }
@@ -131,7 +134,8 @@ function safeOperation(
 function safeAssetResponse(service: SkinControllerService): SkinReadCustomAssetResponse {
   try {
     return assetResponse(service.readCustomAsset())
-  } catch {
+  } catch (error) {
+    logFailure('Skin', 'readCustomAsset IPC threw', error)
     return failure(safeState(service), 'SKIN_SERVICE_UNAVAILABLE')
   }
 }

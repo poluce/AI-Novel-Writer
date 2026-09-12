@@ -12,6 +12,7 @@ import type {
   SkinState,
 } from '../../src/shared/skin-types'
 import { VELA_HOME } from '../utils/config-utils'
+import { logFailure } from '../../src/shared/fail-log'
 
 /** Same on-disk boundary enforced by the native picker and persisted-asset reads. */
 export const MAX_SKIN_INPUT_BYTES = 20 * 1024 * 1024
@@ -215,7 +216,8 @@ export class SkinService {
     try {
       fs.mkdirSync(path.join(this.rootDirectory, 'assets'), { recursive: true })
       this.state = this.loadPersistedState()
-    } catch {
+    } catch (error) {
+      logFailure('Skin', 'initialize failed; using classic skin', error)
       this.state = CLASSIC_STATE
     }
     return this.getState()
@@ -245,7 +247,8 @@ export class SkinService {
       let image: SkinImageLike
       try {
         image = this.imageCodec.createFromBuffer(source)
-      } catch {
+      } catch (error) {
+        logFailure('Skin', 'image decode failed', error)
         throw new SkinServiceFailure('IMAGE_DECODE_FAILED')
       }
       if (!image || image.isEmpty()) throw new SkinServiceFailure('IMAGE_DECODE_FAILED')
@@ -289,6 +292,7 @@ export class SkinService {
       if (createdAssetFile && createdAssetFile !== previousAssetFile) {
         this.cleanupAsset(createdAssetFile)
       }
+      logFailure('Skin', 'importCustomAsset failed', error)
       const code = error instanceof SkinServiceFailure ? error.code : 'SKIN_STORAGE_FAILED'
       return { success: false, state: this.getState(), code }
     }
@@ -310,7 +314,8 @@ export class SkinService {
       this.writeManifest(nextState)
       this.state = nextState
       return { success: true, state: this.getState() }
-    } catch {
+    } catch (error) {
+      logFailure('Skin', 'activate failed', error, { skinId })
       return { success: false, state: this.getState(), code: 'SKIN_STORAGE_FAILED' }
     }
   }
@@ -326,7 +331,8 @@ export class SkinService {
     }
     try {
       this.writeManifest(nextState)
-    } catch {
+    } catch (error) {
+      logFailure('Skin', 'removeCustom failed', error)
       return { success: false, state: this.getState(), code: 'SKIN_STORAGE_FAILED' }
     }
 
@@ -367,7 +373,8 @@ export class SkinService {
           bytes: new Uint8Array(bytes),
         },
       }
-    } catch {
+    } catch (error) {
+      logFailure('Skin', 'custom asset unreadable; degrading to classic', error)
       return this.degradeCorruptCustomAsset(customSkin)
     }
   }

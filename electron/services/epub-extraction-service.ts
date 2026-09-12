@@ -1,6 +1,7 @@
 import path from 'node:path'
 import type { Readable } from 'node:stream'
 import * as yauzl from 'yauzl'
+import { logFailure } from '../../src/shared/fail-log'
 
 export const EPUB_MAX_ARCHIVE_ENTRIES = 10_000
 export const EPUB_MAX_ENTRY_BYTES = 32 * 1024 * 1024
@@ -278,7 +279,8 @@ async function readEntry(
       return new TextDecoder('utf-16be', { fatal: true }).decode(content)
     }
     return new TextDecoder('utf-8', { fatal: true }).decode(content)
-  } catch {
+  } catch (error) {
+    logFailure('Import', 'EPUB text decode failed', error)
     throw new EpubExtractionError('EPUB_INVALID_ARCHIVE')
   }
 }

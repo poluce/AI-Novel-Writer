@@ -3,6 +3,7 @@ import type {
   ModelDiscoveryRequest,
   ModelDiscoveryResult,
 } from '../../src/shared/ipc-channels'
+import { logFailure } from '../../src/shared/fail-log'
 
 interface ModelDiscoveryServiceDependencies {
   fetchImpl?: typeof fetch
@@ -176,6 +177,10 @@ export class ModelDiscoveryService {
         try {
           payload = await response.json()
         } catch {
+          logFailure('LLM', 'Gemini model list JSON parse failed', undefined, {
+            provider: model.provider,
+            aborted: abortController.signal.aborted,
+          })
           return abortController.signal.aborted
             ? { success: false, errorCode: 'network' }
             : { success: false, errorCode: 'invalid_response' }
@@ -208,6 +213,10 @@ export class ModelDiscoveryService {
       try {
         payload = await response.json()
       } catch {
+        logFailure('LLM', 'OpenAI-compatible model list JSON parse failed', undefined, {
+          provider: model.provider,
+          aborted: abortController.signal.aborted,
+        })
         return abortController.signal.aborted
           ? { success: false, errorCode: 'network' }
           : { success: false, errorCode: 'invalid_response' }
@@ -217,6 +226,9 @@ export class ModelDiscoveryService {
       if (models.length === 0) return { success: false, errorCode: 'empty' }
       return { success: true, models }
     } catch {
+      logFailure('LLM', 'discoverModels network or unexpected failure', undefined, {
+        provider: model.provider,
+      })
       return { success: false, errorCode: 'network' }
     } finally {
       clearTimeout(timeout)

@@ -23,6 +23,7 @@ import type {
   UpdateStatus,
   SafeUpdateTechnicalDetails,
 } from '../../src/shared/update-types'
+import { logFailure } from '../../src/shared/fail-log'
 
 export type {
   UpdateActionResponse,
@@ -424,7 +425,8 @@ export class UpdateService {
     try {
       await this.options.openRelease()
       return this.actionResponse(true)
-    } catch {
+    } catch (error) {
+      logFailure('Update', 'openRelease failed', error)
       return this.actionResponse(false, makeUpdateError('OPEN_RELEASE_FAILED', 'navigation', 'open-release-failed', true, 'OPEN_RELEASE_FAILED'))
     }
   }
@@ -470,7 +472,8 @@ export class UpdateService {
     try {
       this.options.updater.quitAndInstall()
       return this.actionResponse(true)
-    } catch {
+    } catch (error) {
+      logFailure('Update', 'quitAndInstall failed', error)
       return this.actionResponse(false, makeUpdateError('INSTALL_FAILED', 'install', 'install-failed', true, 'INSTALL_FAILED'))
     }
   }

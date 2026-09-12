@@ -1,4 +1,5 @@
 import type { UpdateBackend } from './update-service'
+import { logFailure } from '../../src/shared/fail-log'
 
 export const GITHUB_LATEST_RELEASE_API = 'https://api.github.com/repos/EthanYoQ/AI-Novel-Writer/releases/latest'
 export const GITHUB_LATEST_RELEASE_PAGE = 'https://github.com/EthanYoQ/AI-Novel-Writer/releases/latest'
@@ -27,7 +28,8 @@ export function createGitHubReleaseUpdateBackend(fetcher: ReleaseFetcher = fetch
       let value: unknown
       try {
         value = await response.json()
-      } catch {
+      } catch (error) {
+        logFailure('Update', 'GitHub release JSON parse failed', error)
         throw new Error('Invalid GitHub release metadata')
       }
       if (!value || typeof value !== 'object') throw new Error('Invalid GitHub release metadata')

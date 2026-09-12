@@ -4,6 +4,7 @@ import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
 import type { ProjectSessionContext } from '../../src/shared/ipc-channels'
+import { logFailure } from '../../src/shared/fail-log'
 import {
   assertProjectCoreStoragePathSupported,
   assertProjectStoragePathSupported,
@@ -126,8 +127,8 @@ export class ProjectAccessService {
     if (fs.existsSync(configuredHome)) {
       try {
         this.homePath = path.normalize(fs.realpathSync.native(configuredHome))
-      } catch {
-        // 受限运行环境可能不允许解析主目录；项目根 probe 仍必须 realpath。
+      } catch (error) {
+        logFailure('Project', 'realpath home directory failed; using unresolved home', error)
       }
     }
     this.newLeaseId = options.newLeaseId ?? randomUUID
@@ -169,7 +170,8 @@ export class ProjectAccessService {
       let parsed: unknown
       try {
         parsed = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
-      } catch {
+      } catch (error) {
+        logFailure('Project', 'project.json parse failed', error, { rootPath })
         throw new Error('项目清单无法读取，已拒绝打开')
       }
       if (!isProjectManifest(parsed)) {
@@ -235,7 +237,8 @@ export class ProjectAccessService {
     try {
       return projectPathKey(this.canonicalProjectRoot(left))
         === projectPathKey(this.canonicalProjectRoot(right))
-    } catch {
+    } catch (error) {
+      logFailure('Project', 'canonical root comparison failed', error)
       return false
     }
   }
