@@ -33,12 +33,12 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 /** 对话框主体 - 增强的阴影和动画 */
 const DialogContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => {
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & { overlay?: boolean }
+>(({ className, children, overlay = true, ...props }, ref) => {
   const text = useLocaleStore(s => s.text)
   return (
   <DialogPortal>
-    <DialogOverlay />
+    {overlay ? <DialogOverlay /> : null}
     <DialogPrimitive.Content
       ref={ref}
       className={cn(

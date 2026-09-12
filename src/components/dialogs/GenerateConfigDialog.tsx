@@ -138,13 +138,19 @@ export default function GenerateConfigDialog({ isOpen, onClose, onGenerated }: P
   const defaultIdea = currentProject?.novelConfig?.coreOutline || ''
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent 
+    <Dialog open={isOpen} onOpenChange={handleOpenChange} modal={false}>
+      <DialogContent
+        overlay={false}
         className="max-w-[520px]"
         onInteractOutside={e => {
-          // 当全局 Confirm 弹窗弹出时，点击 Confirm （由于渲染在 Body）
-          // 会被 Radix 误认为是 Interact Outside。因此此时屏蔽关闭事件
-          if (confirming) e.preventDefault()
+          // 非模态：点页面其他地方不关窗；叠了确认框时同样不关。
+          e.preventDefault()
+        }}
+        onPointerDownOutside={e => {
+          e.preventDefault()
+        }}
+        onFocusOutside={e => {
+          e.preventDefault()
         }}
       >
         <DialogHeader>
