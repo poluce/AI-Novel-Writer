@@ -97,6 +97,7 @@ export default function App() {
   const text = useLocaleStore((s) => s.text)
   const sidebarOpen = useLayoutStore(s => s.sidebarOpen)
   const aiPanelOpen = useLayoutStore(s => s.aiPanelOpen)
+  const bottomPanelOpen = useLayoutStore(s => s.bottomPanelOpen)
   const rightView = useLayoutStore(s => s.rightView)
   const settingsOpen = useLayoutStore(s => s.settingsOpen)
   const closeSettings = useLayoutStore(s => s.closeSettings)
@@ -309,11 +310,15 @@ export default function App() {
             </PanelGroup>
           </Panel>
 
-          {/* 下层：底部面板（铺满整个 PanelGroup 宽度）— 始终挂载，面板控制显隐 */}
-          <PanelResizeHandle />
-          <Panel id="bottom" defaultSize={25} minSize={8}>
-            <BottomPanel />
-          </Panel>
+          {/* 下层：底部面板。关闭时拆掉 Panel，避免留下空白占位。 */}
+          {bottomPanelOpen && (
+            <>
+              <PanelResizeHandle />
+              <Panel id="bottom" defaultSize={25} minSize={8}>
+                <BottomPanel />
+              </Panel>
+            </>
+          )}
         </PanelGroup>
 
         {/* 右侧工具窗口栏（全高，包括底部面板区域） */}
