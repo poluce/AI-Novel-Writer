@@ -6,7 +6,7 @@ import { buildAgentTools, confirmationToolNames } from './tool-builder'
 import type { AgentEditorSnapshot, PiAgentEvent, RendererActionSink } from '../../src/shared/agent-events'
 import type { ModelProfile } from '../../src/shared/ipc-channels'
 import type { WritingLanguage } from '../../src/shared/writing-language'
-import { logFailure } from '../../src/shared/fail-log'
+import { logFailure, logInfo } from '../../src/shared/fail-log'
 
 export interface AgentSessionManagerOptions {
   /** Resolve a persisted model profile for a turn (modelId may be undefined). */
@@ -35,10 +35,12 @@ export class AgentSessionManager {
     editorSnapshot?: AgentEditorSnapshot,
   ): Promise<{ success: boolean; error?: string }> {
     try {
+      logInfo('Agent', 'prompt start', { conversationId, modelId, chars: input.length })
       const session = this.getOrCreate(conversationId, modelId)
       session.setEditorSnapshot(editorSnapshot)
       session.setTools(buildAgentTools(this.options.resolveLanguage(conversationId), this.options.rendererAction))
       await session.prompt(input)
+      logInfo('Agent', 'prompt finished', { conversationId, modelId })
       return { success: true }
     } catch (error) {
       logFailure('Agent', 'prompt failed', error, { conversationId, modelId })

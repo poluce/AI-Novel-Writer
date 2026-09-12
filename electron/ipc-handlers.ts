@@ -1,4 +1,6 @@
 import { ensureVelaHome, VELA_HOME } from './utils/config-utils'
+import { appendVelaLog } from './utils/app-log'
+import { setDiagnosticLogSink } from '../src/shared/fail-log'
 
 import { registerConfigController } from './controllers/config-controller'
 import { registerProjectController } from './controllers/project-controller'
@@ -25,6 +27,7 @@ import { skinService } from './services/skin-service'
 export function registerIPCHandlers() {
   // 确保全局配置目录结构存在
   ensureVelaHome()
+  setDiagnosticLogSink(appendVelaLog)
 
   // 皮肤存储损坏或不可用时必须降级为经典皮肤，不能阻断其余 IPC 注册。
   try {

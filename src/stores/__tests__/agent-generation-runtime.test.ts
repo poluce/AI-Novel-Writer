@@ -69,12 +69,31 @@ describe('Agent IPC bridge', () => {
   })
 
   it('derives generating from the active conversation streaming message', async () => {
+    let resolvePrompt: ((value: { success: boolean }) => void) | undefined
+    ipcInvoke.mockImplementation(() => new Promise(resolve => {
+      resolvePrompt = resolve
+    }))
+
+    const pending = useAgentStore.getState().sendMessage('Keep writing')
+    await vi.waitFor(() => {
+      expect(selectIsGenerating(useAgentStore.getState())).toBe(true)
+    })
+    expect(useAgentStore.getState()).not.toHaveProperty('generating')
+
+    resolvePrompt?.({ success: true })
+    await pending
+    expect(selectIsGenerating(useAgentStore.getState())).toBe(false)
+  })
+
+  it('surfaces an empty successful turn instead of leaving a blank streaming bubble', async () => {
+    useLocaleStore.setState({ locale: 'en-US', initialized: true })
     ipcInvoke.mockResolvedValue({ success: true })
 
     await useAgentStore.getState().sendMessage('Keep writing')
 
-    expect(selectIsGenerating(useAgentStore.getState())).toBe(true)
-    expect(useAgentStore.getState()).not.toHaveProperty('generating')
+    const last = useAgentStore.getState().getActiveConversation()?.messages.at(-1)
+    expect(last?.streaming).toBe(false)
+    expect(last?.content).toContain('~/.vela/logs/vela.log')
   })
 
   it('shows a generic failure when agent:prompt reports an error', async () => {
@@ -90,9 +109,15 @@ describe('Agent IPC bridge', () => {
 
   it('cancelGeneration invokes agent:abort and closes the streaming message', async () => {
     useLocaleStore.setState({ locale: 'en-US', initialized: true })
-    ipcInvoke.mockResolvedValue({ success: true })
+    ipcInvoke.mockImplementation((channel: string) => {
+      if (channel === 'agent:prompt') return new Promise(() => {})
+      return Promise.resolve({ success: true })
+    })
     useAgentStore.getState().createConversation()
-    await useAgentStore.getState().sendMessage('Keep writing')
+    void useAgentStore.getState().sendMessage('Keep writing')
+    await vi.waitFor(() => {
+      expect(selectIsGenerating(useAgentStore.getState())).toBe(true)
+    })
 
     await useAgentStore.getState().cancelGeneration()
 

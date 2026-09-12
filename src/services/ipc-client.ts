@@ -13,6 +13,7 @@ import type {
 } from '../shared/ipc-channels'
 import type { ProjectSessionContext } from '../shared/ipc-channels'
 import { getActiveProjectSessionContext } from '../shared/project-session-context'
+import { setDiagnosticLogSink, type DiagnosticLogRecord } from '../shared/fail-log'
 
 /** 从 preload 暴露的 velaAPI */
 interface VelaAPI {
@@ -159,4 +160,10 @@ export const ipc = {
   getZoomLevel: () => {
     return getAPI().getZoomLevel()
   }
+}
+
+if (typeof window !== 'undefined') {
+  setDiagnosticLogSink((record: DiagnosticLogRecord) => {
+    void ipc.invoke('app:append-diagnostic-log', record).catch(() => {})
+  })
 }

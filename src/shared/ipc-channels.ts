@@ -577,6 +577,10 @@ export interface AppDataChannels {
     args: [name: string]
     return: { success: boolean; error?: string }
   }
+  'app:append-diagnostic-log': {
+    args: [record: import('./fail-log').DiagnosticLogRecord]
+    return: { success: boolean }
+  }
 }
 
 export interface LLMRequest {

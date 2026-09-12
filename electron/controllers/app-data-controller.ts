@@ -5,6 +5,8 @@ import type { AppPromptLoadReceipt, AppPromptTemplate } from '../../src/shared/i
 import type { WritingLanguage } from '../../src/shared/writing-language'
 import { mainText } from '../i18n'
 import { VELA_HOME, writeJsonFile } from '../utils/config-utils'
+import { appendVelaLog } from '../utils/app-log'
+import type { DiagnosticLogRecord } from '../../src/shared/fail-log'
 import { inspectWritingSkill, installWritingSkill } from '../services/writing-skill-service'
 
 function text(zhCNText: string, enUSText: string): string {
@@ -107,6 +109,14 @@ function promptLanguageFromFilename(filename: string): WritingLanguage | undefin
  * 任意 app-data 路径，也不借用外部文件授权。
  */
 export function registerAppDataController(): void {
+  ipcMain.handle('app:append-diagnostic-log', (_event, record: DiagnosticLogRecord) => {
+    if (!record || typeof record !== 'object' || typeof record.scope !== 'string' || typeof record.event !== 'string') {
+      return { success: false }
+    }
+    appendVelaLog(record)
+    return { success: true }
+  })
+
   ipcMain.handle('prompt:load-global', async (): Promise<AppPromptLoadReceipt> => {
     const promptsDirectory = path.join(VELA_HOME, 'prompts')
     if (!fs.existsSync(promptsDirectory)) return { templates: [], diagnostics: [] }

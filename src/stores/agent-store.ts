@@ -11,7 +11,7 @@ import { captureAgentEditorSnapshot } from '../services/agent/editor-snapshot'
 import { createAgentExecutionContext } from '../services/agent/tools/project-context'
 import { writingLanguageText } from '../shared/writing-language'
 import { ipc } from '../services/ipc-client'
-import { logFailure } from '../shared/fail-log'
+import { logFailure, logInfo } from '../shared/fail-log'
 import type { PiToolCallInfo, RendererAction } from '../shared/agent-events'
 import { useLocaleStore } from './locale-store'
 import { useProjectStore } from './project-store'
@@ -271,7 +271,11 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   },
 
   sendMessage: async (content) => {
-    if (!content.trim() || selectIsGenerating(get())) return
+    if (!content.trim()) return
+    if (selectIsGenerating(get())) {
+      logInfo('Agent', 'ignored send while a turn is already in flight')
+      return
+    }
     const requestLocale = useLocaleStore.getState().locale
     const text = (zhCNText: string, enUSText: string) => requestLocale === 'en-US' ? enUSText : zhCNText
     let skillInvocation: { skill: LoadedSkill; input: string } | null = null
@@ -418,7 +422,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       activeRequestUiLocale = requestLocale
       set({ activeRequestId: assistantMsg.id })
 
-      // 调用主进程 Pi Agent（事件经 agent:event 流式回传）
+      logInfo('Agent', 'sending prompt', { conversationId: convId, modelId, chars: content.trim().length })
       const result = await ipc.invoke(
         'agent:prompt',
         convId,
@@ -438,7 +442,22 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
           streaming: false,
         }))
         set({ activeRequestId: null })
+        return
       }
+      updateAssistantMsg(m => {
+        if (!m.streaming) return m
+        return {
+          ...m,
+          streaming: false,
+          content: m.content.trim()
+            ? m.content
+            : text(
+              '生成结束但没有返回正文。请查看 ~/.vela/logs/vela.log',
+              'Generation finished with no text. See ~/.vela/logs/vela.log',
+            ),
+        }
+      })
+      set({ activeRequestId: null })
     } catch (error) {
       logFailure('Agent', 'renderer prompt threw', error, { conversationId: convId, modelId })
       updateAssistantMsg(m => ({

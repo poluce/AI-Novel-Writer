@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { describeError, logFailure } from '../fail-log'
+import { describeError, logFailure, logInfo, setDiagnosticLogSink } from '../fail-log'
 
 afterEach(() => {
+  setDiagnosticLogSink(undefined)
   vi.restoreAllMocks()
 })
 
@@ -20,6 +21,18 @@ describe('fail-log', () => {
     expect(spy).toHaveBeenCalledWith('[Vela MCP] connect failed', expect.objectContaining({
       serverId: 'docs',
       error: expect.objectContaining({ message: 'timeout' }),
+    }))
+  })
+
+  it('forwards structured records to the diagnostic sink', () => {
+    const sink = vi.fn()
+    setDiagnosticLogSink(sink)
+    logInfo('Agent', 'sending prompt', { conversationId: 'c1' })
+    expect(sink).toHaveBeenCalledWith(expect.objectContaining({
+      level: 'info',
+      scope: 'Agent',
+      event: 'sending prompt',
+      conversationId: 'c1',
     }))
   })
 })

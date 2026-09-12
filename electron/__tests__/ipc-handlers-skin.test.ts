@@ -12,6 +12,10 @@ vi.mock('../utils/config-utils', () => ({
   VELA_HOME: 'C:\\vela-app-data',
   ensureVelaHome: mocks.ensureVelaHome,
 }))
+vi.mock('../utils/app-log', () => ({
+  appendVelaLog: vi.fn(),
+  velaLogFilePath: () => 'C:\\vela-app-data\\logs\\vela.log',
+}))
 vi.mock('../services/skin-service', () => ({
   skinService: { initialize: mocks.initializeSkinService },
 }))
