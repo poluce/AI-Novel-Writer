@@ -69,7 +69,7 @@ describe('createPiModels', () => {
     expect(model.id).toBe('gemini-3.1-pro-low')
   })
 
-  it('clamps Gemini maxOutputTokens that custom proxies reject', () => {
+  it('does not rewrite the user-configured Gemini maxOutputTokens', () => {
     const { model } = createPiModels(profile({
       maxTokens: 65_536,
       capabilities: {
@@ -80,7 +80,7 @@ describe('createPiModels', () => {
         usage: true,
       },
     }))
-    expect(model.maxTokens).toBe(65_530)
+    expect(model.maxTokens).toBe(65_536)
   })
 
   it('derives context window and max tokens from verified capabilities when present', () => {

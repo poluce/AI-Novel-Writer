@@ -9,10 +9,6 @@ import { openAICompletionsApi } from '@earendil-works/pi-ai/api/openai-completio
 
 import type { ModelProfile } from '../../src/shared/ipc-channels'
 import { assertGenerationModelSupportsTools } from '../../src/shared/tool-calling-gate'
-import { logInfo } from '../../src/shared/fail-log'
-
-/** Custom Gemini-compatible proxies reject 65536; 65530 stays under that ceiling. */
-const GEMINI_MAX_OUTPUT_TOKENS = 65_530
 
 export function resolveGeminiBaseUrl(baseUrl: string): string {
   const trimmed = baseUrl.replace(/\/+$/, '')
@@ -47,17 +43,6 @@ export function createPiModels(profile: ModelProfile): PiModelRuntime {
   assertGenerationModelSupportsTools(profile)
   const isGemini = profile.protocol === 'gemini'
   const baseUrl = isGemini ? resolveGeminiBaseUrl(profile.baseUrl) : profile.baseUrl
-  const requestedMax = profile.capabilities?.maxOutputTokens ?? profile.maxTokens
-  const maxTokens = isGemini && requestedMax > GEMINI_MAX_OUTPUT_TOKENS
-    ? GEMINI_MAX_OUTPUT_TOKENS
-    : requestedMax
-  if (isGemini && maxTokens !== requestedMax) {
-    logInfo('LLM', 'clamped Gemini maxOutputTokens', {
-      modelName: profile.modelName,
-      requested: requestedMax,
-      clamped: maxTokens,
-    })
-  }
 
   const model = (isGemini
     ? {
@@ -82,7 +67,7 @@ export function createPiModels(profile: ModelProfile): PiModelRuntime {
     input: ['text'],
     cost: ZERO_COST,
     contextWindow: profile.capabilities?.contextWindowTokens ?? 1_000_000,
-    maxTokens,
+    maxTokens: profile.capabilities?.maxOutputTokens ?? profile.maxTokens,
   }
 
   const provider = createProvider({
