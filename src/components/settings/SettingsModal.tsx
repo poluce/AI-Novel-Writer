@@ -31,6 +31,7 @@ import { APP_BRAND } from '../../shared/brand'
 import { useLayoutStore, type SettingsSection } from '../../stores/layout-store'
 import { useLocaleStore } from '../../stores/locale-store'
 import { generationModelLacksToolCalling, toolCallingRequiredMessage } from '../../shared/tool-calling-gate'
+import { logFailure } from '../../shared/fail-log'
 import type { Locale } from '../../i18n/types'
 import { alertError } from '../ui/AlertDialog'
 import {
@@ -1038,7 +1039,9 @@ function ProxySection() {
           port: cfg.proxy.port ?? 7890,
         })
       }
-    }).catch(() => { })
+    }).catch((error) => {
+      logFailure('Settings', 'failed to load proxy config', error)
+    })
   }, [])
 
   const handleSave = async () => {
@@ -1265,7 +1268,9 @@ function EditorSection() {
   useEffect(() => {
     ipc.invoke('config:get').then((config) => {
       setAutoOpenNextChapterAfterFinalize(config.autoOpenNextChapterAfterFinalize === true)
-    }).catch(() => {})
+    }).catch((error) => {
+      logFailure('Settings', 'failed to load editor auto-open-next-chapter config', error)
+    })
   }, [])
 
   const setAutoOpenNext = async (checked: boolean) => {

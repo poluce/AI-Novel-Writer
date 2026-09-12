@@ -310,7 +310,8 @@ export function registerLLMController() {
     try {
       applyProxyConfig()
       return await modelDiscovery.discoverModels(request)
-    } catch {
+    } catch (error) {
+      logFailure('LLM', 'discover-models failed', error)
       return { success: false, errorCode: 'invalid_response' as const }
     }
   })

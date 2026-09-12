@@ -5,6 +5,7 @@ import {
 } from './base-command'
 import type { BlueprintRangeCommitReceipt } from '../../../../electron/repositories/blueprint-repository'
 import { composePromptSystemRole, resolvePromptTemplate } from '../../prompt-templates'
+import { logFailure } from '../../../shared/fail-log'
 import { DirectoryPromptBuilder } from '../../prompts/prompt-builder'
 import { createGenerationRuntime, type GenerationRuntime } from '../../generation/generation-runtime'
 import type { GenerationTask } from '../../generation/generation-harness'
@@ -566,7 +567,10 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
           context.projectSession,
         )
         context.data.blueprintCharacterSyncReceipt = syncReceipt
-      } catch {
+      } catch (error) {
+        logFailure('Directory', 'character sync after blueprint commit failed', error, {
+          operationId: commitReceipt.characterSyncOperation.operationId,
+        })
         throw new DirectoryPostCommitSyncError(commitReceipt)
       }
 
