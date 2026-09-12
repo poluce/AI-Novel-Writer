@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Save, Sparkles, Info, Loader2, RotateCcw } from 'lucide-react'
+import { Save, Sparkles, Info, Loader2, RotateCcw, ChevronDown } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
 import { registerEditorExitSaveHandler } from '../../stores/editor-store'
 import { useLLMStore } from '../../stores/llm-store'
@@ -18,7 +18,6 @@ import {
 import type { GeneratableField } from '../../services/workflows/commands/generate-field.command'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
-import { Textarea } from '../ui/Textarea'
 import { NativeSelect } from '../ui/NativeSelect'
 import GenerateConfigDialog from '../dialogs/GenerateConfigDialog'
 import { useLocaleStore } from '../../stores/locale-store'
@@ -58,6 +57,7 @@ function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
 
   // 各区块的独立生成状态
   const [generatingField, setGeneratingField] = useState<GeneratableField | null>(null)
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
 
   // 直接从 Store 读取配置 — 单一数据源，无需 local state 镜像
   const projectMatches = currentProject?.path === projectKey
@@ -133,6 +133,7 @@ function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
     }
     if (generatingField) return // 防止并发
 
+    setCollapsedSections(current => ({ ...current, [fieldKey]: false }))
     setGeneratingField(fieldKey)
     try {
       const { GenerateFieldCommand } = await import('../../services/workflows/commands/generate-field.command')
@@ -355,86 +356,103 @@ function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
             </div>
           </Section>
 
-          {/* 核心大纲 */}
-          <Section
-            title={text('核心大纲', 'Core outline')}
-            desc={text('一段话概括整个故事：谁/在哪/要做什么。也是 AI 一键填充时的灵感输入', 'Summarize who does what and where. This also seeds AI configuration generation.')}
-            aiFieldKey="coreOutline"
-            generatingField={generatingField}
-            onAIGenerate={handleFieldGenerate}
-          >
-            <Textarea value={config.coreOutline} onChange={(e) => update('coreOutline', e.target.value)} placeholder={text('在此输入你的创作想法，或让 AI 根据这段话一键生成全部配置...', 'Enter your story idea, or let AI generate the full configuration from it...')} rows={4} />
-          </Section>
-
-          {/* 世界观设定 */}
-          <Section
-            title={text('世界观 / 初始设定', 'World / initial setting')}
-            desc={text('故事发生的背景、时代、力量体系（架构生成后可由 AI 自动扩展）', 'Background, era, and power system. AI can expand this during architecture generation.')}
-            aiFieldKey="worldSetting"
-            generatingField={generatingField}
-            onAIGenerate={handleFieldGenerate}
-          >
-            <Textarea value={config.worldSetting} onChange={(e) => update('worldSetting', e.target.value)} placeholder={text('描述故事发生的背景、时代、力量体系、社会结构（可简写，AI 生成架构时会自动丰富）...', 'Describe the background, era, power system, and social structure...')} rows={4} />
-          </Section>
-
-          {/* 金手指 */}
-          <Section
-            title={text('金手指 / 核心卖点', 'Protagonist advantage / core hook')}
-            desc={text('主角的差异化优势：获取方式、核心能力、成长路径（架构生成时 AI 会深度扩展）', 'How the protagonist gains a distinctive advantage, its abilities, and growth path.')}
-            aiFieldKey="goldenFinger"
-            generatingField={generatingField}
-            onAIGenerate={handleFieldGenerate}
-          >
-            <Textarea value={config.goldenFinger} onChange={(e) => update('goldenFinger', e.target.value)} placeholder={text('主角的独特优势或故事核心卖点（可简写，架构生成时AI会深度扩展）...', 'Describe the protagonist’s unique advantage or the story’s core hook...')} rows={3} />
-          </Section>
-
-          {/* 主角人设 */}
-          <Section
-            title={text('主角人设', 'Protagonist profile')}
-            desc={text('性格特征、背景故事、核心目标（架构生成时 AI 会补全关系网和角色弧光）', 'Personality, backstory, and central goal. AI can expand relationships and the character arc.')}
-            aiFieldKey="protagonistProfile"
-            generatingField={generatingField}
-            onAIGenerate={handleFieldGenerate}
-          >
-            <Textarea value={config.protagonistProfile} onChange={(e) => update('protagonistProfile', e.target.value)} placeholder={text('主角的性格特征、背景故事、核心目标...', 'Personality traits, backstory, and central goal...')} rows={4} />
-          </Section>
-
-          {/* 全局写作要求 */}
-          <Section
-            title={text('全局写作要求', 'Global writing guidance')}
-            desc={text('写作风格、禁忌事项、节奏控制等全局规则（AI 填充配置时会自动生成）', 'Global rules for style, pacing, and content restrictions.')}
-            aiFieldKey="globalGuidance"
-            generatingField={generatingField}
-            onAIGenerate={handleFieldGenerate}
-          >
-            <Textarea
-              value={config.globalGuidance}
-              onChange={(e) => update('globalGuidance', e.target.value)}
-              placeholder={text('全局的写作风格要求、禁忌事项、特殊规则...', 'Global style requirements, restrictions, and special rules...')}
-              rows={6}
-            />
-          </Section>
-
-          {/* 文风配置 */}
-          <Section
-            title={text('文风配置', 'Writing style')}
-            desc={text('AI 写稿/修稿时会严格遵循这里的风格要求。可手动填写或由 AI 自动生成。', 'AI follows these style requirements when drafting and revising. Enter them manually or generate with AI.')}
-            aiFieldKey="writingStyle"
-            generatingField={generatingField}
-            onAIGenerate={handleFieldGenerate}
-          >
-            <Textarea
-              value={config.writingStyle || ''}
-              onChange={(e) => update('writingStyle', e.target.value)}
-              placeholder={text('尚未配置。点击右上角「AI 生成」或手动填写…', 'Not configured. Generate with AI or enter a style manually...')}
-              rows={6}
-            />
-          </Section>
-
-          {/* 参考作品 */}
-          <Section title={text('参考作品', 'Reference works')} desc={text('参考作品的风格、体系或机制，如：“参考《证道》的修炼体系”', 'Reference the style, setting, or mechanics of other works.')}>
-            <Textarea value={config.referenceWorks || ''} onChange={(e) => update('referenceWorks', e.target.value)} placeholder={text('参考哪些作品的风格、设定或机制？（AI 架构生成时会参考）', 'Which works should inform the style, setting, or mechanics?')} rows={2} />
-          </Section>
+          <SettingDocument>
+            <SettingSection
+              title={text('核心大纲', 'Core outline')}
+              collapsed={Boolean(collapsedSections.coreOutline)}
+              onToggle={() => setCollapsedSections(current => ({ ...current, coreOutline: !current.coreOutline }))}
+              generating={generatingField === 'coreOutline'}
+              generateDisabled={generatingField != null}
+              onGenerate={() => void handleFieldGenerate('coreOutline')}
+            >
+              <DocumentBody
+                value={config.coreOutline}
+                onChange={value => update('coreOutline', value)}
+                placeholder={text('在标题下直接写正文，或点 AI 生成填充……', 'Write under this heading, or generate with AI…')}
+              />
+            </SettingSection>
+            <SettingSection
+              title={text('世界观 / 初始设定', 'World / initial setting')}
+              collapsed={Boolean(collapsedSections.worldSetting)}
+              onToggle={() => setCollapsedSections(current => ({ ...current, worldSetting: !current.worldSetting }))}
+              generating={generatingField === 'worldSetting'}
+              generateDisabled={generatingField != null}
+              onGenerate={() => void handleFieldGenerate('worldSetting')}
+            >
+              <DocumentBody
+                value={config.worldSetting}
+                onChange={value => update('worldSetting', value)}
+                placeholder={text('时代、地点、规则、冲突来源……', 'Era, place, rules, and sources of conflict…')}
+              />
+            </SettingSection>
+            <SettingSection
+              title={text('金手指 / 核心卖点', 'Protagonist advantage / core hook')}
+              collapsed={Boolean(collapsedSections.goldenFinger)}
+              onToggle={() => setCollapsedSections(current => ({ ...current, goldenFinger: !current.goldenFinger }))}
+              generating={generatingField === 'goldenFinger'}
+              generateDisabled={generatingField != null}
+              onGenerate={() => void handleFieldGenerate('goldenFinger')}
+            >
+              <DocumentBody
+                value={config.goldenFinger}
+                onChange={value => update('goldenFinger', value)}
+                placeholder={text('来源、机制、限制与代价……', 'Origin, mechanism, limits, and cost…')}
+              />
+            </SettingSection>
+            <SettingSection
+              title={text('主角人设', 'Protagonist profile')}
+              collapsed={Boolean(collapsedSections.protagonistProfile)}
+              onToggle={() => setCollapsedSections(current => ({ ...current, protagonistProfile: !current.protagonistProfile }))}
+              generating={generatingField === 'protagonistProfile'}
+              generateDisabled={generatingField != null}
+              onGenerate={() => void handleFieldGenerate('protagonistProfile')}
+            >
+              <DocumentBody
+                value={config.protagonistProfile}
+                onChange={value => update('protagonistProfile', value)}
+                placeholder={text('性格、背景、目标、弱点……', 'Personality, backstory, goal, and weakness…')}
+              />
+            </SettingSection>
+            <SettingSection
+              title={text('全局写作要求', 'Global writing guidance')}
+              collapsed={Boolean(collapsedSections.globalGuidance)}
+              onToggle={() => setCollapsedSections(current => ({ ...current, globalGuidance: !current.globalGuidance }))}
+              generating={generatingField === 'globalGuidance'}
+              generateDisabled={generatingField != null}
+              onGenerate={() => void handleFieldGenerate('globalGuidance')}
+            >
+              <DocumentBody
+                value={config.globalGuidance}
+                onChange={value => update('globalGuidance', value)}
+                placeholder={text('跨章节长期有效的规则……', 'Stable cross-chapter rules…')}
+              />
+            </SettingSection>
+            <SettingSection
+              title={text('文风配置', 'Writing style')}
+              collapsed={Boolean(collapsedSections.writingStyle)}
+              onToggle={() => setCollapsedSections(current => ({ ...current, writingStyle: !current.writingStyle }))}
+              generating={generatingField === 'writingStyle'}
+              generateDisabled={generatingField != null}
+              onGenerate={() => void handleFieldGenerate('writingStyle')}
+            >
+              <DocumentBody
+                value={config.writingStyle || ''}
+                onChange={value => update('writingStyle', value)}
+                placeholder={text('节奏、对话、描写密度……', 'Pacing, dialogue, and descriptive density…')}
+              />
+            </SettingSection>
+            <SettingSection
+              title={text('参考作品', 'Reference works')}
+              collapsed={Boolean(collapsedSections.referenceWorks)}
+              onToggle={() => setCollapsedSections(current => ({ ...current, referenceWorks: !current.referenceWorks }))}
+            >
+              <DocumentBody
+                value={config.referenceWorks || ''}
+                onChange={value => update('referenceWorks', value)}
+                placeholder={text('参考哪些作品的风格或体系……', 'Which works should inform style or systems…')}
+              />
+            </SettingSection>
+          </SettingDocument>
         </div>
       </div>
 
@@ -456,30 +474,16 @@ function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
   )
 }
 
-/** 表单分组 — 支持右上角 AI 生成按钮 */
+/** 表单分组 */
 function Section({
   title,
   desc,
   children,
-  aiFieldKey,
-  generatingField,
-  onAIGenerate,
 }: {
   title: string
   desc?: string
   children: React.ReactNode
-  /** 对应 NovelConfig 中的字段 key，传入则显示 AI 生成按钮 */
-  aiFieldKey?: GeneratableField
-  /** 当前正在生成的字段（全局共享状态，防止并发） */
-  generatingField?: GeneratableField | null
-  /** AI 生成回调 */
-  onAIGenerate?: (fieldKey: GeneratableField) => void
 }) {
-  const text = useLocaleStore(s => s.text)
-  const isGenerating = aiFieldKey != null && generatingField === aiFieldKey
-  const isAnyGenerating = generatingField != null
-  const showAIButton = aiFieldKey != null && onAIGenerate != null
-
   return (
     <div className="p-4 rounded-xl bg-[var(--color-sidebar)] border border-[var(--color-border)]">
       <div className="flex items-start justify-between mb-3">
@@ -487,25 +491,111 @@ function Section({
           <h3 className="text-sm font-semibold text-[var(--color-text)]">{title}</h3>
           {desc && <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{desc}</p>}
         </div>
-        {showAIButton && (
-          <Button
-            variant="ai"
-            size="sm"
-            onClick={() => onAIGenerate(aiFieldKey)}
-            disabled={isAnyGenerating}
-            className="flex-shrink-0 ml-3"
-            title={isGenerating ? text('正在生成...', 'Generating...') : text(`AI 生成「${title}」`, `Generate “${title}” with AI`)}
-          >
-            {isGenerating
-              ? <Loader2 size={11} className="animate-spin" />
-              : <Sparkles size={11} />
-            }
-            {isGenerating ? text('生成中...', 'Generating...') : text('AI 生成', 'Generate with AI')}
-          </Button>
-        )}
       </div>
       {children}
     </div>
+  )
+}
+
+function SettingDocument({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="px-5 py-4 rounded-xl border"
+      style={{
+        backgroundColor: 'var(--color-editor-bg)',
+        borderColor: 'var(--color-border)',
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
+function SettingSection({
+  title,
+  collapsed,
+  onToggle,
+  generating = false,
+  generateDisabled = false,
+  onGenerate,
+  children,
+}: {
+  title: string
+  collapsed: boolean
+  onToggle: () => void
+  generating?: boolean
+  generateDisabled?: boolean
+  onGenerate?: () => void
+  children: React.ReactNode
+}) {
+  const text = useLocaleStore(s => s.text)
+  return (
+    <section className="mb-1">
+      <div
+        className="flex items-center gap-2 py-2"
+        style={{ borderBottom: '1px solid var(--color-border)' }}
+      >
+        <button
+          type="button"
+          className="flex h-5 w-5 items-center justify-center rounded-sm shrink-0"
+          style={{ color: 'var(--color-text-muted)' }}
+          title={collapsed ? text('展开', 'Expand') : text('收起', 'Collapse')}
+          aria-expanded={!collapsed}
+          onClick={onToggle}
+        >
+          <ChevronDown size={14} style={{ transform: collapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 120ms' }} />
+        </button>
+        <h3 className="text-sm font-semibold m-0" style={{ color: 'var(--color-text)' }}>{title}</h3>
+        {onGenerate && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto shrink-0"
+            onClick={onGenerate}
+            disabled={generateDisabled}
+            title={generating ? text('正在生成...', 'Generating...') : text('AI 生成', 'Generate with AI')}
+          >
+            {generating ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
+            {generating ? text('生成中...', 'Generating...') : text('AI 生成', 'Generate with AI')}
+          </Button>
+        )}
+      </div>
+      {!collapsed && children}
+    </section>
+  )
+}
+
+function DocumentBody({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string
+  onChange: (value: string) => void
+  placeholder: string
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.max(el.scrollHeight, 72)}px`
+  }, [value])
+
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      onChange={event => onChange(event.target.value)}
+      placeholder={placeholder}
+      rows={3}
+      className="w-full resize-none bg-transparent px-1 py-2 text-sm outline-none"
+      style={{
+        color: 'var(--color-text)',
+        minHeight: 72,
+        lineHeight: 1.7,
+      }}
+    />
   )
 }
 

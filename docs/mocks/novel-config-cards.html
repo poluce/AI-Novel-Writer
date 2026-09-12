@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>小说配置 · 一份 Markdown 文档示意</title>
+  <style>
+    :root {
+      --bg: #f6f1ea;
+      --paper: #fffdf9;
+      --border: #e4d8cc;
+      --text: #2c241c;
+      --muted: #7a6c60;
+      --accent: #b5402c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 16px/1.7 "Source Han Serif SC", "Noto Serif SC", Georgia, serif;
+      color: var(--text);
+      background: var(--bg);
+    }
+    .page { max-width: 760px; margin: 0 auto; padding: 28px 20px 96px; }
+    .note {
+      font: 13px/1.5 "PingFang SC", sans-serif;
+      color: var(--muted);
+      margin: 0 0 20px;
+    }
+    .paper {
+      background: var(--paper);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 28px 36px 40px;
+      min-height: 70vh;
+    }
+    h1.doc-title {
+      font-size: 22px;
+      font-weight: 600;
+      margin: 0 0 8px;
+    }
+    .doc-sub { font-size: 13px; color: var(--muted); margin-bottom: 28px; }
+    .section { margin: 0 0 8px; }
+    .heading {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 28px 0 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+    .heading h2 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+      user-select: none;
+    }
+    button.fold {
+      flex: 0 0 22px;
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 11px;
+      line-height: 22px;
+    }
+    button.fold:hover { color: var(--text); }
+    .section.collapsed .body { display: none; }
+    .section.collapsed .heading { margin-bottom: 0; }
+    button.ai {
+      font: 12px/1 "PingFang SC", sans-serif;
+      margin-left: auto;
+      border: 1px solid var(--accent);
+      background: transparent;
+      color: var(--accent);
+      border-radius: 999px;
+      padding: 5px 12px;
+      cursor: pointer;
+    }
+    button.ai:hover { background: var(--accent); color: #fff; }
+    button.ai.busy { opacity: 0.6; pointer-events: none; }
+    .body {
+      min-height: 4.5em;
+      outline: none;
+      white-space: pre-wrap;
+      padding: 4px 2px 16px;
+    }
+    .body:empty::before {
+      content: attr(data-placeholder);
+      color: var(--muted);
+      font-style: italic;
+    }
+    .body:focus { background: #fff8f0; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <p class="note">
+      示意：整页是<strong>一份</strong> Markdown 文档。
+      标题左侧可展开/收起这一节。旁边的「AI 生成」只填/改该节正文。
+    </p>
+    <article class="paper">
+      <h1 class="doc-title">小说配置</h1>
+      <div class="doc-sub">类型、章数等短字段仍在上面的表单（本页不画）。下面长设定合成一篇文档。</div>
+
+      <section class="section" data-key="coreOutline">
+        <div class="heading">
+          <button type="button" class="fold" aria-expanded="true" title="收起">▼</button>
+          <h2>核心大纲</h2>
+          <button type="button" class="ai">AI 生成</button>
+        </div>
+        <div class="body" contenteditable="true" data-placeholder="在标题下直接写正文，或点 AI 生成填充……"></div>
+      </section>
+
+      <section class="section" data-key="worldSetting">
+        <div class="heading">
+          <button type="button" class="fold" aria-expanded="true" title="收起">▼</button>
+          <h2>世界观 / 初始设定</h2>
+          <button type="button" class="ai">AI 生成</button>
+        </div>
+        <div class="body" contenteditable="true" data-placeholder="时代、地点、规则、冲突来源……"></div>
+      </section>
+
+      <section class="section" data-key="goldenFinger">
+        <div class="heading">
+          <button type="button" class="fold" aria-expanded="true" title="收起">▼</button>
+          <h2>金手指 / 核心卖点</h2>
+          <button type="button" class="ai">AI 生成</button>
+        </div>
+        <div class="body" contenteditable="true" data-placeholder="来源、机制、限制与代价……"></div>
+      </section>
+
+      <section class="section" data-key="protagonistProfile">
+        <div class="heading">
+          <button type="button" class="fold" aria-expanded="true" title="收起">▼</button>
+          <h2>主角人设</h2>
+          <button type="button" class="ai">AI 生成</button>
+        </div>
+        <div class="body" contenteditable="true" data-placeholder="性格、背景、目标、弱点……"></div>
+      </section>
+
+      <section class="section" data-key="globalGuidance">
+        <div class="heading">
+          <button type="button" class="fold" aria-expanded="true" title="收起">▼</button>
+          <h2>全局写作要求</h2>
+          <button type="button" class="ai">AI 生成</button>
+        </div>
+        <div class="body" contenteditable="true" data-placeholder="跨章节长期有效的规则……"></div>
+      </section>
+
+      <section class="section" data-key="writingStyle">
+        <div class="heading">
+          <button type="button" class="fold" aria-expanded="true" title="收起">▼</button>
+          <h2>文风配置</h2>
+          <button type="button" class="ai">AI 生成</button>
+        </div>
+        <div class="body" contenteditable="true" data-placeholder="节奏、对话、描写密度……"></div>
+      </section>
+
+      <section class="section" data-key="referenceWorks">
+        <div class="heading">
+          <button type="button" class="fold" aria-expanded="true" title="收起">▼</button>
+          <h2>参考作品</h2>
+        </div>
+        <div class="body" contenteditable="true" data-placeholder="参考哪些作品的风格或体系（本项示意不带 AI）……"></div>
+      </section>
+    </article>
+  </div>
+  <script>
+    const samples = {
+      coreOutline: '码头学徒林舟发现港城潮汐被伪造。他必须在永夜吞没城市前找回真正的太阳，否则所有人会把谎言当成季节。\n\n开局揭穿潮表 → 中段祭司用安定换记忆 → 终章太阳从未离开，只是被藏进人口中。',
+      worldSetting: '永夜将至的港口城邦。潮汐由「潮门」官方发布，民间不得私测天象。稀缺的是真实的白天，权力来自解释季节的资格。',
+      goldenFinger: '林舟能听见潮水里被删掉的那一拍。能力随诚实使用而增强，一旦用它说谎，听力会永久少一截。',
+      protagonistProfile: '外表顺从的学徒，实际记仇且极怕被当成傻子。想证明自己看见过太阳。弱点是太需要被相信。',
+      globalGuidance: '1. 不解释金手指原理\n2. 每章至少一个可被下一章回收的具体物件\n3. 禁止旁白替角色做道德判断',
+      writingStyle: '短句推动作。长句只留给潮水和谎言。对话少形容词，信息藏在停顿里。',
+    }
+
+    document.querySelectorAll('.section').forEach(section => {
+      const key = section.dataset.key
+      const body = section.querySelector('.body')
+      const fold = section.querySelector('.fold')
+      const btn = section.querySelector('.ai')
+      fold.addEventListener('click', () => {
+        const collapsed = section.classList.toggle('collapsed')
+        fold.textContent = collapsed ? '▶' : '▼'
+        fold.title = collapsed ? '展开' : '收起'
+        fold.setAttribute('aria-expanded', collapsed ? 'false' : 'true')
+      })
+      if (!btn) return
+      btn.addEventListener('click', () => {
+        btn.classList.add('busy')
+        btn.textContent = '生成中…'
+        setTimeout(() => {
+          const existing = body.innerText.trim()
+          body.textContent = existing
+            ? existing + '\n\n（再次生成：在原文基础上改写的示意）\n' + samples[key]
+            : samples[key]
+          btn.classList.remove('busy')
+          btn.textContent = 'AI 生成'
+          body.focus()
+        }, 400)
+      })
+    })
+  </script>
+</body>
+</html>
