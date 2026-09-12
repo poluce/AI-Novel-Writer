@@ -22,6 +22,7 @@ import {
 } from '../shared/project-session-context'
 import { useProjectStore } from './project-store'
 import { useLocaleStore } from './locale-store'
+import { logFailure } from '../shared/fail-log'
 import {
   normalizeWorkflowResourceKeys,
   workflowResourceClaimsConflict,
@@ -624,7 +625,9 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
     ), uiLocale)
 
     // 自动联动：打开右侧面板的 AI 输出视图（非阻塞 import 避免循环依赖）
-    import('./layout-store').then(m => m.useLayoutStore.getState().openRightPanel('ai-output')).catch(() => {})
+    import('./layout-store').then(m => m.useLayoutStore.getState().openRightPanel('ai-output')).catch((error) => {
+      logFailure('Workflow', 'failed to open AI output panel', error, { runId: run.id })
+    })
 
     // 创建执行上下文
     const context: WorkflowContext = {

@@ -9,6 +9,7 @@ import { projectSessionContextFromProject } from '../../shared/project-session-c
 import { ipc } from '../ipc-client'
 import { useLLMStore } from '../../stores/llm-store'
 import { useProjectStore } from '../../stores/project-store'
+import { logFailure } from '../../shared/fail-log'
 import {
   assertGenerationHarnessPolicy,
   createGenerationHarness,
@@ -173,15 +174,26 @@ function createDefaultEnvironment(): GenerationRuntimeEnvironment {
           cleanup()
           resolve(completion)
         }
-        const fail = () => {
+        const fail = (error?: unknown) => {
           if (settled) return
           settled = true
           cleanup()
+          logFailure('Generation', 'leased stream failed', error, {
+            purpose: request.purpose,
+            leaseId: request.leaseId,
+          })
           reject(new Error('模型租约请求失败'))
         }
         const cancel = () => {
-          if (requestId) llmStore.cancelGeneration(requestId).catch(() => {})
-          fail()
+          if (requestId) {
+            llmStore.cancelGeneration(requestId).catch((cancelError) => {
+              logFailure('Generation', 'cancel leased stream failed', cancelError, {
+                purpose: request.purpose,
+                requestId,
+              })
+            })
+          }
+          fail(request.signal.reason ?? new Error('aborted'))
         }
         request.signal.addEventListener('abort', cancel, { once: true })
         if (request.signal.aborted) {

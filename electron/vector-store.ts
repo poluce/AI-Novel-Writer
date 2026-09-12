@@ -9,6 +9,7 @@ import { Field, FixedSizeList as ArrowFixedSizeList, Float32, Int32, Utf8, Schem
 import fs from 'node:fs'
 import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
+import { logFailure } from '../src/shared/fail-log'
 
 // ===== 类型定义 =====
 
@@ -508,8 +509,8 @@ async function appendCanonicalRecords(
 async function ensureTextIndex(table: lancedb.Table): Promise<void> {
   try {
     await table.createIndex('text', { config: lancedb.Index.fts() })
-  } catch {
-    // 已有索引和不支持 FTS 的旧 LanceDB 都不应阻断文本写入。
+  } catch (error) {
+    logFailure('VectorStore', 'FTS index create skipped or failed', error)
   }
 }
 
@@ -1315,7 +1316,8 @@ export async function listDocuments(projectPath: string): Promise<DocumentInfo[]
       filePath: row.filePath || '',
       corpusKind: row.corpusKind ?? 'unknown',
     }))
-  } catch {
+  } catch (error) {
+    logFailure('VectorStore', 'listDocuments failed', error, { projectPath })
     return []
   }
 }

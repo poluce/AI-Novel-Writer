@@ -12,6 +12,7 @@ import {
 import type { ImportedChapter } from './import-novel.command'
 import { promptLanguageText } from '../../prompt-language'
 import type { WritingLanguage } from '../../../shared/writing-language'
+import { logFailure } from '../../../shared/fail-log'
 
 export interface AnalyzeWritingStyleOptions {
   sampleText?: string
@@ -79,7 +80,8 @@ export class AnalyzeWritingStyleCommand extends BaseWorkflowCommand<string> {
           `  已采样 ${sampleTexts.length} 章正文`,
           `  Sampled ${sampleTexts.length} ${sampleTexts.length === 1 ? 'chapter' : 'chapters'}`,
         ))
-      } catch {
+      } catch (error) {
+        logFailure('Style', 'failed to sample finalized chapters', error)
         callbacks.log(text('提取定稿内容失败', 'Failed to read finalized chapter content.'))
         return ''
       }

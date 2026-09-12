@@ -11,6 +11,7 @@ import { createGenerationRuntime } from '../../services/generation/generation-ru
 import type { GenerationReasoningStage } from '../../shared/reasoning-types'
 import { countDraftUnits } from '../../shared/draft-units'
 import { useLocaleStore } from '../../stores/locale-store'
+import { logFailure } from '../../shared/fail-log'
 import { useProjectStore } from '../../stores/project-store'
 import { getActiveProjectSessionContext } from '../../shared/project-session-context'
 import { resolveWritingLanguage } from '../../shared/writing-language'
@@ -328,6 +329,11 @@ export default function CodeMirrorEditor({
         ],
       }))
       if (outcome.status !== 'completed' || outcome.finishReason !== 'stop') {
+        logFailure('EditorAI', 'inline generation did not complete', undefined, {
+          status: outcome.status,
+          finishReason: outcome.finishReason,
+          action: action.key,
+        })
         if (requestSequence !== aiRequestSequenceRef.current) return
         setAiResult('')
         setAiError(uiText('生成未完整完成，结果不可应用', 'Generation did not complete; the result cannot be applied.'))
@@ -336,12 +342,14 @@ export default function CodeMirrorEditor({
       if (requestSequence !== aiRequestSequenceRef.current) return
       setAiResult(outcome.content)
     } catch (e) {
-      console.error(e)
+      logFailure('EditorAI', 'inline generation threw', e, { action: action.key })
       if (requestSequence !== aiRequestSequenceRef.current) return
       setAiResult('')
       setAiError(uiText('生成失败，结果不可应用', 'Generation failed; the result cannot be applied.'))
     } finally {
-      await runtime?.close().catch(() => {})
+      await runtime?.close().catch((closeError) => {
+        logFailure('EditorAI', 'generation runtime close failed', closeError)
+      })
     }
   }
 

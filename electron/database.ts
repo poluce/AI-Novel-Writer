@@ -1057,8 +1057,8 @@ function createTables(db: BetterSqlite3.Database, importSourceSecret?: Buffer) {
         AND IFNULL(cs_key_items, '') = ''
         AND IFNULL(cs_recent_events, '') = ''
     `).run()
-  } catch {
-    // 旧库结构差异时忽略
+  } catch (error) {
+    console.warn('[Vela DB] skipped cs_updated_at_chapter sentinel migration', error)
   }
 
   migrateDraftUnitCounts(db)

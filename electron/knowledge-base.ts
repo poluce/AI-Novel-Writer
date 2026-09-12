@@ -15,6 +15,7 @@ import { chunkText, generateEmbeddings } from './embedding'
 import { normalizeEmbeddingOptions, type EmbeddingOptions } from '../src/shared/embedding-options'
 import type { ImportRunExecutionAuthority } from '../src/shared/import-run'
 import { EmbeddingResponseValidationError } from './services/embedding-response-error'
+import { logFailure } from '../src/shared/fail-log'
 import {
   LEGACY_VECTOR_MIGRATION_BLOCKED,
   LegacyVectorMigrationBlockedError,
@@ -204,8 +205,11 @@ export async function searchKnowledge(
       if (vec && vec.length > 0) {
         queryVector = vec
       }
-    } catch {
-      // Embedding 不可用，降级为 FTS
+    } catch (error) {
+      logFailure('Knowledge', 'embedding query failed; falling back to FTS', error, {
+        projectPath,
+        modelName: model.modelName,
+      })
     }
   }
 
