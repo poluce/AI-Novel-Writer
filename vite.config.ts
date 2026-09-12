@@ -36,6 +36,9 @@ export default defineConfig({
               // Pi 是 ESM-only（exports 只有 "import"），主进程产物同为 ESM，
               // 故走 external + 静态 import（P0 打包结论：不打包、不切格式）。
               /^@earendil-works\/pi-(ai|agent-core)(\/|$)/,
+              // MCP SDK 依赖 CJS `cross-spawn`，打进 ESM 主进程会变成
+              // `__require("child_process")` 并在启动时炸掉。
+              /^@modelcontextprotocol\/sdk(\/|$)/,
             ]
           }
         }

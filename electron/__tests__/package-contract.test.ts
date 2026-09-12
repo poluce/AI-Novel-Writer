@@ -56,6 +56,7 @@ describe('release dependency contract', () => {
 
     const viteConfig = readFileSync('vite.config.ts', 'utf8')
     expect(viteConfig).toContain('/^@earendil-works\\/pi-(ai|agent-core)(\\/|$)/')
+    expect(viteConfig).toContain('/^@modelcontextprotocol\\/sdk(\\/|$)/')
 
     const safeFileSystem = readFileSync('electron/security/windows-safe-file-system.ts', 'utf8')
     const safeFileSystemHelper = readFileSync('electron/security/windows-safe-file-system.ps1', 'utf8')
