@@ -21,7 +21,6 @@ import { useLocaleStore } from '../../stores/locale-store'
 /** 左侧侧边栏视图按钮配置（不含 Home，它单独渲染） */
 const sidebarActivities: Array<{ id: SidebarView; icon: typeof FolderOpen; zh: string; en: string }> = [
   { id: 'project', icon: FolderOpen, zh: '项目', en: 'Project' },
-  { id: 'knowledge', icon: BookOpen, zh: '小说', en: 'Novel' },
   { id: 'characters', icon: Users, zh: '角色', en: 'Cast' },
 ]
 
@@ -177,6 +176,13 @@ export default function LeftToolWindowBar() {
               'plot-tree',
             )
           }}
+        />
+        <LeftNavButton
+          icon={BookOpen}
+          label={text('知识库', 'Knowledge')}
+          active={activeRailItem === 'knowledge'}
+          title={text('知识库', 'Knowledge base')}
+          onClick={() => setSidebarView('knowledge')}
         />
       </div>
 
