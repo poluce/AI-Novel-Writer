@@ -309,41 +309,35 @@ function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
                 />
               </Field>
             </div>
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 items-end mt-4">
+            <div className="grid grid-cols-4 gap-4 mt-4 items-end">
               <Field label={text('沉寂提醒阈值（章）', 'Dormant reminder threshold (chapters)')} htmlFor="narrative-thread-dormant-threshold">
-                <Input
-                  id="narrative-thread-dormant-threshold"
-                  type="number"
-                  min={MIN_NARRATIVE_THREAD_DORMANT_THRESHOLD}
-                  max={MAX_NARRATIVE_THREAD_DORMANT_THRESHOLD}
-                  value={dormantThreshold}
-                  onChange={event => update(
-                    'narrativeThreadDormantChapterThreshold',
-                    resolveNarrativeThreadDormantThreshold(Number(event.target.value)),
-                  )}
-                />
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    id="narrative-thread-dormant-threshold"
+                    type="number"
+                    min={MIN_NARRATIVE_THREAD_DORMANT_THRESHOLD}
+                    max={MAX_NARRATIVE_THREAD_DORMANT_THRESHOLD}
+                    value={dormantThreshold}
+                    onChange={event => update(
+                      'narrativeThreadDormantChapterThreshold',
+                      resolveNarrativeThreadDormantThreshold(Number(event.target.value)),
+                    )}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => update(
+                      'narrativeThreadDormantChapterThreshold',
+                      DEFAULT_NARRATIVE_THREAD_DORMANT_THRESHOLD,
+                    )}
+                    title={text('恢复默认值', 'Restore default')}
+                    aria-label={text('恢复默认值', 'Restore default')}
+                  >
+                    <RotateCcw size={13} />
+                  </Button>
+                </div>
               </Field>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => update(
-                  'narrativeThreadDormantChapterThreshold',
-                  DEFAULT_NARRATIVE_THREAD_DORMANT_THRESHOLD,
-                )}
-              >
-                <RotateCcw size={13} />{text('恢复默认值', 'Restore default')}
-              </Button>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-              <span>{text('作用范围：当前项目', 'Scope: this project')}</span>
-              <span>{text(
-                `产品默认值：${DEFAULT_NARRATIVE_THREAD_DORMANT_THRESHOLD} 章`,
-                `Product default: ${DEFAULT_NARRATIVE_THREAD_DORMANT_THRESHOLD} chapters`,
-              )}</span>
-              <span>{text(
-                `当前生效值：${dormantThreshold} 章`,
-                `Effective now: ${dormantThreshold} chapters`,
-              )}</span>
             </div>
           </Section>
 

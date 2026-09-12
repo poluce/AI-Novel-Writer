@@ -245,16 +245,13 @@ describe('project writing language', () => {
     await mount(<NovelConfigEditor projectKey={currentProject.path} />)
     await expect.element(page.getByText('基本信息', { exact: true })).toBeVisible()
     await expect.element(page.getByText('沉寂提醒阈值（章）', { exact: true })).toBeVisible()
-    await expect.element(page.getByText('作用范围：当前项目', { exact: true })).toBeVisible()
-    await expect.element(page.getByText('产品默认值：3 章', { exact: true })).toBeVisible()
-    await expect.element(page.getByText('当前生效值：9 章', { exact: true })).toBeVisible()
     const threshold = document.getElementById('narrative-thread-dormant-threshold')
     if (!(threshold instanceof HTMLInputElement)) throw new Error('Missing narrative thread threshold input')
     expect({ value: threshold.value, min: threshold.min, max: threshold.max }).toEqual({ value: '9', min: '1', max: '50' })
 
     await act(async () => page.getByRole('button', { name: '恢复默认值' }).click())
     expect(useProjectStore.getState().currentProject?.novelConfig.narrativeThreadDormantChapterThreshold).toBe(3)
-    await expect.element(page.getByText('当前生效值：3 章', { exact: true })).toBeVisible()
+    expect(document.getElementById('narrative-thread-dormant-threshold')).toMatchObject({ value: '3' })
 
     await act(async () => {
       useLocaleStore.setState({ locale: 'en-US' })
@@ -262,8 +259,5 @@ describe('project writing language', () => {
     })
     await expect.element(page.getByText('Basic information', { exact: true })).toBeVisible()
     await expect.element(page.getByText('Dormant reminder threshold (chapters)', { exact: true })).toBeVisible()
-    await expect.element(page.getByText('Scope: this project', { exact: true })).toBeVisible()
-    await expect.element(page.getByText('Product default: 3 chapters', { exact: true })).toBeVisible()
-    await expect.element(page.getByText('Effective now: 3 chapters', { exact: true })).toBeVisible()
   })
 })
