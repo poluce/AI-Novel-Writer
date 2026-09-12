@@ -196,7 +196,7 @@ function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
         <div className="space-y-5">
           {/* 基本信息 */}
           <Section title={text('基本信息', 'Basic information')}>
-            <div className="grid grid-cols-3 gap-4 mb-4 items-end">
+            <div className="grid grid-cols-3 gap-4">
               <Field label={text('写作语言', 'Writing language')} htmlFor="project-writing-language">
                 <NativeSelect
                   id="project-writing-language"
@@ -207,14 +207,6 @@ function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
                   <option value="en-US">English</option>
                 </NativeSelect>
               </Field>
-              <p className="col-span-2 text-xs leading-5 text-[var(--color-text-muted)]">
-                {text(
-                  '控制后续 AI 创作使用的内置指令语言；不会改变界面语言，也不会翻译已有内容。',
-                  'Controls the built-in instruction language for future AI writing. It does not change the interface language or translate existing content.',
-                )}
-              </p>
-            </div>
-            <div className="grid grid-cols-3 gap-4">
               <Field label={text('类型', 'Genre')}>
                 <NativeSelect value={config.genre} onChange={(e) => update('genre', e.target.value)}>
                   <option value="" disabled>{text('请选择类型', 'Select a genre')}</option>
