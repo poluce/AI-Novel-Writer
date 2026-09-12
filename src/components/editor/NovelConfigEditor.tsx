@@ -292,7 +292,24 @@ function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
               </Field>
             </div>
             <div className="grid grid-cols-4 gap-4 mt-4 items-end">
-              <Field label={text('写作语言', 'Writing language')} htmlFor="project-writing-language">
+              <Field
+                label={text('写作语言', 'Writing language')}
+                htmlFor="project-writing-language"
+                tipItems={[
+                  text(
+                    '用途：控制后续 AI 创作使用的内置指令语言',
+                    'Purpose: controls the built-in instruction language for later AI writing',
+                  ),
+                  text(
+                    '界面：不会改变软件界面语言',
+                    'Interface: does not change the app language',
+                  ),
+                  text(
+                    '已有内容：不会翻译已经写好的文字',
+                    'Existing text: does not translate what you already wrote',
+                  ),
+                ]}
+              >
                 <NativeSelect
                   id="project-writing-language"
                   value={resolveWritingLanguage(config.writingLanguage)}
@@ -302,7 +319,24 @@ function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
                   <option value="en-US">English</option>
                 </NativeSelect>
               </Field>
-              <Field label={text('沉寂提醒阈值（章）', 'Dormant reminder threshold (chapters)')} htmlFor="narrative-thread-dormant-threshold">
+              <Field
+                label={text('沉寂提醒阈值（章）', 'Dormant reminder threshold (chapters)')}
+                htmlFor="narrative-thread-dormant-threshold"
+                tipItems={[
+                  text(
+                    '提醒：线索连续若干章未推进后，在剧情「计划清单」上显示沉寂提醒',
+                    'Reminder: after several chapters without progress, the plot plan list flags the thread as dormant',
+                  ),
+                  text(
+                    '逾期：仍按该线索的预计回收章节即时计算，与此阈值无关',
+                    'Overdue: still computed from the thread’s expected payoff chapter, independent of this threshold',
+                  ),
+                  text(
+                    `默认：${DEFAULT_NARRATIVE_THREAD_DORMANT_THRESHOLD} 章，仅作用于当前项目`,
+                    `Default: ${DEFAULT_NARRATIVE_THREAD_DORMANT_THRESHOLD} chapters, this project only`,
+                  ),
+                ]}
+              >
                 <div className="flex items-center gap-1.5">
                   <Input
                     id="narrative-thread-dormant-threshold"
