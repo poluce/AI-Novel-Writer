@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Save, Sparkles, Info, Loader2, RotateCcw, ChevronDown } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
 import { registerEditorExitSaveHandler } from '../../stores/editor-store'
@@ -623,7 +624,17 @@ function Field({
   children: React.ReactNode
 }) {
   const [showTip, setShowTip] = useState(false)
-  const tipRef = useRef<HTMLDivElement>(null)
+  const iconRef = useRef<HTMLSpanElement>(null)
+  const [tipPos, setTipPos] = useState({ top: 0, left: 0 })
+
+  const openTip = () => {
+    const rect = iconRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const width = 260
+    const left = Math.max(8, Math.min(rect.left + rect.width / 2 - width / 2, window.innerWidth - width - 8))
+    setTipPos({ top: rect.top, left })
+    setShowTip(true)
+  }
 
   return (
     <div>
@@ -631,20 +642,19 @@ function Field({
         {label}
         {tipItems && tipItems.length > 0 && (
           <span
-            style={{ position: 'relative', display: 'inline-flex' }}
-            onMouseEnter={() => setShowTip(true)}
+            ref={iconRef}
+            style={{ display: 'inline-flex' }}
+            onMouseEnter={openTip}
             onMouseLeave={() => setShowTip(false)}
           >
             <Info size={11} style={{ opacity: 0.5 }} />
-            {showTip && (
+            {showTip && createPortal(
               <div
-                ref={tipRef}
                 style={{
-                  position: 'absolute',
-                  bottom: '100%',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  marginBottom: 6,
+                  position: 'fixed',
+                  top: tipPos.top,
+                  left: tipPos.left,
+                  transform: 'translateY(-100%) translateY(-6px)',
                   padding: '8px 12px',
                   borderRadius: 8,
                   fontSize: 11,
@@ -654,18 +664,19 @@ function Field({
                   background: 'var(--color-bg-elevated, var(--color-sidebar))',
                   border: '1px solid var(--color-border)',
                   boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
-                  zIndex: 9999,
+                  zIndex: 10000,
                   width: 260,
                   pointerEvents: 'none',
                 }}
               >
                 {tipItems.map((item, i) => (
-                  <div key={i} style={{ paddingLeft: 0 }}>
+                  <div key={i}>
                     <span style={{ color: 'var(--color-accent)', fontWeight: 600 }}>{item.split(/：|: /)[0]}</span>
                     {item.includes('：') ? '：' + item.split('：').slice(1).join('：') : ': ' + item.split(': ').slice(1).join(': ')}
                   </div>
                 ))}
-              </div>
+              </div>,
+              document.body,
             )}
           </span>
         )}
