@@ -531,9 +531,9 @@ export default function EditorArea({ onNewProject: _onNewProject }: EditorAreaPr
                 backgroundColor: activeTabId === tab.id
                   ? 'var(--color-tab-active)'
                   : 'transparent',
-                /* JetBrains 激活 Tab：顶部 2px 葵紫色指示线 */
+                /* 激活 Tab：底部 2px 指示线 */
                 boxShadow: activeTabId === tab.id
-                  ? 'inset 0 2px 0 var(--color-tab-indicator)'
+                  ? 'inset 0 -2px 0 var(--color-tab-indicator)'
                   : 'none',
                 /* 无竖分割线 */
                 borderRight: 'none',
