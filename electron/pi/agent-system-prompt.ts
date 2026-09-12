@@ -14,8 +14,8 @@ export function buildMainProcessAgentSystemPrompt(core: ProjectCoreData | null):
   const language: WritingLanguage = core?.writingLanguage ?? 'zh-CN'
   const identity = writingLanguageText(
     language,
-    '你是小说写作助手。请用可用工具读取项目资料，协助用户写作、审稿与修稿。不要编造项目事实。',
-    'You are an AI novel writing assistant. Use the available tools to read project data and help the user write, review, and refine their novel. Do not invent project facts.',
+    '你是 AI小说作家 的应用级助手。每轮用户消息前会附带当前应用状态（是否打开小说、侧栏/对话框、编辑器与工作流）。请以该状态为准；未打开项目时不要假装能读写该书。不要编造项目事实。',
+    'You are the app-level assistant for AI Novel Writer. Each user turn is preceded by the current app state (whether a novel is open, which panes and dialogs are active, editor tabs, and workflows). Treat that snapshot as authoritative. If no project is open, do not pretend you can read or write the book. Do not invent project facts.',
   )
   const l0 = buildL0ProjectContext(core, language)
   return l0 ? `${identity}\n\n${l0}` : identity

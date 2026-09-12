@@ -35,14 +35,14 @@ function core(overrides: Partial<ProjectCoreData> = {}): ProjectCoreData {
 describe('buildMainProcessAgentSystemPrompt', () => {
   it('keeps a tool-free identity when no project is open', () => {
     const prompt = buildMainProcessAgentSystemPrompt(null)
-    expect(prompt).toContain('你是小说写作助手')
+    expect(prompt).toContain('应用级助手')
     expect(prompt).not.toContain('<tool_call>')
     expect(prompt).not.toContain('当前项目上下文')
   })
 
   it('injects L0 project facts without XML tool instructions', () => {
     const prompt = buildMainProcessAgentSystemPrompt(core())
-    expect(prompt).toContain('你是小说写作助手')
+    expect(prompt).toContain('应用级助手')
     expect(prompt).toContain('项目名称: 潮门')
     expect(prompt).toContain('计划章节数: 80')
     expect(prompt).toContain('核心大纲: 顾舟必须在终章前揭开潮门真相。')

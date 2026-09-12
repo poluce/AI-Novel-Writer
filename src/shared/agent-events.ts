@@ -46,7 +46,36 @@ export interface AgentWorkflowSnapshot {
   stepCount: number
 }
 
+export interface AgentProjectSnapshot {
+  open: boolean
+  name?: string
+  path?: string
+}
+
+export interface AgentLayoutSnapshot {
+  sidebarView: string
+  rightView: string
+  bottomPanelOpen: boolean
+  bottomTab: string
+  settingsOpen: boolean
+  newProjectOpen: boolean
+  importNovelOpen: boolean
+  chapterCreationOpen: boolean
+}
+
+export interface AgentAppChange {
+  kind: 'project' | 'sidebar' | 'right_panel' | 'settings' | 'dialog'
+  from: string
+  to: string
+}
+
 export interface AgentEditorSnapshot {
   tabs: AgentEditorTabSnapshot[]
   workflow?: AgentWorkflowSnapshot
+  /** App-wide shell: which book is open, which pane is active. */
+  project?: AgentProjectSnapshot
+  recentProjects?: Array<{ name: string }>
+  layout?: AgentLayoutSnapshot
+  mcp?: { connectedServers: number; tools: number }
+  changes?: AgentAppChange[]
 }
