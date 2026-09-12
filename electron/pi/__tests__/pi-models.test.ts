@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { createPiModels, resolveGeminiBaseUrl, resolveGeminiModelIdentity } from '../pi-models'
+import { createPiModels, resolveGeminiBaseUrl } from '../pi-models'
 
 import type { ModelProfile } from '../../../src/shared/ipc-channels'
 
@@ -19,19 +19,6 @@ function profile(overrides: Partial<ModelProfile> = {}): ModelProfile {
     ...overrides,
   }
 }
-
-describe('resolveGeminiModelIdentity', () => {
-  it('keeps official ids unchanged', () => {
-    expect(resolveGeminiModelIdentity('gemini-2.5-flash')).toEqual({ id: 'gemini-2.5-flash' })
-  })
-
-  it('splits a thinking suffix used by custom Gemini UIs', () => {
-    expect(resolveGeminiModelIdentity('gemini-3.1-pro-low')).toEqual({
-      id: 'gemini-3.1-pro',
-      thinkingLevel: 'low',
-    })
-  })
-})
 
 describe('resolveGeminiBaseUrl', () => {
   it('appends v1beta for an antigravity-style custom root', () => {
@@ -77,10 +64,23 @@ describe('createPiModels', () => {
     expect(model.baseUrl).toBe('https://proxy.example.com/antigravity/v1beta')
   })
 
-  it('sends gemini-3.1-pro-low as gemini-3.1-pro to Google-compatible proxies', () => {
+  it('keeps vendor model ids that include a thinking suffix', () => {
     const { model } = createPiModels(profile({ modelName: 'gemini-3.1-pro-low' }))
-    expect(model.id).toBe('gemini-3.1-pro')
-    expect(model.name).toBe('gemini-3.1-pro-low')
+    expect(model.id).toBe('gemini-3.1-pro-low')
+  })
+
+  it('clamps Gemini maxOutputTokens that custom proxies reject', () => {
+    const { model } = createPiModels(profile({
+      maxTokens: 65_536,
+      capabilities: {
+        contextWindowTokens: 1_048_576,
+        maxOutputTokens: 65_536,
+        reasoning: true,
+        structuredOutput: true,
+        usage: true,
+      },
+    }))
+    expect(model.maxTokens).toBe(32_768)
   })
 
   it('derives context window and max tokens from verified capabilities when present', () => {

@@ -11,22 +11,8 @@ import type { ModelProfile } from '../../src/shared/ipc-channels'
 import { assertGenerationModelSupportsTools } from '../../src/shared/tool-calling-gate'
 import { logInfo } from '../../src/shared/fail-log'
 
-const GEMINI_THINKING_SUFFIX = /-(minimal|low|medium|high|none)$/i
-
-export interface GeminiModelIdentity {
-  id: string
-  thinkingLevel?: 'minimal' | 'low' | 'medium' | 'high'
-}
-
-/** Custom UIs often encode thinking as `gemini-3.1-pro-low`. Google wants `gemini-3.1-pro`. */
-export function resolveGeminiModelIdentity(modelName: string): GeminiModelIdentity {
-  const match = modelName.match(GEMINI_THINKING_SUFFIX)
-  if (!match) return { id: modelName }
-  const thinkingLevel = match[1].toLowerCase() as NonNullable<GeminiModelIdentity['thinkingLevel']> | 'none'
-  const id = modelName.slice(0, -match[0].length)
-  if (!id || thinkingLevel === 'none') return { id: id || modelName }
-  return { id, thinkingLevel }
-}
+/** Custom Gemini-compatible proxies reject 65536; 32768 is accepted. */
+const GEMINI_MAX_OUTPUT_TOKENS = 32_768
 
 export function resolveGeminiBaseUrl(baseUrl: string): string {
   const trimmed = baseUrl.replace(/\/+$/, '')
@@ -60,13 +46,16 @@ export interface PiModelRuntime {
 export function createPiModels(profile: ModelProfile): PiModelRuntime {
   assertGenerationModelSupportsTools(profile)
   const isGemini = profile.protocol === 'gemini'
-  const geminiIdentity = isGemini ? resolveGeminiModelIdentity(profile.modelName) : { id: profile.modelName }
   const baseUrl = isGemini ? resolveGeminiBaseUrl(profile.baseUrl) : profile.baseUrl
-  if (isGemini && geminiIdentity.id !== profile.modelName) {
-    logInfo('LLM', 'stripped Gemini thinking suffix from model id', {
-      configured: profile.modelName,
-      resolved: geminiIdentity.id,
-      thinkingLevel: geminiIdentity.thinkingLevel,
+  const requestedMax = profile.capabilities?.maxOutputTokens ?? profile.maxTokens
+  const maxTokens = isGemini && requestedMax > GEMINI_MAX_OUTPUT_TOKENS
+    ? GEMINI_MAX_OUTPUT_TOKENS
+    : requestedMax
+  if (isGemini && maxTokens !== requestedMax) {
+    logInfo('LLM', 'clamped Gemini maxOutputTokens', {
+      modelName: profile.modelName,
+      requested: requestedMax,
+      clamped: maxTokens,
     })
   }
 
@@ -84,7 +73,7 @@ export function createPiModels(profile: ModelProfile): PiModelRuntime {
   }
 
   const piModel: PiChatModel = {
-    id: geminiIdentity.id,
+    id: profile.modelName,
     name: profile.modelName,
     api: model.api,
     provider: profile.provider,
@@ -93,7 +82,7 @@ export function createPiModels(profile: ModelProfile): PiModelRuntime {
     input: ['text'],
     cost: ZERO_COST,
     contextWindow: profile.capabilities?.contextWindowTokens ?? 1_000_000,
-    maxTokens: profile.capabilities?.maxOutputTokens ?? profile.maxTokens,
+    maxTokens,
   }
 
   const provider = createProvider({
