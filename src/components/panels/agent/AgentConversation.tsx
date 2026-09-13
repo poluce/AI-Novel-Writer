@@ -1,12 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowDown, Trash2, Workflow } from 'lucide-react'
+import { ArrowDown, Info, Trash2, Workflow } from 'lucide-react'
 import { selectIsGenerating, useAgentStore } from '../../../stores/agent-store'
 import { useLayoutStore } from '../../../stores/layout-store'
+import { useProjectStore } from '../../../stores/project-store'
 import { APP_BRAND } from '../../../shared/brand'
+import { resolveWritingLanguage } from '../../../shared/writing-language'
+import { captureAgentEditorSnapshot } from '../../../services/agent/editor-snapshot'
+import { buildL1AgentContext } from '../../../services/agent/l1-context'
 import AgentMessage from './AgentMessage'
 import AgentInputBox from './AgentInputBox'
 import { formatRelativeTime } from '../../../utils/time'
 import { useLocaleStore } from '../../../stores/locale-store'
+import {
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+} from '../../ui/Dialog'
 
 /**
  * 对话区域主组件
@@ -200,13 +207,47 @@ function ActiveConversation() {
  */
 function AgentToolbar() {
   const text = useLocaleStore(s => s.text)
+  const locale = useLocaleStore(s => s.locale)
   const openRightPanel = useLayoutStore(s => s.openRightPanel)
+  const [contextOpen, setContextOpen] = useState(false)
+  const [contextText, setContextText] = useState('')
+
+  const openTurnContext = () => {
+    const project = useProjectStore.getState().currentProject
+    const language = project
+      ? resolveWritingLanguage(project.novelConfig.writingLanguage)
+      : locale
+    const snapshot = captureAgentEditorSnapshot({ commitSurface: false })
+    setContextText(buildL1AgentContext(snapshot, language) ?? '')
+    setContextOpen(true)
+  }
 
   return (
-    <div className="flex items-center justify-end mb-1.5">
-
-      {/* 右侧：打开 AI 输出面板 */}
+    <div className="flex items-center justify-between gap-2 mb-1.5">
       <button
+        type="button"
+        onClick={openTurnContext}
+        className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all select-none"
+        style={{
+          color: 'var(--color-text-muted)',
+          border: '1px solid var(--color-border)',
+        }}
+        title={text('查看本轮发给助手的额外上下文', 'View extra context sent with this turn')}
+        onMouseEnter={e => {
+          e.currentTarget.style.backgroundColor = 'var(--color-hover)'
+          e.currentTarget.style.color = 'var(--color-text)'
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.backgroundColor = 'transparent'
+          e.currentTarget.style.color = 'var(--color-text-muted)'
+        }}
+      >
+        <Info size={12} strokeWidth={1.75} />
+        {text('本轮上下文', 'Turn context')}
+      </button>
+
+      <button
+        type="button"
         onClick={() => openRightPanel('ai-output')}
         className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all select-none"
         style={{
@@ -226,6 +267,36 @@ function AgentToolbar() {
         <Workflow size={12} strokeWidth={1.75} />
         {text('AI 工作流', 'AI workflow')}
       </button>
+
+      <Dialog open={contextOpen} onOpenChange={setContextOpen} modal={false}>
+        <DialogContent
+          overlay={false}
+          className="max-w-[520px]"
+          onInteractOutside={event => event.preventDefault()}
+          onPointerDownOutside={event => event.preventDefault()}
+          onFocusOutside={event => event.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>{text('本轮上下文', 'This turn’s context')}</DialogTitle>
+            <DialogDescription>
+              {text(
+                '发送下一条消息时附带的应用状态。不含系统提示词，也不含文件正文。',
+                'App state attached to the next message. This is not the system prompt and does not include file bodies.',
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <pre
+            className="mx-5 mb-5 mt-3 max-h-[50vh] overflow-y-auto whitespace-pre-wrap rounded-md px-3 py-2 text-xs leading-relaxed"
+            style={{
+              backgroundColor: 'var(--color-editor-bg)',
+              border: '1px solid var(--color-border)',
+              color: 'var(--color-text)',
+            }}
+          >
+            {contextText || text('（本轮没有额外上下文）', '(No extra context this turn)')}
+          </pre>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

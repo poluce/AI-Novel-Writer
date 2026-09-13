@@ -64,7 +64,7 @@ function diffSurface(previous: PreviousAppSurface | null, next: PreviousAppSurfa
 }
 
 /** Capture app shell + current-project editor tabs for one Agent turn. */
-export function captureAgentEditorSnapshot(): AgentEditorSnapshot {
+export function captureAgentEditorSnapshot(options?: { commitSurface?: boolean }): AgentEditorSnapshot {
   const projectState = useProjectStore.getState()
   const current = projectState.currentProject
   const project: AgentProjectSnapshot = current
@@ -123,7 +123,7 @@ export function captureAgentEditorSnapshot(): AgentEditorSnapshot {
     chapterCreationOpen: layout.chapterCreationOpen,
   }
   const changes = diffSurface(previousSurface, surface)
-  previousSurface = surface
+  if (options?.commitSurface !== false) previousSurface = surface
 
   return {
     tabs,
