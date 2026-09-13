@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { ArrowDown, Info, Trash2, Workflow } from 'lucide-react'
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import { ArrowDown, FileText, Info, Trash2, Workflow } from 'lucide-react'
 import { selectIsGenerating, useAgentStore } from '../../../stores/agent-store'
 import { useLayoutStore } from '../../../stores/layout-store'
 import { useProjectStore } from '../../../stores/project-store'
@@ -11,6 +11,7 @@ import AgentMessage from './AgentMessage'
 import AgentInputBox from './AgentInputBox'
 import { formatRelativeTime } from '../../../utils/time'
 import { useLocaleStore } from '../../../stores/locale-store'
+import { ipc } from '../../../services/ipc-client'
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '../../ui/Dialog'
@@ -205,12 +206,32 @@ function ActiveConversation() {
  * 左侧：快速引用按钮（架构、角色、蓝图）
  * 右侧：打开 AI 输出面板按钮
  */
+function toolbarChipStyle() {
+  return {
+    color: 'var(--color-text-muted)',
+    border: '1px solid var(--color-border)',
+  } as const
+}
+
 function AgentToolbar() {
   const text = useLocaleStore(s => s.text)
   const locale = useLocaleStore(s => s.locale)
   const openRightPanel = useLayoutStore(s => s.openRightPanel)
-  const [contextOpen, setContextOpen] = useState(false)
-  const [contextText, setContextText] = useState('')
+  const [inspect, setInspect] = useState<{
+    kind: 'system' | 'turn'
+    body: string
+  } | null>(null)
+
+  const chipHover = {
+    onMouseEnter: (e: MouseEvent<HTMLButtonElement>) => {
+      e.currentTarget.style.backgroundColor = 'var(--color-hover)'
+      e.currentTarget.style.color = 'var(--color-text)'
+    },
+    onMouseLeave: (e: MouseEvent<HTMLButtonElement>) => {
+      e.currentTarget.style.backgroundColor = 'transparent'
+      e.currentTarget.style.color = 'var(--color-text-muted)'
+    },
+  }
 
   const openTurnContext = () => {
     const project = useProjectStore.getState().currentProject
@@ -218,57 +239,69 @@ function AgentToolbar() {
       ? resolveWritingLanguage(project.novelConfig.writingLanguage)
       : locale
     const snapshot = captureAgentEditorSnapshot({ commitSurface: false })
-    setContextText(buildL1AgentContext(snapshot, language) ?? '')
-    setContextOpen(true)
+    setInspect({
+      kind: 'turn',
+      body: buildL1AgentContext(snapshot, language) ?? '',
+    })
+  }
+
+  const openSystemPrompt = async () => {
+    try {
+      const result = await ipc.invoke('agent:system-prompt')
+      setInspect({
+        kind: 'system',
+        body: result.success
+          ? (result.prompt ?? '')
+          : (result.error ?? text('无法读取系统提示词', 'Could not read the system prompt')),
+      })
+    } catch (error) {
+      setInspect({
+        kind: 'system',
+        body: text(`无法读取系统提示词：${error}`, `Could not read the system prompt: ${error}`),
+      })
+    }
   }
 
   return (
     <div className="flex items-center justify-between gap-2 mb-1.5">
-      <button
-        type="button"
-        onClick={openTurnContext}
-        className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all select-none"
-        style={{
-          color: 'var(--color-text-muted)',
-          border: '1px solid var(--color-border)',
-        }}
-        title={text('查看本轮发给助手的额外上下文', 'View extra context sent with this turn')}
-        onMouseEnter={e => {
-          e.currentTarget.style.backgroundColor = 'var(--color-hover)'
-          e.currentTarget.style.color = 'var(--color-text)'
-        }}
-        onMouseLeave={e => {
-          e.currentTarget.style.backgroundColor = 'transparent'
-          e.currentTarget.style.color = 'var(--color-text-muted)'
-        }}
-      >
-        <Info size={12} strokeWidth={1.75} />
-        {text('本轮上下文', 'Turn context')}
-      </button>
+      <div className="flex items-center gap-1.5 min-w-0">
+        <button
+          type="button"
+          onClick={() => void openSystemPrompt()}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all select-none"
+          style={toolbarChipStyle()}
+          title={text('查看助手系统提示词', 'View the assistant system prompt')}
+          {...chipHover}
+        >
+          <FileText size={12} strokeWidth={1.75} />
+          {text('系统提示词', 'System prompt')}
+        </button>
+        <button
+          type="button"
+          onClick={openTurnContext}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all select-none"
+          style={toolbarChipStyle()}
+          title={text('查看本轮发给助手的额外上下文', 'View extra context sent with this turn')}
+          {...chipHover}
+        >
+          <Info size={12} strokeWidth={1.75} />
+          {text('本轮上下文', 'Turn context')}
+        </button>
+      </div>
 
       <button
         type="button"
         onClick={() => openRightPanel('ai-output')}
         className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all select-none"
-        style={{
-          color: 'var(--color-text-muted)',
-          border: '1px solid var(--color-border)',
-        }}
+        style={toolbarChipStyle()}
         title={text('切换到 AI 输出面板', 'Switch to AI output panel')}
-        onMouseEnter={e => {
-          e.currentTarget.style.backgroundColor = 'var(--color-hover)'
-          e.currentTarget.style.color = 'var(--color-text)'
-        }}
-        onMouseLeave={e => {
-          e.currentTarget.style.backgroundColor = 'transparent'
-          e.currentTarget.style.color = 'var(--color-text-muted)'
-        }}
+        {...chipHover}
       >
         <Workflow size={12} strokeWidth={1.75} />
         {text('AI 工作流', 'AI workflow')}
       </button>
 
-      <Dialog open={contextOpen} onOpenChange={setContextOpen} modal={false}>
+      <Dialog open={inspect !== null} onOpenChange={open => { if (!open) setInspect(null) }} modal={false}>
         <DialogContent
           overlay={false}
           className="max-w-[520px]"
@@ -277,12 +310,21 @@ function AgentToolbar() {
           onFocusOutside={event => event.preventDefault()}
         >
           <DialogHeader>
-            <DialogTitle>{text('本轮上下文', 'This turn’s context')}</DialogTitle>
+            <DialogTitle>
+              {inspect?.kind === 'system'
+                ? text('系统提示词', 'System prompt')
+                : text('本轮上下文', 'This turn’s context')}
+            </DialogTitle>
             <DialogDescription>
-              {text(
-                '发送下一条消息时附带的应用状态。不含系统提示词，也不含文件正文。',
-                'App state attached to the next message. This is not the system prompt and does not include file bodies.',
-              )}
+              {inspect?.kind === 'system'
+                ? text(
+                    '助手的基础身份与当前项目摘要。不含本轮界面状态，也不含工具列表。',
+                    'The assistant’s identity and current project summary. This is not the per-turn UI state or the tool list.',
+                  )
+                : text(
+                    '发送下一条消息时附带的应用状态。不含系统提示词，也不含文件正文。',
+                    'App state attached to the next message. This is not the system prompt and does not include file bodies.',
+                  )}
             </DialogDescription>
           </DialogHeader>
           <pre
@@ -293,7 +335,10 @@ function AgentToolbar() {
               color: 'var(--color-text)',
             }}
           >
-            {contextText || text('（本轮没有额外上下文）', '(No extra context this turn)')}
+            {inspect?.body
+              || (inspect?.kind === 'system'
+                ? text('（没有系统提示词）', '(No system prompt)')
+                : text('（本轮没有额外上下文）', '(No extra context this turn)'))}
           </pre>
         </DialogContent>
       </Dialog>

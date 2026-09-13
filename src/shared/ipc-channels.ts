@@ -1169,6 +1169,10 @@ export interface AgentChannels {
     args: [conversationId: string]
     return: { success: boolean }
   }
+  'agent:system-prompt': {
+    args: []
+    return: { success: boolean; prompt?: string; error?: string }
+  }
 }
 
 export interface AgentStreamEvents {

@@ -71,4 +71,15 @@ export function registerAgentController(): void {
   ipcMain.handle('agent:abort', async (_event, conversationId: string) => {
     return manager.abort(conversationId)
   })
+
+  ipcMain.handle('agent:system-prompt', async () => {
+    try {
+      return { success: true, prompt: resolveSystemPrompt() }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      }
+    }
+  })
 }
