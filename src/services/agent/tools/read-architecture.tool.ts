@@ -1,5 +1,5 @@
 /**
- * read_architecture — 读取故事架构文件
+ * read_architecture — 读取全书设定与大纲（故事前提、角色图谱、世界观、情节大纲）
  */
 import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
@@ -8,7 +8,7 @@ import { agentToolText, assertAgentProjectCurrent, requireAgentProject } from '.
 
 export const readArchitectureTool = buildAgentTool({
   name: 'read_architecture',
-  description: '读取小说的故事架构文件（四段式架构：故事前提、世界观、角色图谱、剧情大纲等）。是理解小说全局结构的核心工具。',
+  description: '读取小说的全书设定与大纲（故事前提、角色图谱、世界观、情节大纲）。是理解小说全局结构的核心工具。',
   descriptionEn: 'Read the story architecture, including the premise, worldbuilding, character graph, and plot synopsis.',
   source: 'builtin',
   inputSchema: {

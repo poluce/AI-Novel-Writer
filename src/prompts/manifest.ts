@@ -111,7 +111,7 @@ export const BUILTIN_PROMPT_STRUCTURES: readonly BuiltinPromptStructure[] = [
   {
     key: "chapter_blueprint",
     variables: {
-      "novel_architecture": "完整故事架构（故事前提+角色图谱+世界观+情节大纲）",
+      "novel_architecture": "全书设定与大纲（故事前提+角色图谱+世界观+情节大纲）",
       "number_of_chapters": "总章数",
       "global_guidance": "全局写作要求",
       "genre": "小说类型",
@@ -122,7 +122,7 @@ export const BUILTIN_PROMPT_STRUCTURES: readonly BuiltinPromptStructure[] = [
   {
     key: "chapter_blueprint_chunk",
     variables: {
-      "novel_architecture": "完整故事架构（故事前提+角色图谱+世界观+情节大纲）",
+      "novel_architecture": "全书设定与大纲（故事前提+角色图谱+世界观+情节大纲）",
       "chapter_list": "已生成的章节列表（最近100章）",
       "number_of_chapters": "总章数",
       "n": "起始章节号",
