@@ -306,3 +306,56 @@ export function replaceSynopsisNodeBody(text: string, node: SynopsisNode, body: 
 export function maxCoveredChapter(nodes: readonly SynopsisNode[]): number {
   return nodes.reduce((max, node) => (node.endChapter && node.endChapter > max ? node.endChapter : max), 0)
 }
+
+/** 左侧列表按每 10 章折叠成一组。 */
+export const SYNOPSIS_GROUP_SPAN = 10
+
+export interface SynopsisNodeGroup {
+  id: string
+  /** `总览` 或 `第1–10章`。 */
+  label: string
+  startChapter: number | null
+  endChapter: number | null
+  nodes: SynopsisNode[]
+}
+
+/** 把结构节点按每 10 章分组；`总览`/`全文` 一类的无章号节点单独成组。 */
+export function groupSynopsisNodes(
+  nodes: readonly SynopsisNode[],
+  span: number = SYNOPSIS_GROUP_SPAN,
+): SynopsisNodeGroup[] {
+  const intro: SynopsisNode[] = []
+  const buckets = new Map<number, SynopsisNode[]>()
+
+  for (const node of nodes) {
+    if (node.startChapter === null) {
+      intro.push(node)
+      continue
+    }
+    const bucketStart = Math.floor((node.startChapter - 1) / span) * span + 1
+    const bucket = buckets.get(bucketStart)
+    if (bucket) bucket.push(node)
+    else buckets.set(bucketStart, [node])
+  }
+
+  const groups: SynopsisNodeGroup[] = []
+  if (intro.length > 0) {
+    groups.push({
+      id: 'intro',
+      label: '总览',
+      startChapter: null,
+      endChapter: null,
+      nodes: intro,
+    })
+  }
+  for (const bucketStart of [...buckets.keys()].sort((a, b) => a - b)) {
+    groups.push({
+      id: `${bucketStart}-${bucketStart + span - 1}`,
+      label: `第${bucketStart}–${bucketStart + span - 1}章`,
+      startChapter: bucketStart,
+      endChapter: bucketStart + span - 1,
+      nodes: buckets.get(bucketStart)!,
+    })
+  }
+  return groups
+}

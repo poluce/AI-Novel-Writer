@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  groupSynopsisNodes,
   matchChapterLabel,
   maxCoveredChapter,
   parseChapterNumber,
@@ -95,6 +96,44 @@ describe('parseSynopsis', () => {
   it('returns no nodes for an empty outline', () => {
     expect(parseSynopsis('').nodes).toEqual([])
     expect(parseSynopsis('# 情节大纲\n').nodes).toEqual([])
+  })
+})
+
+describe('groupSynopsisNodes', () => {
+  it('folds the chapter sections into ten-chapter groups and keeps 总览 separate', () => {
+    const parsed = parseSynopsis(outline)
+    const groups = groupSynopsisNodes(parsed.nodes)
+
+    expect(groups.map(group => [group.label, group.nodes.map(node => node.label)])).toEqual([
+      ['总览', ['总览']],
+      ['第1–10章', ['第1–20章']],
+      ['第21–30章', ['第21章', '第22–100章']],
+    ])
+  })
+
+  it('falls back to a single 总览 group for an outline without chapter labels', () => {
+    const parsed = parseSynopsis('# 情节大纲\n\n第一幕：主角失去家园。')
+    expect(groupSynopsisNodes(parsed.nodes).map(group => group.label)).toEqual(['总览'])
+  })
+
+  it('starts a new group every ten chapters', () => {
+    const nodes = parseSynopsis([
+      '# 情节大纲',
+      '第1章：开端',
+      '内容一。',
+      '第10章：收束',
+      '内容二。',
+      '第11章：转折',
+      '内容三。',
+      '第100章：终局',
+      '内容四。',
+    ].join('\n')).nodes
+
+    expect(groupSynopsisNodes(nodes).map(group => [group.label, group.nodes.length])).toEqual([
+      ['第1–10章', 2],
+      ['第11–20章', 1],
+      ['第91–100章', 1],
+    ])
   })
 })
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Map, AlertTriangle, CheckCircle2, Circle, RefreshCw, FileText, Save, RotateCcw } from 'lucide-react'
+import { Map, AlertTriangle, CheckCircle2, Circle, RefreshCw, FileText, Save, RotateCcw, ChevronDown, ChevronRight } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { useLocaleStore } from '../../stores/locale-store'
@@ -26,6 +26,7 @@ import {
 import type { ProjectSessionContext } from '../../shared/ipc-channels'
 import { sameProjectSessionContext } from '../../shared/project-session-context'
 import {
+  groupSynopsisNodes,
   parseSynopsis,
   replaceSynopsisNodeBody,
   synopsisNodeBody,
@@ -88,6 +89,7 @@ export default function SynopsisEditor({ projectKey }: { projectKey: string }) {
   const [parsed, setParsed] = useState<ParsedSynopsis>(EMPTY_OUTLINE)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({})
   const lastCompletedRunRef = useRef<string | null>(null)
   const requestGate = useRef(new LatestRequestGate())
 
@@ -107,6 +109,7 @@ export default function SynopsisEditor({ projectKey }: { projectKey: string }) {
       setParsed(EMPTY_OUTLINE)
       setSelectedNodeId(null)
       setDrafts({})
+      setCollapsedGroups({})
       setLoading(false)
       return
     }
@@ -327,6 +330,13 @@ export default function SynopsisEditor({ projectKey }: { projectKey: string }) {
   const pendingBatch = !incomplete && !recoveryFailed && coveredTo > 0 && coveredTo < totalChapters
   const disabled = loading || busy || isArchRunning
   const selectedNode = parsed.nodes.find(node => node.id === selectedNodeId) ?? null
+  const groups = groupSynopsisNodes(parsed.nodes)
+  const selectedGroupId = groups.find(group => group.nodes.some(node => node.id === selectedNodeId))?.id ?? null
+  // 默认只展开当前选中项所在的分组，其余按每 10 章折叠；手动展开/折叠优先。
+  const isGroupOpen = (groupId: string) => collapsedGroups[groupId] ?? groupId === selectedGroupId
+  const toggleGroup = (groupId: string) => {
+    setCollapsedGroups(current => ({ ...current, [groupId]: !(current[groupId] ?? groupId === selectedGroupId) }))
+  }
   const selectedBody = selectedNode
     ? drafts[selectedNode.id] ?? synopsisNodeBody(selectedNode)
     : ''
@@ -606,41 +616,84 @@ export default function SynopsisEditor({ projectKey }: { projectKey: string }) {
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto p-1">
-              {parsed.nodes.map(node => {
-                const nodeDirty = drafts[node.id] !== undefined
-                const active = node.id === selectedNodeId
+              {groups.map(group => {
+                const open = isGroupOpen(group.id)
+                const groupDirty = group.nodes.some(node => drafts[node.id] !== undefined)
+                const holdsSelection = group.id === selectedGroupId
                 return (
-                  <div
-                    key={node.id}
-                    className={`group relative px-2.5 py-2 rounded-md text-xs cursor-pointer mb-0.5 transition-colors ${
-                      active
-                        ? 'bg-[var(--color-active)] text-[var(--color-text)]'
-                        : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)]'
-                    }`}
-                    onClick={() => setSelectedNodeId(node.id)}
-                    title={node.title || node.label}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-mono text-[0.7rem] opacity-40 flex-shrink-0">
-                        {node.startChapter ?? '—'}
-                      </span>
-                      <span className="font-medium truncate flex-1">{node.label}</span>
-                      {nodeDirty && (
+                  <div key={group.id} className="mb-0.5">
+                    {/* 分组标题：每 10 章一段，点击折叠/展开 */}
+                    <div
+                      className={`flex items-center gap-1 rounded-md px-2 py-1.5 text-xs cursor-pointer select-none transition-colors ${
+                        holdsSelection && !open
+                          ? 'bg-[var(--color-active)] text-[var(--color-text)]'
+                          : 'hover:bg-[var(--color-hover)]'
+                      }`}
+                      style={{ color: holdsSelection && !open ? undefined : 'var(--color-text-secondary)' }}
+                      onClick={() => toggleGroup(group.id)}
+                      title={text(
+                        `${group.label}（${group.nodes.length} 段）`,
+                        `${group.label} (${group.nodes.length} sections)`,
+                      )}
+                    >
+                      {open
+                        ? <ChevronDown size={12} className="flex-shrink-0" style={{ color: 'var(--color-text-muted)' }} />
+                        : <ChevronRight size={12} className="flex-shrink-0" style={{ color: 'var(--color-text-muted)' }} />}
+                      <span className="font-medium truncate flex-1">{group.label}</span>
+                      {groupDirty && (
                         <span
                           aria-hidden="true"
                           className="h-1.5 w-1.5 rounded-full flex-shrink-0"
                           style={{ backgroundColor: 'var(--color-accent)' }}
                         />
                       )}
+                      <span className="text-[0.7rem] flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
+                        {group.nodes.length}
+                      </span>
                     </div>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      {node.title && <span className="truncate flex-1 opacity-80">{node.title}</span>}
-                      {node.volume && (
-                        <span className="text-[0.7rem] px-1 py-0.5 rounded bg-[var(--color-hover)] flex-shrink-0">
-                          {node.volume}
-                        </span>
-                      )}
-                    </div>
+
+                    {open && (
+                      <div>
+                        {group.nodes.map(node => {
+                          const nodeDirty = drafts[node.id] !== undefined
+                          const active = node.id === selectedNodeId
+                          return (
+                            <div
+                              key={node.id}
+                              className={`relative ml-2 px-2.5 py-2 rounded-md text-xs cursor-pointer mb-0.5 transition-colors ${
+                                active
+                                  ? 'bg-[var(--color-active)] text-[var(--color-text)]'
+                                  : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)]'
+                              }`}
+                              onClick={() => setSelectedNodeId(node.id)}
+                              title={node.title || node.label}
+                            >
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-mono text-[0.7rem] opacity-40 flex-shrink-0">
+                                  {node.startChapter ?? '—'}
+                                </span>
+                                <span className="font-medium truncate flex-1">{node.label}</span>
+                                {nodeDirty && (
+                                  <span
+                                    aria-hidden="true"
+                                    className="h-1.5 w-1.5 rounded-full flex-shrink-0"
+                                    style={{ backgroundColor: 'var(--color-accent)' }}
+                                  />
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1 mt-0.5">
+                                {node.title && <span className="truncate flex-1 opacity-80">{node.title}</span>}
+                                {node.volume && (
+                                  <span className="text-[0.7rem] px-1 py-0.5 rounded bg-[var(--color-hover)] flex-shrink-0">
+                                    {node.volume}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                 )
               })}

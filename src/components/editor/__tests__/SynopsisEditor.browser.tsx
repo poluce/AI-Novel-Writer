@@ -224,30 +224,39 @@ describe('SynopsisEditor', () => {
     })
   })
 
-  it('lists the chapter-range nodes of the outline and shows the selected section', async () => {
+  it('folds the outline into ten-chapter groups and shows the selected section', async () => {
     core = { synopsis: OUTLINE, totalChapters: 100, writingLanguage: 'zh-CN' }
     await renderEditor()
 
+    // 只展开选中项所在的分组，其余按每 10 章折叠。
     const list = container.textContent
-    expect(list).toContain('第1–20章')
-    expect(list).toContain('第21章')
-    expect(list).toContain('第22–100章')
     expect(list).toContain('总览')
+    expect(list).toContain('第1–10章')
+    expect(list).toContain('第21–30章')
+    expect(list).not.toContain('第22–100章')
 
-    // 默认选中第一段，右侧显示该段正文。
+    // 默认选中第一段（总览），右侧显示该段正文。
     await expect.element(page.getByRole('textbox', { name: '当前章节区间的大纲正文' }))
       .toHaveValue('全书围绕灵脉异变展开，主角从铁砧镇一路追查到终局。')
 
+    // 展开第 21–30 章分组后选中其中的结构节点。
+    await act(async () => page.getByText('第21–30章', { exact: true }).click())
+    expect(container.textContent).toContain('第22–100章')
     await act(async () => page.getByText('第21章', { exact: true }).click())
     await expect.element(page.getByRole('textbox', { name: '当前章节区间的大纲正文' }))
       .toHaveValue('宗门废墟之下，林舟第一次触碰旧铁锤里的传承。')
     expect(container.textContent).toContain('第21章：破门')
+
+    // 再次点击分组标题可折叠回去。
+    await act(async () => page.getByText('第21–30章', { exact: true }).click())
+    expect(container.textContent).not.toContain('第22–100章')
   })
 
   it('saves an edited section back into the whole outline without touching other ranges', async () => {
     core = { synopsis: OUTLINE, totalChapters: 100, writingLanguage: 'zh-CN' }
     await renderEditor()
 
+    await act(async () => page.getByText('第21–30章', { exact: true }).click())
     await act(async () => page.getByText('第21章', { exact: true }).click())
     const editor = page.getByRole('textbox', { name: '当前章节区间的大纲正文' })
     await act(async () => editor.fill('林舟破门而入，却发现传承早已被人取走。'))
