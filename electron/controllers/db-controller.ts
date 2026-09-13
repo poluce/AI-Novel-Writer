@@ -20,6 +20,8 @@ import { CharacterRepository } from '../repositories/character-repository'
 import { CharacterRosterRepository } from '../repositories/character-roster-repository'
 import type { CharacterRosterCommitRequest } from '../../src/shared/character-roster'
 import { DraftRepository } from '../repositories/draft-repository'
+import { DraftAnnotationRepository } from '../repositories/draft-annotation-repository'
+import type { DraftAnnotation } from '../../src/shared/draft-annotation'
 import type { DraftSourceDependency } from '../../src/shared/draft-source-dependency'
 import { FinalizedDraftImportRepository } from '../repositories/finalized-draft-import-repository'
 import { FinalizationRepository } from '../repositories/finalization-repository'
@@ -93,6 +95,7 @@ const MUTATING_DATABASE_CHANNELS = new Set([
   'db:draft-create',
   'db:draft-update-status',
   'db:draft-update-content',
+  'db:draft-replace-annotations',
   'db:draft-delete',
   'db:recovery-candidate-record',
   'db:recovery-candidate-update',
@@ -830,6 +833,21 @@ export function registerDatabaseController() {
     try {
       assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
       DraftRepository.updateStatus(id, status, wordCount)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  ipcMain.handle('db:draft-list-annotations', async (_event, draftId: number, expectedProjectPath: string) => {
+    assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
+    return DraftAnnotationRepository.list(draftId)
+  })
+
+  ipcMain.handle('db:draft-replace-annotations', async (_event, draftId: number, annotations: DraftAnnotation[], expectedProjectPath: string) => {
+    try {
+      assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
+      DraftAnnotationRepository.replace(draftId, annotations)
       return { success: true }
     } catch (err) {
       return { success: false, error: String(err) }

@@ -25,10 +25,18 @@ export type PiAgentEvent =
 export type RendererAction =
   | { type: 'open_editor'; filePath: string; content: string; tabType: string; fileName: string }
   | { type: 'start_workflow'; workflow: string; chapterNumber?: number }
+  | { type: 'replace_draft_excerpt'; chapterNumber: number; oldText: string; newText: string; draftId?: number }
   | { type: 'refresh_project_config' }
   | { type: 'refresh_blueprint' }
 
-export type RendererActionSink = (action: RendererAction) => void
+/** Receipt from the renderer after a blocking action actually finished (or failed). */
+export type RendererActionResult =
+  | { ok: true; summary: string }
+  | { ok: false; error: string }
+
+export type RendererActionSink = (
+  action: RendererAction,
+) => void | Promise<RendererActionResult | void>
 
 /** Renderer-owned editor/workflow facts sent with each agent prompt (L1). */
 export interface AgentEditorTabSnapshot {

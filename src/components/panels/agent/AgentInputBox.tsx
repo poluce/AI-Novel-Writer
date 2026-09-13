@@ -7,6 +7,7 @@ import {
   Image,
   AtSign,
   Workflow,
+  X,
 } from 'lucide-react'
 import { selectIsGenerating, useAgentStore, type AgentMode } from '../../../stores/agent-store'
 import { useLLMStore } from '../../../stores/llm-store'
@@ -28,7 +29,8 @@ export default function AgentInputBox() {
   const text = useLocaleStore(s => s.text)
   const [inputText, setInputText] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const { sendMessage, cancelGeneration, getActiveConversation, setMode, setModelId } = useAgentStore()
+  const { sendMessage, cancelGeneration, getActiveConversation, setMode, setModelId, removeComposerCitation } = useAgentStore()
+  const composerCitations = useAgentStore(s => s.composerCitations)
   const generating = useAgentStore(selectIsGenerating)
   const models = useLLMStore(s => s.models)
   const defaultModelId = useLLMStore(s => s.defaultModelId)
@@ -161,11 +163,11 @@ export default function AgentInputBox() {
       await cancelGeneration()
       return
     }
-    if (!inputText.trim()) return
+    if (!inputText.trim() && composerCitations.length === 0) return
     const text = inputText
     setInputText('')
     await sendMessage(text)
-  }, [generating, inputText, sendMessage, cancelGeneration])
+  }, [composerCitations.length, generating, inputText, sendMessage, cancelGeneration])
 
   /** 键盘事件：Enter 发送，Shift+Enter 换行 */
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -186,7 +188,7 @@ export default function AgentInputBox() {
     }
   }
 
-  const canSend = !generating && inputText.trim().length > 0
+  const canSend = !generating && (inputText.trim().length > 0 || composerCitations.length > 0)
 
   return (
     <div
@@ -244,6 +246,50 @@ export default function AgentInputBox() {
             handleInputChange('/')
             textareaRef.current?.focus()
           }} />
+        </div>
+      )}
+
+      {composerCitations.length > 0 && (
+        <div className="flex flex-wrap gap-1 px-1.5 pt-1 pb-1">
+          {composerCitations.map(citation => {
+            const location = [
+              citation.chapterNumber != null
+                ? text(`第${citation.chapterNumber}章`, `Ch.${citation.chapterNumber}`)
+                : text('草稿', 'Draft'),
+              citation.fromLine > 0
+                ? (citation.toLine > citation.fromLine
+                  ? `L${citation.fromLine}–${citation.toLine}`
+                  : `L${citation.fromLine}`)
+                : '',
+            ].filter(Boolean).join(' · ')
+            const preview = citation.quote.replace(/\s+/g, ' ').trim()
+            return (
+              <span
+                key={citation.id}
+                className="inline-flex items-center gap-1 max-w-[220px] px-1.5 py-0.5 rounded text-[10px]"
+                style={{
+                  backgroundColor: 'var(--color-panel)',
+                  border: '1px solid var(--color-accent)',
+                  color: 'var(--color-text)',
+                }}
+                title={`${location}\n${citation.quote}`}
+              >
+                <span className="truncate">
+                  {location}
+                  {' · '}
+                  {preview.length > 18 ? `${preview.slice(0, 18)}…` : preview}
+                </span>
+                <button
+                  type="button"
+                  className="p-0.5 rounded shrink-0"
+                  aria-label={text('移除引用', 'Remove excerpt')}
+                  onClick={() => removeComposerCitation(citation.id)}
+                >
+                  <X size={10} />
+                </button>
+              </span>
+            )
+          })}
         </div>
       )}
 

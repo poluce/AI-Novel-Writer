@@ -7,8 +7,17 @@ import {
   type WritingLanguage,
 } from '../../../src/shared/writing-language'
 
+const WorkflowName = Type.Union([
+  Type.Literal('generate_draft'),
+  Type.Literal('review'),
+  Type.Literal('refine'),
+  Type.Literal('finalize'),
+  Type.Literal('generate_blueprint'),
+  Type.Literal('generate_architecture'),
+])
+
 const Schema = Type.Object({
-  workflow: Type.String(),
+  workflow: WorkflowName,
   chapter_number: Type.Optional(Type.Number()),
 })
 
@@ -21,14 +30,16 @@ const WORKFLOW_NAMES: Record<string, readonly [string, string]> = {
   generate_architecture: ['生成架构', 'architecture generation'],
 }
 
+const CHAPTER_WORKFLOWS = ['generate_draft', 'review', 'refine', 'finalize'] as const
+
 export function createStartWorkflowTool(
   language: WritingLanguage,
   rendererAction: RendererActionSink,
 ): AgentTool<typeof Schema> {
   const text = (zhCN: string, enUS: string) => writingLanguageText(language, zhCN, enUS)
   const description = language === 'en-US'
-    ? 'Start an AI Novel Writer creative workflow for drafting, review, refinement, finalization, blueprint generation, or architecture generation.'
-    : '触发 AI小说作家创作工作流。支持写稿、修稿、审稿、定稿、生成蓝图等工作流。这将在 AI 输出面板中执行对应的多步骤创作流程。'
+    ? 'Start an AI Novel Writer creative workflow for drafting, review, refinement, finalization, blueprint generation, or architecture generation. Only report success after the task panel has registered the run. Review, refinement, and finalization require an open draft in the editor and will fail if started with only a chapter number.'
+    : '触发 AI小说作家创作工作流。支持写稿、修稿、审稿、定稿、生成蓝图、生成架构。必须等任务中心真正注册成功后才能报告成功。审稿、修稿、定稿需要已打开的草稿，仅凭章节号会失败。'
 
   return {
     name: 'start_workflow',
@@ -42,8 +53,7 @@ export function createStartWorkflowTool(
       }
       const chapterNumber = params.chapter_number
 
-      const chapterWorkflows = ['generate_draft', 'review', 'refine', 'finalize']
-      if (chapterWorkflows.includes(workflow) && chapterNumber === undefined) {
+      if ((CHAPTER_WORKFLOWS as readonly string[]).includes(workflow) && chapterNumber === undefined) {
         throw new Error(text(
           `${workflow} 工作流需要指定 chapter_number 参数`,
           `The ${workflow} workflow requires a chapter_number argument`,
@@ -56,17 +66,23 @@ export function createStartWorkflowTool(
         ? text(`（第 ${chapterNumber} 章）`, ` (Chapter ${chapterNumber})`)
         : ''
 
-      rendererAction({
+      const outcome = await rendererAction({
         type: 'start_workflow',
         workflow,
         ...(chapterNumber === undefined ? {} : { chapterNumber }),
       })
+      if (!outcome) {
+        throw new Error(text(
+          `「${displayName}${chapterInfo}」工作流未能注册到任务中心，未向模型报告成功。`,
+          `The ${displayName}${chapterInfo} workflow was not registered in the task panel.`,
+        ))
+      }
+      if (!outcome.ok) {
+        throw new Error(outcome.error)
+      }
 
       return {
-        content: [{ type: 'text', text: text(
-          `已启动「${displayName}${chapterInfo}」工作流。`,
-          `Started the ${displayName}${chapterInfo} workflow.`,
-        ) }],
+        content: [{ type: 'text', text: outcome.summary }],
         details: {},
       }
     },

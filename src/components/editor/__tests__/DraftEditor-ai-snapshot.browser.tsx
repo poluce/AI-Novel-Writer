@@ -60,6 +60,8 @@ beforeEach(async () => {
     if (channel === 'db:draft-list') return [{ id: 7, version: 1 }]
     if (channel === 'db:revision-get-pending' || channel === 'db:review-list') return []
     if (channel === 'db:draft-update-content') return { success: true }
+    if (channel === 'db:draft-list-annotations') return []
+    if (channel === 'db:draft-replace-annotations') return { success: true }
     throw new Error(`Unexpected IPC channel: ${channel}`)
   })
   Object.defineProperty(window, 'velaAPI', {

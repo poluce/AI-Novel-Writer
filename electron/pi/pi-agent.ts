@@ -43,6 +43,7 @@ export interface PiAgentHandle {
   prompt(input: string): Promise<void>
   abort(): void
   setTools(tools: AgentTool<any>[]): void
+  restoreMessages(messages: AgentMessage[]): void
   messages: AgentMessage[]
 }
 
@@ -96,7 +97,9 @@ export function createPiAgent(options: CreatePiAgentOptions): PiAgentHandle {
     },
     streamFn: withLlmCallAccounting(options.streamFn),
     transformContext: options.transformContext,
-    toolExecution: 'sequential',
+    // Read tools run concurrently. Write/confirm/MCP tools keep
+    // `executionMode: 'sequential'` in tool-builder so they never overlap.
+    toolExecution: 'parallel',
     beforeToolCall: async (ctx) => {
       const call = toolCalls.get(ctx.toolCall.id)
       const needsConfirm = confirmationNames.has(ctx.toolCall.name)
@@ -201,6 +204,9 @@ export function createPiAgent(options: CreatePiAgentOptions): PiAgentHandle {
     abort: () => agent.abort(),
     setTools: (tools) => {
       agent.state.tools = tools
+    },
+    restoreMessages: (messages) => {
+      agent.state.messages = messages
     },
     get messages() {
       return agent.state.messages

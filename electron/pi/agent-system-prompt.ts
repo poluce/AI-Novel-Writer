@@ -1,3 +1,10 @@
+import type { PromptTemplate } from '../../src/prompts/types'
+import {
+  ASSISTANT_WRITING_IDENTITY_KEY,
+  appShellModeInstruction,
+  renderAssistantIdentity,
+} from '../../src/services/agent/assistant-identity'
+import { getBuiltinPromptTemplate } from '../../src/services/prompt-templates'
 import { localizeNovelConfigFacts } from '../../src/shared/novel-config-localization'
 import { writingLanguageText, type WritingLanguage } from '../../src/shared/writing-language'
 import type { ProjectCoreData } from '../repositories/project-core-repository'
@@ -5,17 +12,24 @@ import type { ProjectCoreData } from '../repositories/project-core-repository'
 /**
  * Main-process system prompt for the multi-turn Pi Agent.
  *
- * L0 project facts come from SQLite. Tool instructions stay on AgentTool
- * schemas — they must not be pasted into the system string as XML.
- * Editor-tab L1 still belongs on transformContext once the renderer can
- * send a snapshot; it is intentionally absent here.
+ * Identity comes from Settings `assistant_writing_identity` (caller supplies
+ * the resolved overlay). L0 project facts come from SQLite. Tool instructions
+ * stay on AgentTool schemas — they must not be pasted into the system string
+ * as XML. Editor-tab L1 belongs on transformContext; it is intentionally
+ * absent here.
  */
-export function buildMainProcessAgentSystemPrompt(core: ProjectCoreData | null): string {
+export function buildMainProcessAgentSystemPrompt(
+  core: ProjectCoreData | null,
+  identityTemplate?: PromptTemplate,
+): string {
   const language: WritingLanguage = core?.writingLanguage ?? 'zh-CN'
-  const identity = writingLanguageText(
+  const template = identityTemplate
+    ?? getBuiltinPromptTemplate(ASSISTANT_WRITING_IDENTITY_KEY, language)
+  if (!template) throw new Error('Missing assistant writing identity prompt')
+  const identity = renderAssistantIdentity(
+    template,
     language,
-    '你是 AI小说作家 的应用级助手。每轮用户消息前会附带当前应用状态（是否打开小说、侧栏/对话框、编辑器与工作流）。请以该状态为准；未打开项目时不要假装能读写该书。不要编造项目事实。',
-    'You are the app-level assistant for AI Novel Writer. Each user turn is preceded by the current app state (whether a novel is open, which panes and dialogs are active, editor tabs, and workflows). Treat that snapshot as authoritative. If no project is open, do not pretend you can read or write the book. Do not invent project facts.',
+    appShellModeInstruction(language),
   )
   const l0 = buildL0ProjectContext(core, language)
   return l0 ? `${identity}\n\n${l0}` : identity

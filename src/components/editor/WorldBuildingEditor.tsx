@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Sparkles, CheckCircle2, Circle, RefreshCw, FileText, BookOpen, AlertTriangle, FolderTree } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
+import { useWorkflowStore } from '../../stores/workflow-store'
 import { useLocaleStore } from '../../stores/locale-store'
 import { renderIcon } from '../panels/sidebar/sidebar-icons'
 
@@ -9,6 +10,7 @@ import ArchitectureConfirmDialog from '../dialogs/ArchitectureConfirmDialog'
 import { Button } from '../ui/Button'
 import { EmptyState } from '../ui/EmptyState'
 import { ipc } from '../../services/ipc-client'
+import { toast } from '../ui/Toast'
 
 import { launchCreativeWorkflow } from '../../services/workflows/creative-workflow-launcher'
 import { globalEventBus } from '../../shared/event-bus'
@@ -35,6 +37,7 @@ import {
   isRecoverableSynopsisCheckpoint,
   isUsableSynopsisCheckpoint,
 } from '../../services/workflows/commands/architecture.command'
+import { SettingDocument, SettingSection, DocumentBody } from './SettingSections'
 
 type ArchStepKey = 'premise' | 'characters' | 'worldbuilding' | 'synopsis'
 
@@ -56,7 +59,10 @@ const ARCH_FILES: Array<{
 /** 续批按钮默认的每批章数上限（可在弹窗内调整，避免一次请求剩余全部章节）。 */
 const CONTINUATION_BATCH_SPAN = 20
 
-/** 故事架构编辑器 — 显示四个架构文件状态，并提供 AI 生成入口 */
+/** 可单块 AI 生成、按顺序解锁的前三个步骤。 */
+const GENERATABLE_STEPS: Array<'premise' | 'characters' | 'worldbuilding'> = ['premise', 'characters', 'worldbuilding']
+
+/** 故事架构编辑器 — 前三块与小说配置同款设置文档 + 单块 AI 生成；情节大纲独立面板 */
 export default function WorldBuildingEditor({ projectKey }: { projectKey: string }) {
   // ✅ 精确订阅，避免 novelConfig 等变化导致不必要的 loadStatus 重建
   const currentProject = useProjectStore(s => s.currentProject)
@@ -64,6 +70,9 @@ export default function WorldBuildingEditor({ projectKey }: { projectKey: string
   const projectMatches = currentProject?.path === projectKey
   const [archStatus, setArchStatus] = useState<Record<string, boolean>>({})
   const [wordCounts, setWordCounts] = useState<Record<string, number>>({})
+  const [archTexts, setArchTexts] = useState<Record<string, string>>({})
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
+  const [generatingBlock, setGeneratingBlock] = useState<Exclude<ArchStepKey, 'synopsis'> | null>(null)
   const [synopsisIncomplete, setSynopsisIncomplete] = useState(false)
   const [synopsisRecoveryFailed, setSynopsisRecoveryFailed] = useState(false)
   const [synopsisCoveredTo, setSynopsisCoveredTo] = useState<number>(0)
@@ -74,6 +83,7 @@ export default function WorldBuildingEditor({ projectKey }: { projectKey: string
   const [showArchDialog, setShowArchDialog] = useState(false)
   const lastCompletedArchitectureRunRef = useRef<string | null>(null)
   const archStatusRequestGate = useRef(new LatestRequestGate())
+  const saveTimerRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
   const {
     snapshot: rosterSnapshot,
     repairError: rosterRepairError,
@@ -81,6 +91,8 @@ export default function WorldBuildingEditor({ projectKey }: { projectKey: string
     refresh: loadCharacterRosterStatus,
     migrate: handleRepairCharacterRoster,
   } = useCharacterRosterRepair({ projectKey, enabled: projectMatches })
+
+  const isArchRunning = useWorkflowStore(s => s.isTypeRunning('architecture_generation'))
 
   /** 加载各架构文件状态（通过 Service 层获取，不直接调 IPC） */
   const loadStatus = useCallback(async () => {
@@ -90,6 +102,7 @@ export default function WorldBuildingEditor({ projectKey }: { projectKey: string
       archStatusRequestGate.current.begin()
       setArchStatus({})
       setWordCounts({})
+      setArchTexts({})
       setSynopsisIncomplete(false)
       setSynopsisRecoveryFailed(false)
       setSynopsisCoveredTo(0)
@@ -146,9 +159,10 @@ export default function WorldBuildingEditor({ projectKey }: { projectKey: string
       recoveryFailed = visiblyPartial
       coveredTo = 0
     }
+    const rosterReady = rosterSnapshot?.status === 'ready'
     const status: Record<string, boolean> = {
       premise: (core?.premise?.length ?? 0) > 50,
-      characters: rosterSnapshot?.status === 'ready',
+      characters: rosterReady,
       worldbuilding: (core?.worldbuilding?.length ?? 0) > 50,
       synopsis: (core?.synopsis?.length ?? 0) > 50,
     }
@@ -164,6 +178,12 @@ export default function WorldBuildingEditor({ projectKey }: { projectKey: string
     ) return
     setArchStatus(status)
     setWordCounts(counts)
+    setArchTexts({
+      premise: core?.premise ?? '',
+      worldbuilding: core?.worldbuilding ?? '',
+      synopsis: dbSynopsis,
+      characters: rosterSnapshot?.renderedMarkdown ?? '',
+    })
     setSynopsisIncomplete(interrupted && Boolean(status.synopsis))
     setSynopsisRecoveryFailed(recoveryFailed && Boolean(status.synopsis))
     setSynopsisCoveredTo(coveredTo)
@@ -206,6 +226,7 @@ export default function WorldBuildingEditor({ projectKey }: { projectKey: string
         lastCompletedArchitectureRunRef.current,
       )) return
       lastCompletedArchitectureRunRef.current = payload.runId
+      setGeneratingBlock(null)
       loadStatus()
       loadCharacterRosterStatus()
     })
@@ -279,6 +300,47 @@ export default function WorldBuildingEditor({ projectKey }: { projectKey: string
     }, projectSession)
   }
 
+  /** 单块 AI 生成（故事前提 / 角色图谱 / 世界观，按顺序解锁） */
+  const handleGenerateBlock = async (key: Exclude<ArchStepKey, 'synopsis'>) => {
+    const projectSession = captureProjectSession(currentProject)
+    if (!projectMatches || !projectSession || !isProjectSessionPath(projectSession, projectKey)) return
+    if (!isProjectSessionCurrent(projectSession)) return
+    if (generatingBlock || isArchRunning) return
+    setGeneratingBlock(key)
+    try {
+      await launchCreativeWorkflow({
+        workflow: 'generate_architecture',
+        selectedSteps: [key],
+      }, projectSession)
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      toast.error(text(`生成启动失败：${detail}`, `Failed to start generation: ${detail}`))
+      if (isProjectSessionCurrent(projectSession)) setGeneratingBlock(null)
+    }
+  }
+
+  /** 内联编辑保存（防抖写回 project_core） */
+  const handleArchTextChange = (key: 'premise' | 'worldbuilding', value: string) => {
+    setArchTexts(current => ({ ...current, [key]: value }))
+    const projectSession = captureProjectSession(currentProject)
+    if (!projectSession || !isProjectSessionPath(projectSession, projectKey)) return
+    const existing = saveTimerRef.current.get(key)
+    if (existing) clearTimeout(existing)
+    const timer = setTimeout(() => {
+      saveTimerRef.current.delete(key)
+      if (!captureProjectSession(useProjectStore.getState().currentProject)) return
+      void ipc.invokeWithProjectSession(
+        projectSession,
+        'db:project-core-update',
+        { [key]: value },
+        projectSession.projectPath,
+      ).then(() => {
+        if (isProjectSessionCurrent(projectSession)) loadStatus()
+      }).catch(() => {})
+    }, 600)
+    saveTimerRef.current.set(key, timer)
+  }
+
   /** 从上次输出长度中断的检查点继续生成情节大纲（断点续写当前批） */
   const handleResumeSynopsis = async () => {
     const projectSession = captureProjectSession(currentProject)
@@ -293,7 +355,6 @@ export default function WorldBuildingEditor({ projectKey }: { projectKey: string
       }, projectSession)
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error)
-      const { toast } = await import('../ui/Toast')
       toast.error(text(`续写启动失败：${detail}`, `Failed to start the continuation: ${detail}`))
     } finally {
       setSynopsisBusy(false)
@@ -354,6 +415,31 @@ export default function WorldBuildingEditor({ projectKey }: { projectKey: string
   )
   const canRepairRoster = canExplicitlyRepairCharacterRoster(rosterPresentation)
 
+  /** 首次严格顺序；已生成的块可任意重新生成。 */
+  const canGenerate = (key: 'premise' | 'characters' | 'worldbuilding'): boolean => {
+    if (generatingBlock || isArchRunning || loading) return false
+    if (archStatus[key]) return true
+    if (key === 'premise') return true
+    if (key === 'characters') return Boolean(archStatus.premise)
+    return Boolean(archStatus.characters)
+  }
+
+  const sectionProps = (key: 'premise' | 'characters' | 'worldbuilding') => ({
+    collapseKey: key,
+    title: text(
+      ARCH_FILES.find(f => f.key === key)!.labelZh,
+      ARCH_FILES.find(f => f.key === key)!.labelEn,
+    ),
+    desc: text(
+      ARCH_FILES.find(f => f.key === key)!.descZh,
+      ARCH_FILES.find(f => f.key === key)!.descEn,
+    ),
+    generated: archStatus[key] ?? false,
+    generating: generatingBlock === key,
+    disabled: !canGenerate(key),
+    wordCount: wordCounts[key] ?? 0,
+  })
+
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* 顶部工具栏 */}
@@ -384,6 +470,7 @@ export default function WorldBuildingEditor({ projectKey }: { projectKey: string
             variant="ai"
             size="sm"
             onClick={openGenerateDialog}
+            disabled={isArchRunning}
             title={text('AI 生成故事架构（选择要生成的步骤）', 'Generate story architecture (choose steps to generate)')}
           >
             <Sparkles size={12} />
@@ -392,209 +479,241 @@ export default function WorldBuildingEditor({ projectKey }: { projectKey: string
         </div>
       </div>
 
-      {/* 文件卡片列表 */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {ARCH_FILES.map(f => {
-          const generated = archStatus[f.key]
-          const synopsisNeedsRecovery = f.key === 'synopsis' && synopsisRecoveryFailed
-          const words = wordCounts[f.key] ?? 0
-          const isCharacters = f.key === 'characters'
-          const rosterNeedsAttention = isCharacters && rosterPresentation
-            && rosterPresentation.kind !== 'ready'
-            && rosterPresentation.kind !== 'empty'
-          // 动态边框颜色：明确失败/异常 → 红 | 显式修复/采用 → 警告 | 已生成 → 绿
-          const cardBorderColor = rosterPresentation?.kind === 'failed_with_data_preserved'
-            || rosterPresentation?.kind === 'inconsistent'
-            ? 'var(--color-error, #ef4444)'
-            : rosterNeedsAttention
-              ? 'var(--color-warning)'
-            : synopsisNeedsRecovery
-              ? 'var(--color-warning)'
-              : generated
-              ? 'var(--color-success)'
-              : 'var(--color-border)'
-          return (
-            <div key={f.key} className="space-y-2">
-              <div
-                className="rounded-lg border p-4 flex items-center gap-4 cursor-pointer transition-all"
-                style={{
-                  borderColor: cardBorderColor,
-                  backgroundColor: rosterPresentation?.kind === 'failed_with_data_preserved'
-                    || rosterPresentation?.kind === 'inconsistent'
-                    ? 'rgba(239, 68, 68, 0.03)'
-                    : 'var(--color-panel)',
-                  opacity: loading ? 0.6 : 1,
-                }}
-                onClick={() => openArchFile(f)}
-                onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--color-accent)'}
-                onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = cardBorderColor}
-                title={`${text('点击查看', 'Open')} — ${text(f.descZh, f.descEn)}`}
-              >
-                {/* 状态图标 */}
-                {generated
-                  ? synopsisNeedsRecovery
-                    ? <AlertTriangle size={18} style={{ flexShrink: 0, color: 'var(--color-warning)' }} />
-                    : <CheckCircle2 size={18} style={{ flexShrink: 0, color: 'var(--color-success)' }} />
-                  : <Circle size={18} style={{ flexShrink: 0, color: 'var(--color-text-muted)' }} />
-                }
-
-                {/* 图标 */}
-                <span className="flex-shrink-0" style={{ color: generated ? 'var(--color-text-secondary)' : 'var(--color-text-muted)' }}>{renderIcon(f.iconName, 24)}</span>
-
-                {/* 标题 + 描述 */}
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
-                    {text(f.labelZh, f.labelEn)}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl mx-auto px-4 py-4">
+          {/* 前三块：与小说配置同款设置文档 + 单块 AI 生成 */}
+          <SettingDocument>
+            {GENERATABLE_STEPS.map(key => {
+              const s = sectionProps(key)
+              const rosterNeedsAttention = key === 'characters' && rosterPresentation
+                && rosterPresentation.kind !== 'ready'
+                && rosterPresentation.kind !== 'empty'
+              return (
+                <SettingSection
+                  key={key}
+                  title={s.title}
+                  collapsed={Boolean(collapsedSections[s.collapseKey])}
+                  onToggle={() => setCollapsedSections(current => ({ ...current, [s.collapseKey]: !current[s.collapseKey] }))}
+                  generating={s.generating}
+                  generateDisabled={s.disabled}
+                  generateTitle={!s.disabled ? undefined : text(
+                    key === 'characters'
+                      ? '请先完成「故事前提」生成'
+                      : key === 'worldbuilding'
+                        ? '请先完成「角色图谱」生成'
+                        : '正在生成中…',
+                    key === 'characters'
+                      ? 'Generate the story premise first'
+                      : key === 'worldbuilding'
+                        ? 'Generate the character map first'
+                        : 'Generating…',
+                  )}
+                  onGenerate={s.generating || s.disabled ? undefined : () => void handleGenerateBlock(key)}
+                >
+                  <div className="flex items-center justify-between gap-3 pt-1 pb-1">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {s.generated
+                        ? <CheckCircle2 size={15} style={{ flexShrink: 0, color: 'var(--color-success)' }} />
+                        : <Circle size={15} style={{ flexShrink: 0, color: 'var(--color-text-muted)' }} />}
+                      <span className="text-xs truncate" style={{ color: 'var(--color-text-muted)' }}>{s.desc}</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {key === 'characters' && rosterPresentation && (
+                        <span
+                          role="status"
+                          className="text-[0.7rem] px-1.5 py-0.5 rounded font-medium"
+                          style={{
+                            backgroundColor: rosterNeedsAttention
+                              ? 'rgba(245, 158, 11, 0.12)'
+                              : 'rgba(34, 197, 94, 0.1)',
+                            color: rosterNeedsAttention
+                              ? 'var(--color-warning-text)'
+                              : 'var(--color-success-text)',
+                          }}
+                        >
+                          {rosterPresentation.label}
+                        </span>
+                      )}
+                      {s.wordCount > 0 && (
+                        <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                          {s.wordCount.toLocaleString()} {text('字符', 'characters')}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        className="p-0.5 rounded"
+                        title={text('打开完整视图', 'Open full view')}
+                        onClick={() => openArchFile(ARCH_FILES.find(f => f.key === key)!)}
+                      >
+                        <FileText size={13} style={{ color: 'var(--color-text-muted)' }} />
+                      </button>
+                    </div>
                   </div>
-                  <div className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-                    {text(f.descZh, f.descEn)}
-                  </div>
-                  {isCharacters && rosterPresentation && (
-                    <div
-                      role="status"
-                      className="text-xs mt-1 leading-5"
-                      style={{
-                        color: rosterNeedsAttention
-                          ? 'var(--color-warning-text)'
-                          : 'var(--color-text-muted)',
-                      }}
-                    >
-                      {rosterPresentation.label} · {rosterPresentation.description}
+                  <DocumentBody
+                    value={archTexts[key] ?? ''}
+                    readOnly={key === 'characters' || !projectMatches}
+                    placeholder={s.generated
+                      ? text('（内容已生成，可直接编辑）', '(Generated — edit directly)')
+                      : text(
+                        key === 'characters'
+                          ? '点击右上角「AI 生成」或先完成故事前提'
+                          : '点击右上角「AI 生成」生成内容',
+                        key === 'characters'
+                          ? 'Click “AI 生成” above, or generate the premise first'
+                          : 'Click “AI 生成” above to generate content',
+                      )}
+                    onChange={key === 'characters'
+                      ? () => {}
+                      : (value) => handleArchTextChange(key, value)}
+                  />
+                  {key === 'characters' && !loading && canRepairRoster && rosterPresentation?.actionLabel && (
+                    <div className="pt-1.5">
+                      <Button
+                        size="sm"
+                        disabled={extracting}
+                        className="gap-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-sm hover:from-amber-600 hover:to-orange-600 border-none hover:shadow hover:-translate-y-[0.5px] transition-all"
+                        onClick={() => void handleRepairCharacterRoster()}
+                        title={rosterPresentation.actionTitle}
+                      >
+                        {extracting
+                          ? <RefreshCw size={12} className="animate-spin opacity-90" />
+                          : <AlertTriangle size={12} className="opacity-90" />}
+                        {extracting ? text('处理中...', 'Working...') : rosterPresentation.actionLabel}
+                      </Button>
                     </div>
                   )}
-                </div>
+                </SettingSection>
+              )
+            })}
+          </SettingDocument>
 
-                {/* 右侧状态标签 / 字数 / 提取按钮 */}
-                <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                  {isCharacters && rosterPresentation ? (
-                    <>
-                      <span
-                        className="text-[0.7rem] px-1.5 py-0.5 rounded font-medium"
-                        style={{
-                          backgroundColor: rosterNeedsAttention
-                            ? 'rgba(245, 158, 11, 0.12)'
-                            : 'rgba(34, 197, 94, 0.1)',
-                          color: rosterNeedsAttention
-                            ? 'var(--color-warning-text)'
-                            : 'var(--color-success-text)',
-                        }}
-                      >
-                        {rosterPresentation.label}
-                      </span>
-                      {generated && (
-                        <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                          {words.toLocaleString()} {text('字符', 'characters')}
-                        </span>
-                      )}
-                    </>
-                  ) : generated ? (
-                    <>
-                      {f.key === 'synopsis' && synopsisRecoveryFailed ? (
-                        <span className="text-[0.7rem] px-1.5 py-0.5 rounded font-medium bg-yellow-500/15 text-[var(--color-warning-text)]">
-                          {text('不完整 · 检查点不可恢复', 'Incomplete · checkpoint unavailable')}
-                        </span>
-                      ) : f.key === 'synopsis' && synopsisIncomplete ? (
-                        <span className="text-[0.7rem] px-1.5 py-0.5 rounded font-medium bg-yellow-500/15 text-[var(--color-warning-text)]">
-                          {text('不完整 · 已存部分', 'Incomplete · partial saved')}
-                        </span>
-                      ) : f.key === 'synopsis' && synopsisCoveredTo > 0 && synopsisCoveredTo < synopsisTotalChapters ? (
-                        <span className="text-[0.7rem] px-1.5 py-0.5 rounded font-medium bg-yellow-500/15 text-[var(--color-warning-text)]">
-                          {text(`已覆盖至第 ${synopsisCoveredTo} 章 · 待续批`, `Covered to ch. ${synopsisCoveredTo} · pending`)}
-                        </span>
+          {/* 情节大纲：独立面板（断点续写 / 续批入口保持） */}
+          <div className="mt-4">
+            {(() => {
+              const f = ARCH_FILES.find(item => item.key === 'synopsis')!
+              const generated = archStatus[f.key]
+              const synopsisNeedsRecovery = !!synopsisRecoveryFailed
+              const words = wordCounts[f.key] ?? 0
+              const cardBorderColor = synopsisNeedsRecovery
+                ? 'var(--color-warning)'
+                : generated
+                  ? 'var(--color-success)'
+                  : 'var(--color-border)'
+              return (
+                <div className="space-y-2">
+                  <div
+                    className="rounded-lg border p-4 flex items-center gap-4 cursor-pointer transition-all"
+                    style={{
+                      borderColor: cardBorderColor,
+                      backgroundColor: 'var(--color-panel)',
+                      opacity: loading ? 0.6 : 1,
+                    }}
+                    onClick={() => openArchFile(f)}
+                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--color-accent)'}
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = cardBorderColor}
+                    title={`${text('点击查看', 'Open')} — ${text(f.descZh, f.descEn)}`}
+                  >
+                    {generated
+                      ? synopsisNeedsRecovery
+                        ? <AlertTriangle size={18} style={{ flexShrink: 0, color: 'var(--color-warning)' }} />
+                        : <CheckCircle2 size={18} style={{ flexShrink: 0, color: 'var(--color-success)' }} />
+                      : <Circle size={18} style={{ flexShrink: 0, color: 'var(--color-text-muted)' }} />}
+                    <span className="flex-shrink-0" style={{ color: generated ? 'var(--color-text-secondary)' : 'var(--color-text-muted)' }}>{renderIcon(f.iconName, 24)}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
+                        {text(f.labelZh, f.labelEn)}
+                      </div>
+                      <div className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                        {text(f.descZh, f.descEn)}
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      {generated ? (
+                        <>
+                          {synopsisNeedsRecovery ? (
+                            <span className="text-[0.7rem] px-1.5 py-0.5 rounded font-medium bg-yellow-500/15 text-[var(--color-warning-text)]">
+                              {text('不完整 · 检查点不可恢复', 'Incomplete · checkpoint unavailable')}
+                            </span>
+                          ) : synopsisIncomplete ? (
+                            <span className="text-[0.7rem] px-1.5 py-0.5 rounded font-medium bg-yellow-500/15 text-[var(--color-warning-text)]">
+                              {text('不完整 · 已存部分', 'Incomplete · partial saved')}
+                            </span>
+                          ) : synopsisCoveredTo > 0 && synopsisCoveredTo < synopsisTotalChapters ? (
+                            <span className="text-[0.7rem] px-1.5 py-0.5 rounded font-medium bg-yellow-500/15 text-[var(--color-warning-text)]">
+                              {text(`已覆盖至第 ${synopsisCoveredTo} 章 · 待续批`, `Covered to ch. ${synopsisCoveredTo} · pending`)}
+                            </span>
+                          ) : (
+                            <span className="text-[0.7rem] px-1.5 py-0.5 rounded font-medium bg-green-500/10 text-[var(--color-success-text)]">
+                              {text('已生成', 'Generated')}
+                            </span>
+                          )}
+                          <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                            {words.toLocaleString()} {text('字符', 'characters')}
+                          </span>
+                          {synopsisIncomplete && !loading && (
+                            <Button
+                              size="sm"
+                              disabled={synopsisBusy}
+                              className="gap-1.5 mt-0.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-sm hover:from-amber-600 hover:to-orange-600 border-none hover:shadow hover:-translate-y-[0.5px] transition-all"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                void handleResumeSynopsis()
+                              }}
+                              title={text(
+                                '上次生成被输出长度中断，已完成部分已保存。点击后 AI 从断点继续生成当前批次。',
+                                'The previous run stopped at the output length limit and the completed part was saved. Click to continue the current batch from the break point.',
+                              )}
+                            >
+                              {synopsisBusy
+                                ? <RefreshCw size={12} className="animate-spin opacity-90" />
+                                : <RefreshCw size={12} className="opacity-90" />}
+                              {synopsisBusy
+                                ? text('续写中...', 'Resuming...')
+                                : text('断点续写大纲', 'Continue outline')}
+                            </Button>
+                          )}
+                          {!synopsisIncomplete && !synopsisRecoveryFailed
+                            && synopsisCoveredTo > 0 && synopsisCoveredTo < synopsisTotalChapters && !loading && (
+                            <Button
+                              size="sm"
+                              disabled={synopsisBusy}
+                              className="gap-1.5 mt-0.5 bg-gradient-to-r from-indigo-500 to-blue-500 text-white shadow-sm hover:from-indigo-600 hover:to-blue-600 border-none hover:shadow hover:-translate-y-[0.5px] transition-all"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                void handleContinueOutlineBatch()
+                              }}
+                              title={text(
+                                `从第 ${synopsisCoveredTo + 1} 章起继续生成剩余章节（已确认的第 1–${synopsisCoveredTo} 章保持不变）。`,
+                                `Continue generating the remaining chapters from chapter ${synopsisCoveredTo + 1} (confirmed chapters 1-${synopsisCoveredTo} stay unchanged).`,
+                              )}
+                            >
+                              {synopsisBusy
+                                ? <RefreshCw size={12} className="animate-spin opacity-90" />
+                                : <RefreshCw size={12} className="opacity-90" />}
+                              {synopsisBusy
+                                ? text('生成中...', 'Generating...')
+                                : text(`续批（第 ${synopsisCoveredTo + 1} 章起）`, `Continue (ch. ${synopsisCoveredTo + 1}+)`)}
+                            </Button>
+                          )}
+                        </>
                       ) : (
-                        <span className="text-[0.7rem] px-1.5 py-0.5 rounded font-medium bg-green-500/10 text-[var(--color-success-text)]">
-                          {text('已生成', 'Generated')}
+                        <span
+                          className="text-[0.7rem] px-1.5 py-0.5 rounded"
+                          style={{ backgroundColor: 'rgba(var(--color-accent-rgb,99 102 241),0.1)', color: 'var(--color-accent)' }}
+                        >
+                          {text('待生成', 'Not generated')}
                         </span>
                       )}
-                      <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                        {words.toLocaleString()} {text('字符', 'characters')}
+                      <span className="text-[0.7rem] flex items-center gap-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                        <FileText size={10} /> {text('点击查看', 'Open')}
                       </span>
-                      {f.key === 'synopsis' && synopsisIncomplete && !loading && (
-                        <Button
-                          size="sm"
-                          disabled={synopsisBusy}
-                          className="gap-1.5 mt-0.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-sm hover:from-amber-600 hover:to-orange-600 border-none hover:shadow hover:-translate-y-[0.5px] transition-all"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            void handleResumeSynopsis()
-                          }}
-                          title={text(
-                            '上次生成被输出长度中断，已完成部分已保存。点击后 AI 从断点继续生成当前批次。',
-                            'The previous run stopped at the output length limit and the completed part was saved. Click to continue the current batch from the break point.',
-                          )}
-                        >
-                          {synopsisBusy
-                            ? <RefreshCw size={12} className="animate-spin opacity-90" />
-                            : <RefreshCw size={12} className="opacity-90" />
-                          }
-                          {synopsisBusy
-                            ? text('续写中...', 'Resuming...')
-                            : text('断点续写大纲', 'Continue outline')}
-                        </Button>
-                      )}
-                      {f.key === 'synopsis' && !synopsisIncomplete && !synopsisRecoveryFailed
-                        && synopsisCoveredTo > 0 && synopsisCoveredTo < synopsisTotalChapters && !loading && (
-                        <Button
-                          size="sm"
-                          disabled={synopsisBusy}
-                          className="gap-1.5 mt-0.5 bg-gradient-to-r from-indigo-500 to-blue-500 text-white shadow-sm hover:from-indigo-600 hover:to-blue-600 border-none hover:shadow hover:-translate-y-[0.5px] transition-all"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            void handleContinueOutlineBatch()
-                          }}
-                          title={text(
-                            `从第 ${synopsisCoveredTo + 1} 章起继续生成剩余章节（已确认的第 1–${synopsisCoveredTo} 章保持不变）。`,
-                            `Continue generating the remaining chapters from chapter ${synopsisCoveredTo + 1} (confirmed chapters 1-${synopsisCoveredTo} stay unchanged).`,
-                          )}
-                        >
-                          {synopsisBusy
-                            ? <RefreshCw size={12} className="animate-spin opacity-90" />
-                            : <RefreshCw size={12} className="opacity-90" />
-                          }
-                          {synopsisBusy
-                            ? text('生成中...', 'Generating...')
-                            : text(`续批（第 ${synopsisCoveredTo + 1} 章起）`, `Continue (ch. ${synopsisCoveredTo + 1}+)`)}
-                        </Button>
-                      )}
-                    </>
-                  ) : (
-                    <span
-                      className="text-[0.7rem] px-1.5 py-0.5 rounded"
-                      style={{ backgroundColor: 'rgba(var(--color-accent-rgb,99 102 241),0.1)', color: 'var(--color-accent)' }}
-                    >
-                      {text('待生成', 'Not generated')}
-                    </span>
-                  )}
-                  {/* 显式安全修复，或采用受保护的既有角色卡。 */}
-                  {isCharacters && !loading && canRepairRoster && rosterPresentation?.actionLabel && (
-                    <Button
-                      size="sm"
-                      disabled={extracting}
-                      className="gap-1.5 mt-0.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-sm hover:from-amber-600 hover:to-orange-600 border-none hover:shadow hover:-translate-y-[0.5px] transition-all"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        void handleRepairCharacterRoster()
-                      }}
-                      title={rosterPresentation.actionTitle}
-                    >
-                      {extracting
-                        ? <RefreshCw size={12} className="animate-spin opacity-90" />
-                        : <AlertTriangle size={12} className="opacity-90" />
-                      }
-                      {extracting ? text('处理中...', 'Working...') : rosterPresentation.actionLabel}
-                    </Button>
-                  )}
-                  {/* 查看箭头提示 */}
-                  {generated && !(isCharacters && !loading && canRepairRoster) && (
-                    <span className="text-[0.7rem] flex items-center gap-0.5" style={{ color: 'var(--color-text-muted)' }}>
-                      <FileText size={10} /> {text('点击查看', 'Open')}
-                    </span>
-                  )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          )
-        })}
+              )
+            })()}
+          </div>
+        </div>
       </div>
 
       {/* AI 生成架构确认弹窗 */}

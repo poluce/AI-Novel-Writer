@@ -31,7 +31,8 @@ import { APP_BRAND } from '../../shared/brand'
 import { ipc } from '../../services/ipc-client'
 import { useLocaleStore } from '../../stores/locale-store'
 import type { MessageKey } from '../../i18n/core'
-import { sameProjectPathKey } from '../../shared/project-session-context'
+import { projectSessionContextFromProject, sameProjectPathKey } from '../../shared/project-session-context'
+import { flushAgentConversations } from '../../services/agent/conversation-archive'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '../ui/Dialog'
@@ -81,9 +82,12 @@ export default function TitleBar() {
     }
     const editor = useEditorStore.getState()
     if (countUnsavedEditorItems(editor.tabs, editor.draftLedgers) === 0) {
-      void ipc.invoke('window:resolve-close', requestId, 'proceed').then(result => {
-        if (!result.success) console.error('[TitleBar] 退出请求已失效')
-      }).catch(error => console.error('[TitleBar] 退出请求失败:', error))
+      void flushAgentConversations(projectSessionContextFromProject(useProjectStore.getState().currentProject))
+        .catch((error) => console.error('[TitleBar] 保存助手会话失败:', error))
+        .then(() => ipc.invoke('window:resolve-close', requestId, 'proceed'))
+        .then(result => {
+          if (!result.success) console.error('[TitleBar] 退出请求已失效')
+        }).catch(error => console.error('[TitleBar] 退出请求失败:', error))
       return
     }
     setExitError(null)
@@ -137,6 +141,7 @@ export default function TitleBar() {
     setExitError(null)
     try {
       await saveDirtyEditorChangesForExit(useProjectStore.getState().currentProject?.path)
+      await flushAgentConversations(projectSessionContextFromProject(useProjectStore.getState().currentProject))
       const result = await ipc.invoke('window:resolve-close', request.requestId, 'proceed')
       if (!result.success) throw new Error(text('退出请求已失效，请重试', 'The exit request expired. Try again.'))
     } catch (error) {

@@ -13,8 +13,10 @@ import type { EmbeddingOptions } from './embedding-options'
 import type { ModelCapabilities } from './provider-presets'
 import type { ModelProviderResourceId } from './model-provider-resources'
 import type { WritingLanguage } from './writing-language'
-import type { AgentEditorSnapshot, PiAgentEvent, RendererAction } from './agent-events'
+import type { AgentEditorSnapshot, PiAgentEvent, RendererAction, RendererActionResult } from './agent-events'
+import type { AgentPromptHistoryTurn } from './agent-conversation-archive'
 import type { DraftStatus } from './draft-status'
+import type { DraftAnnotation } from './draft-annotation'
 import type {
   RecoveryCandidate,
   RecoveryCandidateRecordInput,
@@ -934,6 +936,8 @@ export interface DatabaseChannels {
   'db:draft-next-version': { args: [chapterNumber: number, expectedProjectPath: string]; return: number }
   'db:draft-update-status': { args: [id: number, status: string, wordCount: number | undefined, expectedProjectPath: string]; return: { success: boolean; error?: string } }
   'db:draft-update-content': { args: [id: number, content: string, wordCount: number, expectedProjectPath: string]; return: { success: boolean; error?: string } }
+  'db:draft-list-annotations': { args: [draftId: number, expectedProjectPath: string]; return: DraftAnnotation[] }
+  'db:draft-replace-annotations': { args: [draftId: number, annotations: DraftAnnotation[], expectedProjectPath: string]; return: { success: boolean; error?: string } }
   'db:draft-delete': {
     args: [id: number, expectedProjectPath: string]
     return: {
@@ -1158,7 +1162,13 @@ export interface MCPChannels {
 // ===== 合并所有频道 =====
 export interface AgentChannels {
   'agent:prompt': {
-    args: [conversationId: string, input: string, modelId?: string, editorSnapshot?: AgentEditorSnapshot]
+    args: [
+      conversationId: string,
+      input: string,
+      modelId?: string,
+      editorSnapshot?: AgentEditorSnapshot,
+      history?: AgentPromptHistoryTurn[],
+    ]
     return: { success: boolean; error?: string }
   }
   'agent:confirm': {
@@ -1173,11 +1183,15 @@ export interface AgentChannels {
     args: []
     return: { success: boolean; prompt?: string; error?: string }
   }
+  'agent:renderer-action-result': {
+    args: [requestId: string, result: RendererActionResult]
+    return: { success: boolean }
+  }
 }
 
 export interface AgentStreamEvents {
   'agent:event': { conversationId: string; event: PiAgentEvent }
-  'agent:renderer-action': { action: RendererAction }
+  'agent:renderer-action': { action: RendererAction; requestId?: string }
 }
 
 export type AllInvokeChannels = WindowChannels & OfficialHomepageChannels & ModelProviderResourceChannels & ConfigChannels & UpdateChannels & SkinChannels & ProjectChannels & FileChannels & AppDataChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & ChapterLifecycleChannels & ImportChannels & MCPChannels & AgentChannels

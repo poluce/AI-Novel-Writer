@@ -7,6 +7,7 @@ import {
 } from './pi-agent'
 import { buildL1AgentContext } from './agent-l1-context'
 import type { AgentEditorSnapshot, PiAgentEvent } from '../../src/shared/agent-events'
+import type { AgentPromptHistoryTurn } from '../../src/shared/agent-conversation-archive'
 import type { WritingLanguage } from '../../src/shared/writing-language'
 
 export type { PiAgentEvent } from '../../src/shared/agent-events'
@@ -63,6 +64,23 @@ export class AgentSession {
 
   prompt(input: string): Promise<void> {
     return this.agent.prompt(input)
+  }
+
+  restoreHistory(history: readonly AgentPromptHistoryTurn[]): void {
+    if (history.length === 0) return
+    this.agent.restoreMessages(history.map((turn) => (
+      turn.role === 'assistant'
+        ? {
+          role: 'assistant' as const,
+          content: [{ type: 'text' as const, text: turn.content }],
+          timestamp: Date.now(),
+        }
+        : {
+          role: 'user' as const,
+          content: turn.content,
+          timestamp: Date.now(),
+        }
+    )) as AgentMessage[])
   }
 
   setTools(tools: AgentTool<any>[]): void {

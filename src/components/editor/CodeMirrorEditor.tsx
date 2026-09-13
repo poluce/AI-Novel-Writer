@@ -1,11 +1,13 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo, type MouseEvent } from 'react'
+import { createPortal } from 'react-dom'
 import CodeMirror, { ReactCodeMirrorRef, EditorView, ViewUpdate } from '@uiw/react-codemirror'
 import { keymap } from '@codemirror/view'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { languages } from '@codemirror/language-data'
-import { EditorState } from '@codemirror/state'
+import { Compartment, EditorState } from '@codemirror/state'
+import { Decoration } from '@codemirror/view'
 import { openSearchPanel, closeSearchPanel, search } from '@codemirror/search'
-import { Sparkles, Bold, Check } from 'lucide-react'
+import { Sparkles, Bold, Check, Pencil, MessageSquarePlus } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { createGenerationRuntime } from '../../services/generation/generation-runtime'
 import type { GenerationReasoningStage } from '../../shared/reasoning-types'
@@ -17,6 +19,12 @@ import { getActiveProjectSessionContext } from '../../shared/project-session-con
 import { resolveWritingLanguage } from '../../shared/writing-language'
 import { promptLanguageText } from '../../services/prompt-language'
 import { composePromptSystemRole, renderPrompt, resolvePromptTemplate } from '../../services/prompt-templates'
+import {
+  MAX_DRAFT_ANNOTATIONS,
+  MAX_DRAFT_ANNOTATION_NOTE,
+  type DraftAnnotation,
+} from '../../shared/draft-annotation'
+import { MAX_DRAFT_EXCERPT_CHARS, type DraftPassageCitation } from '../../shared/draft-excerpt'
 
 export type CodeMirrorEditorProps = {
   content: string
@@ -28,6 +36,14 @@ export type CodeMirrorEditorProps = {
   placeholder?: string
   hideStatusBar?: boolean
   mode?: 'document' | 'prose'
+  enableAnnotations?: boolean
+  annotations?: readonly DraftAnnotation[]
+  onAnnotationsChange?: (annotations: DraftAnnotation[]) => void
+  showLineNumbers?: boolean
+  chapterNumber?: number
+  draftId?: number
+  draftVersion?: number
+  onAddToAssistant?: (citation: DraftPassageCitation) => void
 }
 
 type EditorAIAction = {
@@ -52,6 +68,31 @@ const EDITOR_AI_GENERATION_BUDGET = Object.freeze({
   deadlineMs: 120_000,
 })
 
+function annotationDecorations(annotations: readonly DraftAnnotation[], docLength = Number.POSITIVE_INFINITY) {
+  return Decoration.set(
+    annotations
+      .filter(item => item.from >= 0 && item.to > item.from && item.to <= docLength)
+      .sort((left, right) => left.from - right.from || left.to - right.to)
+      .map(item => Decoration.mark({ class: 'cm-draft-annotation' }).range(item.from, item.to)),
+    true,
+  )
+}
+
+function remapAnnotation(annotation: DraftAnnotation, update: ViewUpdate): DraftAnnotation {
+  const from = update.changes.mapPos(annotation.from, 1)
+  const to = update.changes.mapPos(annotation.to, -1)
+  const doc = update.state.doc
+  if (from < to && from <= doc.length && to <= doc.length && doc.sliceString(from, to) === annotation.quote) {
+    return from === annotation.from && to === annotation.to ? annotation : { ...annotation, from, to }
+  }
+  const index = doc.toString().indexOf(annotation.quote)
+  if (index >= 0) {
+    return { ...annotation, from: index, to: index + annotation.quote.length }
+  }
+  if (annotation.from === -1 && annotation.to === -1) return annotation
+  return { ...annotation, from: -1, to: -1 }
+}
+
 export default function CodeMirrorEditor({
   content,
   editable = true,
@@ -60,10 +101,23 @@ export default function CodeMirrorEditor({
   onCharCountChange,
   placeholder,
   mode = 'document',
+  enableAnnotations = false,
+  annotations = [],
+  onAnnotationsChange,
+  showLineNumbers = false,
+  chapterNumber,
+  draftId,
+  draftVersion,
+  filePath,
+  onAddToAssistant,
 }: CodeMirrorEditorProps) {
   const uiText = useLocaleStore(s => s.text)
   const uiLocale = useLocaleStore(s => s.locale)
   const editorRef = useRef<ReactCodeMirrorRef>(null)
+  const annotationCompartment = useRef(new Compartment())
+  const annotationInputFocusedRef = useRef(false)
+  const [annotationNote, setAnnotationNote] = useState('')
+  const [contextMenu, setContextMenu] = useState<{ top: number; left: number; from: number; to: number } | null>(null)
 
   // 避免状态回路
   const lastEmittedContentRef = useRef(content)
@@ -109,6 +163,34 @@ export default function CodeMirrorEditor({
   }, [])
 
   useEffect(() => {
+    setAnnotationNote('')
+  }, [selectionRange?.from, selectionRange?.to])
+
+  useEffect(() => {
+    if (!contextMenu) return
+    const close = () => setContextMenu(null)
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close()
+    }
+    window.addEventListener('mousedown', close)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', close)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [contextMenu])
+
+  useEffect(() => {
+    const view = editorRef.current?.view
+    if (!view) return
+    view.dispatch({
+      effects: annotationCompartment.current.reconfigure(
+        EditorView.decorations.of(annotationDecorations(annotations, view.state.doc.length)),
+      ),
+    })
+  }, [annotations])
+
+  useEffect(() => {
     if (aiResult === '') {
       const timer = setInterval(() => setLoadingDots(d => d.length >= 3 ? '.' : d + '.'), 400)
       return () => clearInterval(timer)
@@ -123,11 +205,18 @@ export default function CodeMirrorEditor({
 
       const cnt = countDraftUnits(newText)
       onCharCountChange?.(cnt)
+      if (enableAnnotations && annotations.length > 0 && onAnnotationsChange) {
+        const next = annotations.map(item => remapAnnotation(item, v))
+        if (next.some((item, index) => item.from !== annotations[index]?.from || item.to !== annotations[index]?.to)) {
+          onAnnotationsChange(next)
+        }
+      }
     }
 
     if (v.selectionSet || v.docChanged || v.geometryChanged) {
       const sel = v.state.selection.main
       if (sel.empty || sel.to - sel.from < 1) {
+        if (annotationInputFocusedRef.current) return
         setBubbleOpen(false)
         setSelectionRange(null)
       } else {
@@ -138,7 +227,7 @@ export default function CodeMirrorEditor({
         }
       }
     }
-  }, [onChange, onCharCountChange, aiResult])
+  }, [onChange, onCharCountChange, aiResult, annotations, enableAnnotations, onAnnotationsChange])
 
   // 监听滚动与缩放，实时更新 Bubble Menu 坐标
   useEffect(() => {
@@ -231,6 +320,20 @@ export default function CodeMirrorEditor({
     ".cm-activeLine": { backgroundColor: "transparent" },
     ".cm-selectionBackground, .cm-focused .cm-selectionBackground": { backgroundColor: "var(--color-hover) !important" },
     ".cm-line": { padding: "0" },
+    ".cm-draft-annotation": {
+      backgroundColor: "color-mix(in srgb, var(--color-warning, #d97706) 22%, transparent)",
+      borderBottom: "1px dashed var(--color-warning-text, #b45309)",
+    },
+    ".cm-gutters": {
+      backgroundColor: "transparent",
+      border: "none",
+      color: "var(--color-text-muted)",
+    },
+    ".cm-lineNumbers .cm-gutterElement": {
+      minWidth: "2.2em",
+      padding: "0 8px 0 0",
+      fontSize: "12px",
+    },
   }), [mode])
 
   // 构建扩展
@@ -281,8 +384,34 @@ export default function CodeMirrorEditor({
     if (mode === 'document') {
       exts.push(markdown({ base: markdownLanguage, codeLanguages: languages }))
     }
+    exts.push(annotationCompartment.current.of(EditorView.decorations.of(annotationDecorations(annotations))))
     return exts
   }, [mode, uiLocale])
+
+  const handleAddAnnotation = () => {
+    if (!enableAnnotations || !onAnnotationsChange || !selectionRange || !editorRef.current?.view) return
+    const note = annotationNote.trim()
+    if (!note) return
+    if (annotations.length >= MAX_DRAFT_ANNOTATIONS) return
+    const view = editorRef.current.view
+    const quote = view.state.sliceDoc(selectionRange.from, selectionRange.to)
+    if (!quote.trim()) return
+    onAnnotationsChange([
+      ...annotations,
+      {
+        id: crypto.randomUUID(),
+        from: selectionRange.from,
+        to: selectionRange.to,
+        quote,
+        note: note.slice(0, MAX_DRAFT_ANNOTATION_NOTE),
+        createdAt: Date.now(),
+      },
+    ])
+    setAnnotationNote('')
+    view.dispatch({ selection: { anchor: selectionRange.to } })
+    setBubbleOpen(false)
+    setSelectionRange(null)
+  }
 
   // AI 菜单：一次性 submit_text，完成后才展示结果
   const handleAIAction = async (action: EditorAIAction) => {
@@ -385,6 +514,40 @@ export default function CodeMirrorEditor({
     setBubbleOpen(false)
   }
 
+  const handleContextMenu = (event: MouseEvent) => {
+    if (!onAddToAssistant || !editorRef.current?.view) return
+    const view = editorRef.current.view
+    const sel = view.state.selection.main
+    if (sel.empty) return
+    event.preventDefault()
+    setBubbleOpen(false)
+    setContextMenu({ top: event.clientY, left: event.clientX, from: sel.from, to: sel.to })
+  }
+
+  const handleAddToAssistant = (from: number, to: number) => {
+    if (!onAddToAssistant || !editorRef.current?.view) return
+    const view = editorRef.current.view
+    const quote = view.state.sliceDoc(from, to)
+    if (!quote.trim()) {
+      setContextMenu(null)
+      return
+    }
+    const fromLine = view.state.doc.lineAt(from).number
+    const toLine = view.state.doc.lineAt(Math.max(to - 1, from)).number
+    onAddToAssistant({
+      id: crypto.randomUUID(),
+      chapterNumber,
+      draftId,
+      version: draftVersion,
+      fromLine,
+      toLine,
+      quote: quote.slice(0, MAX_DRAFT_EXCERPT_CHARS),
+      filePath,
+    })
+    setContextMenu(null)
+    setBubbleOpen(false)
+  }
+
   const handleRejectAI = () => {
     aiRequestSequenceRef.current += 1
     aiTargetRef.current = null
@@ -395,7 +558,7 @@ export default function CodeMirrorEditor({
 
   // 固定 basicSetup 内存引用，防止 React 每次渲染生成新对象导致内部扩展被重载（搜索框消失的罪魁祸首）
   const cmBasicSetup = useMemo(() => ({
-    lineNumbers: false,
+    lineNumbers: showLineNumbers,
     foldGutter: false,
     dropCursor: false,
     allowMultipleSelections: false,
@@ -403,7 +566,7 @@ export default function CodeMirrorEditor({
     highlightActiveLine: false,
     highlightActiveLineGutter: false,
     searchKeymap: true,
-  }), [])
+  }), [showLineNumbers])
 
   return (
     <div className="relative h-full flex flex-col min-h-0"
@@ -432,6 +595,7 @@ export default function CodeMirrorEditor({
         }
       }}>
       <div className="flex-1 relative min-h-0 overflow-hidden"
+        onContextMenu={handleContextMenu}
         onMouseDown={() => {
           // 点击空白处关闭 Bubble Menu
           if (aiResult) return;
@@ -452,6 +616,34 @@ export default function CodeMirrorEditor({
             onUpdate={handleUpdate}
           />
         </div>
+        {contextMenu && onAddToAssistant && createPortal(
+          <div
+            className="fixed z-[80] py-1 rounded-md shadow-xl min-w-[168px]"
+            style={{
+              top: contextMenu.top,
+              left: contextMenu.left,
+              backgroundColor: 'var(--color-sidebar)',
+              border: '1px solid var(--color-border)',
+            }}
+            onMouseDown={event => {
+              event.preventDefault()
+              event.stopPropagation()
+            }}
+          >
+            <button
+              type="button"
+              className="w-full text-left px-3 py-1.5 text-xs hover:bg-[var(--color-hover)]"
+              onMouseDown={event => {
+                event.preventDefault()
+                event.stopPropagation()
+                handleAddToAssistant(contextMenu.from, contextMenu.to)
+              }}
+            >
+              {uiText('添加到助手', 'Add to assistant')}
+            </button>
+          </div>,
+          document.body,
+        )}
       </div>
 
       {/* Bubble Menu */}
@@ -464,7 +656,13 @@ export default function CodeMirrorEditor({
             backgroundColor: 'var(--color-sidebar)',
             borderColor: 'var(--color-border)',
           }}
-          onMouseDown={(e) => e.preventDefault()} // 防止编辑器失焦
+          onMouseDown={(e) => {
+            if ((e.target as HTMLElement).closest('input, textarea')) {
+              e.stopPropagation()
+              return
+            }
+            e.preventDefault()
+          }}
         >
           {aiResult !== null ? (
             <div className="w-[360px] max-h-[260px] overflow-y-auto p-2">
@@ -529,6 +727,43 @@ export default function CodeMirrorEditor({
             </div>
           ) : (
             <>
+              {enableAnnotations && mode === 'prose' && (
+                <div className="flex items-center gap-1 pr-1">
+                  <Pencil size={11} style={{ color: 'var(--color-warning-text, #b45309)' }} />
+                  <input
+                    value={annotationNote}
+                    maxLength={MAX_DRAFT_ANNOTATION_NOTE}
+                    onChange={event => setAnnotationNote(event.target.value)}
+                    onKeyDown={event => {
+                      if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault()
+                        handleAddAnnotation()
+                      }
+                    }}
+                    onFocus={() => { annotationInputFocusedRef.current = true }}
+                    onBlur={() => { annotationInputFocusedRef.current = false }}
+                    placeholder={uiText('这段有什么问题？', 'What is wrong with this passage?')}
+                    className="w-[180px] px-1.5 py-1 text-[11px] rounded-md"
+                    style={{
+                      background: 'var(--color-bg-elevated, var(--color-panel))',
+                      border: '1px solid var(--color-border)',
+                      color: 'var(--color-text)',
+                      outline: 'none',
+                    }}
+                    aria-label={uiText('选区标注', 'Passage note')}
+                  />
+                  <button
+                    className="px-1.5 py-1 text-[10px] rounded-md font-medium"
+                    style={{
+                      backgroundColor: annotationNote.trim() ? 'var(--color-accent)' : 'var(--color-hover)',
+                      color: annotationNote.trim() ? '#fff' : 'var(--color-text-muted)',
+                    }}
+                    disabled={!annotationNote.trim() || annotations.length >= MAX_DRAFT_ANNOTATIONS}
+                    onClick={handleAddAnnotation}
+                  >{uiText('标注', 'Note')}</button>
+                  <div className="w-[1px] h-3 mx-1" style={{ backgroundColor: 'var(--color-border)' }} />
+                </div>
+              )}
               {mode === 'document' && (
                 <>
                   <button
@@ -547,6 +782,21 @@ export default function CodeMirrorEditor({
                       }
                     }}
                   ><Bold size={14} /></button>
+                  <div className="w-[1px] h-3 mx-1" style={{ backgroundColor: 'var(--color-border)' }} />
+                </>
+              )}
+              {onAddToAssistant && selectionRange && (
+                <>
+                  <button
+                    className="p-1.5 rounded flex items-center gap-1 text-[10px]"
+                    style={{ color: 'var(--color-accent)' }}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
+                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    onClick={() => handleAddToAssistant(selectionRange.from, selectionRange.to)}
+                  >
+                    <MessageSquarePlus size={11} />
+                    {uiText('添加到助手', 'Add to assistant')}
+                  </button>
                   <div className="w-[1px] h-3 mx-1" style={{ backgroundColor: 'var(--color-border)' }} />
                 </>
               )}

@@ -300,6 +300,48 @@ describe('RefineDraftCommand bounded visible completion', () => {
     expect(request).toContain(priorityBoundary)
   })
 
+  it('sends author passage notes into the direct refinement prompt', async () => {
+    const source = '顾舟停在潮门口。'.repeat(80)
+    const revision = '顾舟在潮门口停了一停。'.repeat(80)
+    const completeWithLease = vi.fn<GenerationRuntimeEnvironment['completeWithLease']>()
+      .mockResolvedValue({ content: revision, finishReason: 'stop' })
+    stubIpc(successfulRevisionIpc())
+
+    await new RefineDraftCommand({
+      draftPath: 'vela://draft/1',
+      draftContent: source,
+      chapterNumber: 1,
+      chapterInfo: {
+        projectPath: PROJECT_PATH,
+        chapterNumber: 1,
+        title: '第一章',
+        role: '开端',
+        purpose: '建立冲突',
+        keyEvents: '事件',
+        characters: [],
+      },
+      annotations: [{
+        id: 'note-1',
+        from: 0,
+        to: 3,
+        quote: '顾舟停',
+        note: '停得太突然，加一点犹豫',
+        createdAt: 1,
+      }],
+    }, runtimeDependencies(completeWithLease)).execute({
+      step: {},
+      context: workflowContext(),
+      callbacks: callbacks(),
+    })
+
+    const prompt = completeWithLease.mock.calls[0]?.[0].messages
+      .map(message => message.content)
+      .join('\n') ?? ''
+    expect(prompt).toContain('作者选区标注')
+    expect(prompt).toContain('原文：「顾舟停」')
+    expect(prompt).toContain('作者意见：停得太突然，加一点犹豫')
+  })
+
   it('uses the frozen English UI locale for visible refinement logs and the diff tab independently of Chinese writing', async () => {
     const source = 'Original chapter. '.repeat(120)
     const revision = 'Revised chapter. '.repeat(120)

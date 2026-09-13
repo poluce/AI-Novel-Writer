@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Save, Sparkles, Info, Loader2, RotateCcw, ChevronDown } from 'lucide-react'
+import { Save, Sparkles, Info, RotateCcw } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
 import { registerEditorExitSaveHandler } from '../../stores/editor-store'
 import { useLLMStore } from '../../stores/llm-store'
@@ -28,6 +28,7 @@ import {
   isProjectSessionPath,
 } from '../project-session-gate'
 import { AUDIENCE_EN, GENRE_EN } from './novel-config-labels'
+import { DocumentBody, SettingDocument, SettingSection } from './SettingSections'
 
 /** 小说配置编辑器 — Tab 内的可视化配置面板 */
 export default function NovelConfigEditor({ projectKey }: { projectKey: string }) {
@@ -506,108 +507,6 @@ function Section({
       </div>
       {children}
     </div>
-  )
-}
-
-function SettingDocument({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      className="px-5 py-4 rounded-xl border"
-      style={{
-        backgroundColor: 'var(--color-editor-bg)',
-        borderColor: 'var(--color-border)',
-      }}
-    >
-      {children}
-    </div>
-  )
-}
-
-function SettingSection({
-  title,
-  collapsed,
-  onToggle,
-  generating = false,
-  generateDisabled = false,
-  onGenerate,
-  children,
-}: {
-  title: string
-  collapsed: boolean
-  onToggle: () => void
-  generating?: boolean
-  generateDisabled?: boolean
-  onGenerate?: () => void
-  children: React.ReactNode
-}) {
-  const text = useLocaleStore(s => s.text)
-  return (
-    <section className="mb-1">
-      <div
-        className="flex items-center gap-2 py-2"
-        style={{ borderBottom: '1px solid var(--color-border)' }}
-      >
-        <button
-          type="button"
-          className="flex h-5 w-5 items-center justify-center rounded-sm shrink-0"
-          style={{ color: 'var(--color-text-muted)' }}
-          title={collapsed ? text('展开', 'Expand') : text('收起', 'Collapse')}
-          aria-expanded={!collapsed}
-          onClick={onToggle}
-        >
-          <ChevronDown size={14} style={{ transform: collapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 120ms' }} />
-        </button>
-        <h3 className="text-sm font-semibold m-0" style={{ color: 'var(--color-text)' }}>{title}</h3>
-        {onGenerate && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="ml-auto shrink-0"
-            onClick={onGenerate}
-            disabled={generateDisabled}
-            title={generating ? text('正在生成...', 'Generating...') : text('AI 生成', 'Generate with AI')}
-          >
-            {generating ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
-            {generating ? text('生成中...', 'Generating...') : text('AI 生成', 'Generate with AI')}
-          </Button>
-        )}
-      </div>
-      {!collapsed && children}
-    </section>
-  )
-}
-
-function DocumentBody({
-  value,
-  onChange,
-  placeholder,
-}: {
-  value: string
-  onChange: (value: string) => void
-  placeholder: string
-}) {
-  const ref = useRef<HTMLTextAreaElement>(null)
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    el.style.height = 'auto'
-    el.style.height = `${Math.max(el.scrollHeight, 72)}px`
-  }, [value])
-
-  return (
-    <textarea
-      ref={ref}
-      value={value}
-      onChange={event => onChange(event.target.value)}
-      placeholder={placeholder}
-      rows={3}
-      className="w-full resize-none bg-transparent px-1 py-2 text-sm outline-none"
-      style={{
-        color: 'var(--color-text)',
-        minHeight: 72,
-        lineHeight: 1.7,
-      }}
-    />
   )
 }
 

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createOpenEditorTool } from '../open-editor.tool'
 import { createStartWorkflowTool } from '../start-workflow.tool'
+import { createReplaceDraftExcerptTool } from '../replace-draft-excerpt.tool'
 import type { RendererAction } from '../../renderer-action'
 
 vi.mock('../../../database', () => ({
@@ -36,7 +37,7 @@ describe('open_editor', () => {
     readTextMock.mockResolvedValue('文件内容')
 
     const actions: RendererAction[] = []
-    const tool = createOpenEditorTool('zh-CN', (a) => actions.push(a))
+    const tool = createOpenEditorTool('zh-CN', (a) => { actions.push(a) })
     await tool.execute('c1', { file_path: 'notes.md', tab_type: 'chapter' })
 
     expect(actions).toHaveLength(1)
@@ -45,17 +46,69 @@ describe('open_editor', () => {
 })
 
 describe('start_workflow', () => {
-  it('emits a start_workflow renderer action', async () => {
+  it('reports success only after the renderer confirms registration', async () => {
     const actions: RendererAction[] = []
-    const tool = createStartWorkflowTool('zh-CN', (a) => actions.push(a))
-    await tool.execute('c1', { workflow: 'generate_draft', chapter_number: 1 })
+    const tool = createStartWorkflowTool('zh-CN', async (a) => {
+      actions.push(a)
+      return { ok: true, summary: '已启动「写稿（第 1 章）」工作流（运行 ID：run-1，状态：running）。' }
+    })
+    const result = await tool.execute('c1', { workflow: 'generate_draft', chapter_number: 1 })
 
     expect(actions).toHaveLength(1)
     expect(actions[0]).toMatchObject({ type: 'start_workflow', workflow: 'generate_draft', chapterNumber: 1 })
+    expect(result.content[0]).toMatchObject({
+      type: 'text',
+      text: '已启动「写稿（第 1 章）」工作流（运行 ID：run-1，状态：running）。',
+    })
+  })
+
+  it('returns the renderer launch error to the model', async () => {
+    const tool = createStartWorkflowTool('zh-CN', async () => ({
+      ok: false,
+      error: 'refine 需要明确的草稿 ID 和不可变正文快照；请先打开目标草稿后从编辑器启动',
+    }))
+    await expect(tool.execute('c1', { workflow: 'refine', chapter_number: 1 }))
+      .rejects.toThrow('草稿 ID')
+  })
+
+  it('does not report success when the renderer never returns a receipt', async () => {
+    const tool = createStartWorkflowTool('zh-CN', () => {})
+    await expect(tool.execute('c1', { workflow: 'generate_architecture' }))
+      .rejects.toThrow('未能注册到任务中心')
   })
 
   it('requires a chapter number for chapter workflows', async () => {
-    const tool = createStartWorkflowTool('zh-CN', () => {})
+    const tool = createStartWorkflowTool('zh-CN', async () => ({ ok: true, summary: 'no' }))
     await expect(tool.execute('c1', { workflow: 'generate_draft' })).rejects.toThrow('chapter_number')
+  })
+})
+
+describe('replace_draft_excerpt', () => {
+  it('reports the renderer receipt to the model', async () => {
+    const tool = createReplaceDraftExcerptTool('zh-CN', async () => ({
+      ok: true,
+      summary: '已在第 1 章草稿中替换一处原文（3 → 5 字）。',
+    }))
+    const result = await tool.execute('c1', {
+      chapter_number: 1,
+      old_text: '他走了',
+      new_text: '他离开了',
+    })
+    expect(result.content[0]).toMatchObject({
+      type: 'text',
+      text: '已在第 1 章草稿中替换一处原文（3 → 5 字）。',
+    })
+  })
+
+  it('returns a unique-match failure to the model', async () => {
+    const tool = createReplaceDraftExcerptTool('zh-CN', async () => ({
+      ok: false,
+      error: '这段原文在草稿中出现了不止一次。请多复制前后文，使匹配唯一。',
+    }))
+    await expect(tool.execute('c1', {
+      chapter_number: 1,
+      old_text: '他走了',
+      new_text: '他离开了',
+    })).rejects.toThrow('不止一次')
   })
 })

@@ -17,6 +17,7 @@ import { createInstallWritingSkillTool } from './tools/install-writing-skill.too
 import { createBindWritingSkillTool } from './tools/bind-writing-skill.tool'
 import { createOpenEditorTool } from './tools/open-editor.tool'
 import { createStartWorkflowTool } from './tools/start-workflow.tool'
+import { createReplaceDraftExcerptTool } from './tools/replace-draft-excerpt.tool'
 import { createProposeNovelConfigTool } from './tools/propose-novel-config.tool'
 import { createProposeChapterBlueprintTool } from './tools/propose-chapter-blueprint.tool'
 import { buildMcpAgentTools } from './tools/mcp.tool'
@@ -26,6 +27,7 @@ function withTruncatedResult(tool: AgentTool<any>): AgentTool<any> {
   const sequential = confirmationToolNames().has(tool.name) || tool.name.startsWith('mcp__')
   return {
     ...tool,
+    // Agent-level execution is parallel; pin writes/MCP so they never overlap.
     ...(sequential ? { executionMode: 'sequential' as const } : {}),
     execute: async (id, params, signal) => {
       const result = await tool.execute(id, params, signal)
@@ -61,6 +63,7 @@ export function buildAgentTools(
     createBindWritingSkillTool(language),
     createOpenEditorTool(language, rendererAction),
     createStartWorkflowTool(language, rendererAction),
+    createReplaceDraftExcerptTool(language, rendererAction),
     createProposeNovelConfigTool(language, rendererAction),
     createProposeChapterBlueprintTool(language),
     ...buildMcpAgentTools(language),
@@ -73,6 +76,7 @@ export function confirmationToolNames(): ReadonlySet<string> {
     'write_file',
     'open_editor',
     'start_workflow',
+    'replace_draft_excerpt',
     'propose_novel_config',
     'propose_chapter_blueprint',
     'install_writing_skill',

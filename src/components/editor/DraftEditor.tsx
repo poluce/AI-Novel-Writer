@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Sparkles, Search, BadgeCheck, Save, FileStack, FileText, Wrench, Check } from 'lucide-react'
+import { Sparkles, Search, BadgeCheck, Save, FileStack, FileText, Wrench, Check, Pencil, X } from 'lucide-react'
 
 import { useProjectStore } from '../../stores/project-store'
 import { registerEditorExitSaveHandler, useEditorStore } from '../../stores/editor-store'
+import { useAgentStore } from '../../stores/agent-store'
+import { useLayoutStore } from '../../stores/layout-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { useLocaleStore } from '../../stores/locale-store'
 import CodeMirrorEditor from './CodeMirrorEditor'
@@ -28,6 +30,7 @@ import { captureFinalizationSnapshot } from '../../services/finalization-snapsho
 
 import { DRAFT_STATUS_LABEL, DRAFT_STATUS_COLOR } from '../../shared/draft-status'
 import { countDraftUnits } from '../../shared/draft-units'
+import { type DraftAnnotation } from '../../shared/draft-annotation'
 import { PostProcessStatusPanel } from '../ui/PostProcessStatusPanel'
 import { getChapterFinalizeScope } from '../../services/workflows/workflow-utils'
 import { guardRepairPostProcess } from '../../services/workflow-guards'
@@ -144,6 +147,45 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
   const [saving, setSaving] = useState(false)
   const [confirmAction, setConfirmAction] = useState<'refine' | 'review' | null>(null)
   const [userRefinePrompt, setUserRefinePrompt] = useState('')
+  const [annotations, setAnnotations] = useState<DraftAnnotation[]>([])
+  const [annotationsReady, setAnnotationsReady] = useState(false)
+  const [annotationListOpen, setAnnotationListOpen] = useState(false)
+
+  useEffect(() => {
+    setAnnotations([])
+    setAnnotationsReady(false)
+    if (!meta?.id || isReadonly) return
+    const session = captureProjectSession(currentProject)
+    if (!session || !isProjectSessionPath(session, projectKey)) return
+    let cancelled = false
+    void ipc.invokeWithProjectSession(session, 'db:draft-list-annotations', meta.id, projectKey)
+      .then((rows) => {
+        if (!cancelled && isProjectSessionCurrent(session) && Array.isArray(rows)) {
+          setAnnotations(rows)
+          setAnnotationsReady(true)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setAnnotationsReady(true)
+      })
+    return () => { cancelled = true }
+  }, [currentProject, isReadonly, meta?.id, projectKey])
+
+  useEffect(() => {
+    if (!annotationsReady || !meta?.id || isReadonly) return
+    const session = captureProjectSession(currentProject)
+    if (!session || !isProjectSessionPath(session, projectKey)) return
+    const timer = setTimeout(() => {
+      void ipc.invokeWithProjectSession(
+        session,
+        'db:draft-replace-annotations',
+        meta.id,
+        annotations,
+        projectKey,
+      ).catch(() => {})
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [annotations, annotationsReady, currentProject, isReadonly, meta?.id, projectKey])
   // 审稿维度多选
   const REVIEW_DIMS = [
     {
@@ -319,6 +361,7 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
         draftContent: source.body,
         sourceDraft: source.sourceDraft,
         userRefinePrompt: userRefinePrompt.trim() || undefined,
+        annotations,
       }, projectSession), false)
     } catch (e) {
       if (!isProjectSessionCurrent(projectSession)) return
@@ -749,6 +792,18 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
               </Button>
             )}
 
+            {annotations.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setAnnotationListOpen(open => !open)}
+                title={text('查看并删除选区标注；AI 修稿时会一并交给模型', 'View and delete passage notes. AI revision will include them.')}
+              >
+                <Pencil size={12} />
+                {text(`标注(${annotations.length})`, `Notes (${annotations.length})`)}
+              </Button>
+            )}
+
             {/* AI 修稿 */}
             <Button
               variant="ai"
@@ -839,6 +894,30 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
         </div>
       )}
 
+      {annotationListOpen && annotations.length > 0 && (
+        <div
+          className="px-3 py-2 text-xs space-y-1.5"
+          style={{ borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg-elevated, var(--color-panel))' }}
+        >
+          {annotations.map(item => (
+            <div key={item.id} className="flex items-start gap-2">
+              <div className="flex-1 min-w-0">
+                <div className="truncate" style={{ color: 'var(--color-text-muted)' }}>「{item.quote}」</div>
+                <div style={{ color: 'var(--color-text)' }}>{item.note}</div>
+              </div>
+              <button
+                type="button"
+                className="p-0.5 rounded"
+                title={text('删除标注', 'Remove note')}
+                onClick={() => setAnnotations(current => current.filter(entry => entry.id !== item.id))}
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* 正文区 */}
       <div className="flex-1 overflow-hidden relative">
         <CodeMirrorEditor
@@ -847,6 +926,21 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
           filePath={filePath}
           editable={!isReadonly && !isChapterBusy}
           hideStatusBar
+          enableAnnotations={!isReadonly && !isChapterBusy}
+          annotations={annotations}
+          onAnnotationsChange={setAnnotations}
+          showLineNumbers
+          chapterNumber={meta?.chapterNumber}
+          draftId={meta?.id}
+          draftVersion={meta?.version}
+          onAddToAssistant={(citation) => {
+            useAgentStore.getState().addComposerCitation(citation)
+            useLayoutStore.getState().openRightPanel('agent')
+            toast.success(text(
+              `已添加到助手输入框（${citation.quote.slice(0, 24)}${citation.quote.length > 24 ? '…' : ''}）`,
+              `Added to the assistant (${citation.quote.slice(0, 24)}${citation.quote.length > 24 ? '…' : ''})`,
+            ))
+          }}
           onCharCountChange={setCharCount}
           onChange={(text) => {
             currentBodyRef.current = text
@@ -880,6 +974,18 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
                 <div className="font-medium text-[var(--color-text)]">{text('本次【直接修稿】范围：', 'This direct revision will:')}</div>
                 <div>{text('1. 全文基础润色、词汇优化，增强画面与表现力。', '1. Polish the full chapter, improve wording, and strengthen imagery and expression.')}</div>
                 <div>{text('2. 可在下方指定的额外修稿要求。', '2. Follow any additional revision instructions below.')}</div>
+                {annotations.length > 0 && (
+                  <div className="pt-2 space-y-1">
+                    <div className="font-medium text-[var(--color-text)]">
+                      {text(`将提交 ${annotations.length} 条选区标注：`, `Will send ${annotations.length} passage notes:`)}
+                    </div>
+                    {annotations.map(item => (
+                      <div key={item.id} className="text-xs leading-relaxed">
+                        「{item.quote.length > 36 ? `${item.quote.slice(0, 36)}…` : item.quote}」— {item.note}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </>
             ) : (
               <>

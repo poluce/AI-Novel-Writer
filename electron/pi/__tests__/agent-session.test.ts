@@ -85,4 +85,14 @@ describe('AgentSession', () => {
       expect(complete.call.status).toBe('failed')
     }
   })
+
+  it('restores prior user/assistant turns onto a new session', () => {
+    const session = buildSession(() => true, [])
+    session.restoreHistory([
+      { role: 'user', content: '上一本的问题' },
+      { role: 'assistant', content: '上一本的回答' },
+    ])
+    expect(session.messages).toHaveLength(2)
+    expect(session.messages[0]).toMatchObject({ role: 'user', content: '上一本的问题' })
+  })
 })

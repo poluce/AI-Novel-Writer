@@ -4,6 +4,7 @@ import { createPiModels } from './pi-models'
 import { buildAgentTools, confirmationToolNames } from './tool-builder'
 
 import type { AgentEditorSnapshot, PiAgentEvent, RendererActionSink } from '../../src/shared/agent-events'
+import type { AgentPromptHistoryTurn } from '../../src/shared/agent-conversation-archive'
 import type { ModelProfile } from '../../src/shared/ipc-channels'
 import type { WritingLanguage } from '../../src/shared/writing-language'
 import { logFailure, logInfo } from '../../src/shared/fail-log'
@@ -33,6 +34,7 @@ export class AgentSessionManager {
     input: string,
     modelId?: string,
     editorSnapshot?: AgentEditorSnapshot,
+    history?: readonly AgentPromptHistoryTurn[],
   ): Promise<{ success: boolean; error?: string }> {
     try {
       const profile = this.options.resolveModel(modelId)
@@ -44,7 +46,7 @@ export class AgentSessionManager {
         provider: profile?.provider,
         chars: input.length,
       })
-      const session = this.getOrCreate(conversationId, modelId)
+      const session = this.getOrCreate(conversationId, modelId, history)
       session.setEditorSnapshot(editorSnapshot)
       session.setTools(buildAgentTools(this.options.resolveLanguage(conversationId), this.options.rendererAction))
       await session.prompt(input)
@@ -77,7 +79,11 @@ export class AgentSessionManager {
     abortAllPiInFlight()
   }
 
-  private getOrCreate(conversationId: string, modelId?: string): AgentSession {
+  private getOrCreate(
+    conversationId: string,
+    modelId?: string,
+    history?: readonly AgentPromptHistoryTurn[],
+  ): AgentSession {
     const existing = this.sessions.get(conversationId)
     if (existing) return existing
 
@@ -97,6 +103,7 @@ export class AgentSessionManager {
       language,
       emit: (event) => this.options.emit(conversationId, event),
     })
+    if (history && history.length > 0) session.restoreHistory(history)
     this.sessions.set(conversationId, session)
     registerPiInFlight(`agent:${conversationId}`, session)
     return session

@@ -65,6 +65,51 @@ describe('createPiAgent', () => {
     expect(doneText).toBe('The sum is 19.')
   })
 
+  it('runs parallel-capable tools concurrently in one assistant turn', async () => {
+    const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+    const started: number[] = []
+    const slowTool = (name: string): AgentTool<typeof AddSchema, { name: string }> => ({
+      name,
+      label: name,
+      description: name,
+      parameters: AddSchema,
+      execute: async () => {
+        started.push(Date.now())
+        await wait(80)
+        return { content: [{ type: 'text', text: name }], details: { name } }
+      },
+    })
+    const faux = fauxProvider()
+    const models = createModels()
+    models.setProvider(faux.provider)
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxToolCall('slow_a', { a: 1, b: 1 }),
+        fauxToolCall('slow_b', { a: 1, b: 1 }),
+      ]),
+      fauxAssistantMessage('ok'),
+    ])
+    const handle = createPiAgent({
+      model: faux.getModel(),
+      streamFn: models.streamSimple.bind(models),
+      systemPrompt: 'You are a calculator.',
+      tools: [slowTool('slow_a'), slowTool('slow_b')],
+      callbacks: {
+        onTextChunk: () => {},
+        onToolCallStart: () => {},
+        onToolCallConfirmRequired: async () => true,
+        onToolCallComplete: () => {},
+        onDone: () => {},
+        onError: () => {},
+      },
+    })
+    const t0 = Date.now()
+    await handle.prompt('run both')
+    expect(started).toHaveLength(2)
+    expect(Math.abs(started[1]! - started[0]!)).toBeLessThan(50)
+    expect(Date.now() - t0).toBeLessThan(160)
+  })
+
   it('surfaces encoded stream failures instead of an empty successful turn', async () => {
     const faux = fauxProvider()
     const models = createModels()

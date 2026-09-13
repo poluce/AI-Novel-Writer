@@ -24,6 +24,7 @@ describe('Agent IPC bridge', () => {
       activeConversationId: null,
       activeRequestId: null,
       toolsInitialized: true,
+      composerCitations: [],
     })
     useLocaleStore.setState({ locale: 'zh-CN', initialized: true })
     useLLMStore.setState({ defaultModelId: 'model-a' })
@@ -44,7 +45,35 @@ describe('Agent IPC bridge', () => {
 
     await useAgentStore.getState().sendMessage('检查项目')
 
-    expect(ipcInvoke).toHaveBeenCalledWith('agent:prompt', conversation.id, '检查项目', 'model-a', undefined)
+    expect(ipcInvoke).toHaveBeenCalledWith(
+      'agent:prompt',
+      conversation.id,
+      '检查项目',
+      'model-a',
+      expect.any(Object),
+      [],
+    )
+  })
+
+  it('prepends composer draft citations to the outgoing user message', async () => {
+    ipcInvoke.mockResolvedValue({ success: true })
+    useAgentStore.getState().createConversation()
+    useAgentStore.getState().addComposerCitation({
+      id: 'cite-1',
+      chapterNumber: 3,
+      version: 2,
+      fromLine: 41,
+      toLine: 44,
+      quote: '他走了。',
+    })
+
+    await useAgentStore.getState().sendMessage('改成他会说的话')
+
+    const sent = ipcInvoke.mock.calls.find(call => call[0] === 'agent:prompt')
+    expect(String(sent?.[2])).toContain('【草稿引用 — 第3章 · v2 · 第41–44行】')
+    expect(String(sent?.[2])).toContain('「他走了。」')
+    expect(String(sent?.[2])).toContain('改成他会说的话')
+    expect(useAgentStore.getState().composerCitations).toEqual([])
   })
 
   it('creates the default conversation and /help response entirely in the frozen English UI locale', async () => {
@@ -65,7 +94,14 @@ describe('Agent IPC bridge', () => {
 
     await useAgentStore.getState().sendMessage('@角色 帮我看看林舟')
 
-    expect(ipcInvoke).toHaveBeenCalledWith('agent:prompt', expect.any(String), '@角色 帮我看看林舟', undefined, undefined)
+    expect(ipcInvoke).toHaveBeenCalledWith(
+      'agent:prompt',
+      expect.any(String),
+      '@角色 帮我看看林舟',
+      undefined,
+      expect.any(Object),
+      [],
+    )
   })
 
   it('derives generating from the active conversation streaming message', async () => {

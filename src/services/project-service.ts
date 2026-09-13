@@ -20,6 +20,13 @@ import { useDraftStore } from '../stores/draft-store'
 import { useEditorStore } from '../stores/editor-store'
 import { useWorkflowStore } from '../stores/workflow-store'
 import { useLocaleStore } from '../stores/locale-store'
+import { useAgentStore } from '../stores/agent-store'
+import {
+  flushAgentConversations,
+  loadProjectAgentConversations,
+  rememberHydratedArchive,
+  subscribeAgentConversationPersistence,
+} from './agent/conversation-archive'
 import {
   projectSessionContextFromProject,
   sameProjectSessionContext,
@@ -215,6 +222,7 @@ export function initProjectService(): void {
     ))
   )
 
+  subscribeAgentConversationPersistence()
   console.log('[ProjectService] 已初始化，事件监听已注册')
 }
 
@@ -222,9 +230,14 @@ export function initProjectService(): void {
  * 主进程已经成功切换项目、renderer 即将发布新的 currentProject 前调用。
  * 先解除角色数组与旧项目的绑定，避免新项目页面短暂复用旧项目数据。
  */
-export function onProjectOpening(projectSession: ProjectSessionContext): void {
+export async function onProjectOpening(projectSession: ProjectSessionContext): Promise<void> {
+  const previous = projectSessionContextFromProject(useProjectStore.getState().currentProject)
+  if (previous && !sameProjectSessionContext(previous, projectSession)) {
+    await flushAgentConversations(previous)
+  }
   useCharacterStore.getState().beginProjectLoad(projectSession.projectPath)
   useDraftStore.getState().beginProjectLoad(projectSession.projectPath)
+  useAgentStore.getState().beginProjectLoad()
 }
 
 /**
@@ -241,6 +254,11 @@ export async function onProjectOpened(
   const results = await Promise.allSettled([
     useCharacterStore.getState().load(projectSession.projectPath, projectSession),
     useDraftStore.getState().loadAllDrafts(projectSession.projectPath, projectSession),
+    loadProjectAgentConversations(projectSession).then((archive) => {
+      if (!isProjectSessionCurrent(projectSession)) return
+      rememberHydratedArchive(archive)
+      useAgentStore.getState().hydrateFromArchive(projectSession, archive)
+    }),
   ])
   if (!isProjectSessionCurrent(projectSession)) return { warnings: [] }
   const warnings: string[] = []
@@ -261,6 +279,12 @@ export async function onProjectOpened(
       'Could not load the draft list.',
     ))
   }
+  if (results[2].status === 'rejected') {
+    warnings.push(text(
+      `助手会话读取失败：${String(results[2].reason)}`,
+      'Could not load assistant conversations.',
+    ))
+  }
 
   // 广播项目已就绪事件
   globalEventBus.emit('PROJECT_CHANGED', {
@@ -277,6 +301,7 @@ export async function onProjectOpened(
  * 由 project-store.closeProject 调用
  */
 export async function onProjectClosed(projectPath: string | null): Promise<void> {
+  useAgentStore.getState().beginProjectLoad()
   const { useEditorStore } = await import('../stores/editor-store')
   if (projectPath) {
     // 正常关闭只清理对应项目，保留其他项目的未保存草稿。

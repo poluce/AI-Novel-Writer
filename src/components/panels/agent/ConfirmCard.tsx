@@ -133,6 +133,15 @@ function generateDescription(
         `将启动工作流：${args.workflow ?? '未知工作流'}${args.chapter_number ? `（第 ${args.chapter_number} 章）` : ''}`,
         `Will start workflow: ${args.workflow ?? 'Unknown workflow'}${args.chapter_number ? ` (Chapter ${args.chapter_number})` : ''}`,
       )
+    case 'replace_draft_excerpt': {
+      const oldText = String(args.old_text ?? '')
+      const newText = String(args.new_text ?? '')
+      const preview = (value: string) => value.length > 80 ? `${value.slice(0, 80)}…` : value
+      return text(
+        `将替换第 ${args.chapter_number ?? '？'} 章草稿中的一段原文：\n「${preview(oldText)}」\n→「${preview(newText)}」`,
+        `Will replace one excerpt in chapter ${args.chapter_number ?? '?'} :\n"${preview(oldText)}"\n→ "${preview(newText)}"`,
+      )
+    }
     case 'propose_novel_config':
       return text('小说配置变更提案', 'Novel configuration change proposal')
     case 'propose_chapter_blueprint':

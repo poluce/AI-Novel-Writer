@@ -28,7 +28,7 @@ describe('propose_novel_config', () => {
   it('writes the config and emits a refresh action', async () => {
     coreUpdateMock.mockReturnValue(undefined)
     const actions: RendererAction[] = []
-    const tool = createProposeNovelConfigTool('zh-CN', (a) => actions.push(a))
+    const tool = createProposeNovelConfigTool('zh-CN', (a) => { actions.push(a) })
     const result = await tool.execute('c1', { changes: { genre: 'fantasy', totalChapters: 10 } })
 
     expect(coreUpdateMock).toHaveBeenCalled()

@@ -9,6 +9,7 @@ import { sameProjectPathKey } from '../../shared/project-session-context'
 import { FINALIZATION_SHARED_WRITE_RESOURCE_KINDS } from '../../shared/workflow-resource-claims'
 import { normalizeChapterWordsTarget } from './chapter-creation-parameters'
 import { localize } from '../../i18n/core'
+import type { DraftAnnotation } from '../../shared/draft-annotation'
 import type { Locale } from '../../i18n/types'
 import { useLocaleStore } from '../../stores/locale-store'
 
@@ -57,6 +58,7 @@ export interface RefineOnlyParams {
   draftContent: string
   sourceDraft: FrozenDraftSourceIdentity
   userRefinePrompt?: string
+  annotations?: readonly DraftAnnotation[]
 }
 
 export interface RefineFromReviewParams {
@@ -278,6 +280,7 @@ export function createRefineOnlyWorkflow(
   const frozenParams = Object.freeze({
     ...params,
     sourceDraft: Object.freeze({ ...params.sourceDraft }),
+    annotations: Object.freeze([...(params.annotations ?? [])]),
   })
   return {
     type: 'chapter_creation',
@@ -307,6 +310,7 @@ export function createRefineOnlyWorkflow(
             chapterNumber: frozenParams.chapterNumber,
             chapterInfo: { projectPath: frozenParams.projectPath, chapterNumber: frozenParams.chapterNumber, title: frozenParams.chapterTitle, role: '', purpose: '', characters: [], keyEvents: '' },
             userRefinePrompt: frozenParams.userRefinePrompt,
+            annotations: frozenParams.annotations,
           })
           return cmd.execute({ step, context, callbacks })
         },

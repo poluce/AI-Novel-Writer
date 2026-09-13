@@ -20,11 +20,13 @@ import {
 import { resolveWritingLanguage, type WritingLanguage } from '../../shared/writing-language'
 import { promptLanguageText } from '../prompt-language'
 import {
-  composePromptSystemRole,
   getBuiltinPromptTemplate,
-  renderPrompt,
   resolvePromptTemplate,
 } from '../prompt-templates'
+import {
+  ASSISTANT_WRITING_IDENTITY_KEY,
+  renderAssistantIdentity,
+} from './assistant-identity'
 import { localizeNovelConfigFacts } from '../../shared/novel-config-localization'
 
 // ===== 上下文构建 =====
@@ -67,8 +69,8 @@ async function buildIdentityPrompt(
   executionContext?: AgentExecutionContext,
 ): Promise<string> {
   const projectSession = executionContext?.projectSession ?? undefined
-  const template = await resolvePromptTemplate('assistant_writing_identity', projectSession, writingLanguage)
-    ?? getBuiltinPromptTemplate('assistant_writing_identity', writingLanguage)
+  const template = await resolvePromptTemplate(ASSISTANT_WRITING_IDENTITY_KEY, projectSession, writingLanguage)
+    ?? getBuiltinPromptTemplate(ASSISTANT_WRITING_IDENTITY_KEY, writingLanguage)
   if (!template) throw new Error('Missing assistant writing identity prompt')
   const modeInstruction = writingLanguage === 'en-US'
     ? (mode === 'planning'
@@ -77,11 +79,7 @@ async function buildIdentityPrompt(
     : (mode === 'planning'
         ? '当前处于规划模式：先分析需求、形成简短方案，再通过可用的应用工具执行。'
         : '当前处于快速模式：直接、高效地完成清晰直接的请求。')
-  return `${composePromptSystemRole(template, writingLanguage)}\n\n${renderPrompt(
-    template,
-    { mode_instruction: modeInstruction },
-    writingLanguage,
-  )}`
+  return renderAssistantIdentity(template, writingLanguage, modeInstruction)
 }
 
 /**

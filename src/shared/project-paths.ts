@@ -14,3 +14,6 @@ export const DIR_VELA_INTERNAL = '.vela'
 
 /** 自定义提示词模板目录（保留文件 IO 以便用户自定义修改） */
 export const DIR_PROMPTS = '.vela/prompts'
+
+/** 右侧写作助手会话存档（按项目隔离） */
+export const AGENT_CONVERSATIONS_FILE = '.vela/agent-conversations.json'

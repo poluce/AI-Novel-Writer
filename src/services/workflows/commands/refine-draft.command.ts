@@ -18,6 +18,7 @@ import { countDraftUnits } from '../../../shared/draft-units'
 import { throwIfSourceDraftChanged } from '../source-draft-changed'
 
 import type { ChapterInfo, FrozenDraftSourceIdentity } from '../chapter-workflow'
+import { formatDraftAnnotationsForRefine, type DraftAnnotation } from '../../../shared/draft-annotation'
 
 export interface RefineDraftParams {
   draftPath: string
@@ -27,6 +28,7 @@ export interface RefineDraftParams {
   chapterInfo: ChapterInfo
   mergedGuidance?: string
   userRefinePrompt?: string
+  annotations?: readonly DraftAnnotation[]
   shortSummary?: string
 }
 
@@ -62,13 +64,15 @@ export class RefineDraftCommand extends BaseWorkflowCommand<string> {
     if (!template) throw new Error(text('未找到修稿模板', 'The revision prompt template was not found.'))
 
     const mergedGuidance = this.params.mergedGuidance || novelConfig.globalGuidance || ''
-    const userPromptBlock = this.params.userRefinePrompt?.trim()
+    const annotationBlock = formatDraftAnnotationsForRefine(this.params.annotations ?? [], writingLanguage)
+    const extraGuidance = this.params.userRefinePrompt?.trim()
       ? promptLanguageText(
           writingLanguage,
           `【用户额外修稿指导（最高优先级）】\n${this.params.userRefinePrompt}`,
           `[Additional author revision guidance — highest priority]\n${this.params.userRefinePrompt}`,
         )
       : ''
+    const userPromptBlock = [annotationBlock, extraGuidance].filter(Boolean).join('\n\n')
 
     const promptBuilder = new ChapterPromptBuilder(template, writingLanguage)
       .withDraftContent(draft)

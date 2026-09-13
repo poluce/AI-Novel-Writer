@@ -1,1 +1,5 @@
-export type { RendererAction, RendererActionSink } from '../../src/shared/agent-events'
+export type {
+  RendererAction,
+  RendererActionResult,
+  RendererActionSink,
+} from '../../src/shared/agent-events'

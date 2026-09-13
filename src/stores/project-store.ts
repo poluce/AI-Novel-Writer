@@ -950,6 +950,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
             'The project context changed, so the close operation was cancelled.',
           ))
         }
+        const { flushAgentConversations } = await import('../services/agent/conversation-archive')
+        await flushAgentConversations(projectSession)
         const result = await ipc.invokeWithProjectSession(projectSession, 'db:close', projectPath)
         requireIpcSuccess(result, '关闭项目数据库')
         if (!sameProjectSessionContext(

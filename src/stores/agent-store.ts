@@ -11,9 +11,19 @@ import { captureAgentEditorSnapshot } from '../services/agent/editor-snapshot'
 import { createAgentExecutionContext } from '../services/agent/tools/project-context'
 import { writingLanguageText } from '../shared/writing-language'
 import { projectSessionContextFromProject } from '../shared/project-session-context'
+import type { ProjectSessionContext } from '../shared/ipc-channels'
+import {
+  toAgentPromptHistory,
+  type AgentConversationArchive,
+  type PersistedAgentConversation,
+} from '../shared/agent-conversation-archive'
+import {
+  formatDraftPassageCitations,
+  type DraftPassageCitation,
+} from '../shared/draft-excerpt'
 import { ipc } from '../services/ipc-client'
 import { logFailure, logInfo } from '../shared/fail-log'
-import type { PiToolCallInfo, RendererAction } from '../shared/agent-events'
+import type { PiToolCallInfo, RendererAction, RendererActionResult } from '../shared/agent-events'
 import { useLocaleStore } from './locale-store'
 import { useProjectStore } from './project-store'
 import { useEditorStore } from './editor-store'
@@ -74,6 +84,10 @@ export interface AgentState {
   activeRequestId: string | null
   /** Tool 系统是否已初始化 */
   toolsInitialized: boolean
+  /** 当前会话存档绑定的项目会话；无项目时为 null */
+  dataProjectSession: ProjectSessionContext | null
+  /** 待随下一句用户消息发送的草稿选区引用 */
+  composerCitations: DraftPassageCitation[]
 
   // ===== 计算属性（Getters） =====
   /** 获取当前活跃会话 */
@@ -104,12 +118,37 @@ export interface AgentState {
   cancelGeneration: () => Promise<void>
   /** 响应 Tool 确认（用于 ConfirmCard） */
   resolveToolConfirmation: (toolCallId: string, confirmed: boolean, options?: unknown) => void
+  /** 切书/开书前清空界面会话，避免短暂显示上一本的对话 */
+  beginProjectLoad: () => void
+  /** 用当前项目存档替换内存中的会话 */
+  hydrateFromArchive: (projectSession: ProjectSessionContext, archive: AgentConversationArchive) => void
+  addComposerCitation: (citation: DraftPassageCitation) => void
+  removeComposerCitation: (id: string) => void
 }
 
 // ===== 工具函数 =====
 
 /** 生成唯一 ID */
 const genId = () => crypto.randomUUID()
+
+function fromPersistedConversation(conversation: PersistedAgentConversation): AgentConversation {
+  return {
+    id: conversation.id,
+    title: conversation.title,
+    createdAt: conversation.createdAt,
+    updatedAt: conversation.updatedAt,
+    mode: conversation.mode,
+    modelId: conversation.modelId,
+    messages: conversation.messages.map(message => ({
+      id: message.id,
+      role: message.role,
+      content: message.content,
+      createdAt: message.createdAt,
+      toolCalls: Array.isArray(message.toolCalls) ? message.toolCalls as ToolCallInfo[] : undefined,
+      artifacts: Array.isArray(message.artifacts) ? message.artifacts as ToolArtifact[] : undefined,
+    })),
+  }
+}
 
 /** 从消息内容生成会话标题 */
 const generateTitle = (content: string): string => {
@@ -184,6 +223,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   defaultMode: 'planning',
   activeRequestId: null,
   toolsInitialized: false,
+  dataProjectSession: null,
+  composerCitations: [],
 
   getActiveConversation: () => {
     const { conversations, activeConversationId } = get()
@@ -239,6 +280,47 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     set({ conversations: [], activeConversationId: null })
   },
 
+  beginProjectLoad: () => {
+    set({
+      conversations: [],
+      activeConversationId: null,
+      showHistory: false,
+      activeRequestId: null,
+      dataProjectSession: null,
+      composerCitations: [],
+    })
+  },
+
+  addComposerCitation: (citation) => {
+    set(state => ({
+      composerCitations: [
+        ...state.composerCitations.filter(item => item.quote !== citation.quote),
+        citation,
+      ],
+    }))
+  },
+
+  removeComposerCitation: (id) => {
+    set(state => ({
+      composerCitations: state.composerCitations.filter(item => item.id !== id),
+    }))
+  },
+
+  hydrateFromArchive: (projectSession, archive) => {
+    const conversations = archive.conversations.map(fromPersistedConversation)
+    const activeConversationId = archive.activeConversationId
+      && conversations.some(conversation => conversation.id === archive.activeConversationId)
+      ? archive.activeConversationId
+      : conversations[0]?.id ?? null
+    set({
+      conversations,
+      activeConversationId,
+      showHistory: false,
+      activeRequestId: null,
+      dataProjectSession: projectSession,
+    })
+  },
+
   toggleHistory: () => {
     set(state => ({ showHistory: !state.showHistory }))
   },
@@ -272,7 +354,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   },
 
   sendMessage: async (content) => {
-    if (!content.trim()) return
+    if (!content.trim() && get().composerCitations.length === 0) return
     if (selectIsGenerating(get())) {
       logInfo('Agent', 'ignored send while a turn is already in flight')
       return
@@ -348,6 +430,13 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       zhCNText,
       enUSText,
     )
+    const citations = get().composerCitations
+    if (citations.length > 0) {
+      const citationBlock = formatDraftPassageCitations(citations, executionContext.writingLanguage)
+      content = citationBlock ? `${citationBlock}\n\n${content}` : content
+      set({ composerCitations: [] })
+    }
+
     if (skillInvocation) {
       const skill = skillInvocation.skill
       const displayName = executionContext.writingLanguage === 'en-US'
@@ -430,6 +519,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         content.trim(),
         modelId,
         captureAgentEditorSnapshot(),
+        toAgentPromptHistory(conv.messages),
       )
       if (!result.success) {
         logFailure('Agent', 'renderer prompt returned failure', undefined, {
@@ -511,7 +601,7 @@ function updateActiveAssistantMsg(updater: (msg: AgentMessage) => AgentMessage):
   }))
 }
 
-function handleRendererAction(action: RendererAction): void {
+async function handleRendererAction(action: RendererAction): Promise<RendererActionResult | void> {
   switch (action.type) {
     case 'open_editor':
       useEditorStore.getState().openFile({
@@ -523,38 +613,73 @@ function handleRendererAction(action: RendererAction): void {
         savedContent: action.content,
         projectKey: useProjectStore.getState().currentProject?.path ?? '',
       })
-      break
+      return
     case 'start_workflow': {
       const project = useProjectStore.getState().currentProject
       const session = projectSessionContextFromProject(project)
+      const uiText = useLocaleStore.getState().text
       if (!session) {
+        const error = uiText('未打开项目，工作流未启动。', 'No project is open, so the workflow was not started.')
         logFailure('Agent', 'start_workflow skipped: no open project', undefined, {
           workflow: action.workflow,
         })
-        break
+        return { ok: false, error }
       }
-      void import('../services/workflows/creative-workflow-launcher').then(({ launchCreativeWorkflow }) => {
+      try {
+        const { launchCreativeWorkflow } = await import('../services/workflows/creative-workflow-launcher')
         const chapterWorkflows = new Set(['generate_draft', 'review', 'refine', 'finalize'])
         const intent = chapterWorkflows.has(action.workflow)
           ? { workflow: action.workflow, chapterNumber: action.chapterNumber as number }
           : { workflow: action.workflow }
-        return launchCreativeWorkflow(intent as import('../services/workflows/creative-workflow-launcher').CreativeIntent, session)
-      }).catch((error) => {
+        const receipt = await launchCreativeWorkflow(
+          intent as import('../services/workflows/creative-workflow-launcher').CreativeIntent,
+          session,
+        )
+        return {
+          ok: true,
+          summary: uiText(
+            `已启动「${action.workflow}${action.chapterNumber != null ? `（第 ${action.chapterNumber} 章）` : ''}」工作流（运行 ID：${receipt.runId}，状态：${receipt.status}）。`,
+            `Started the ${action.workflow}${action.chapterNumber != null ? ` (Chapter ${action.chapterNumber})` : ''} workflow (run ID: ${receipt.runId}; status: ${receipt.status}).`,
+          ),
+        }
+      } catch (error) {
         logFailure('Agent', 'start_workflow launch failed', error, {
           workflow: action.workflow,
           chapterNumber: action.chapterNumber,
         })
-      })
-      break
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        }
+      }
+    }
+    case 'replace_draft_excerpt': {
+      const { applyDraftExcerptReplace } = await import('../services/agent/apply-draft-excerpt')
+      try {
+        return await applyDraftExcerptReplace({
+          chapterNumber: action.chapterNumber,
+          oldText: action.oldText,
+          newText: action.newText,
+          draftId: action.draftId,
+        })
+      } catch (error) {
+        logFailure('Agent', 'replace_draft_excerpt failed', error, {
+          chapterNumber: action.chapterNumber,
+        })
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        }
+      }
     }
     case 'refresh_project_config':
     case 'refresh_blueprint': {
       const project = useProjectStore.getState().currentProject
-      if (!project) break
+      if (!project) return
       void useProjectStore.getState().refreshFileTree(project.path).catch((error) => {
         logFailure('Agent', `${action.type} refresh failed`, error)
       })
-      break
+      return
     }
   }
 }
@@ -612,7 +737,24 @@ if (typeof window !== 'undefined') {
     }
   })
 
-  ipc.on('agent:renderer-action', ({ action }) => {
-    handleRendererAction(action)
+  ipc.on('agent:renderer-action', ({ action, requestId }) => {
+    void handleRendererAction(action).then((result) => {
+      if (!requestId) return
+      const payload: RendererActionResult = result ?? {
+        ok: false,
+        error: useLocaleStore.getState().text(
+          '工作流未能注册到任务中心，已拒绝报告启动成功。',
+          'The workflow was not registered in the task panel, so start was not reported as success.',
+        ),
+      }
+      return ipc.invoke('agent:renderer-action-result', requestId, payload)
+    }).catch((error) => {
+      logFailure('Agent', 'renderer action reply failed', error, { requestId })
+      if (!requestId) return
+      return ipc.invoke('agent:renderer-action-result', requestId, {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    })
   })
 }

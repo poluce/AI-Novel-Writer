@@ -179,6 +179,18 @@ function createTables(db: BetterSqlite3.Database, importSourceSecret?: Buffer) {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_drafts_chapter_version
       ON drafts(chapter_number, version);
 
+    CREATE TABLE IF NOT EXISTS draft_annotations (
+      id TEXT PRIMARY KEY,
+      draft_id INTEGER NOT NULL,
+      start_offset INTEGER NOT NULL,
+      end_offset INTEGER NOT NULL,
+      quote TEXT NOT NULL,
+      note TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY (draft_id) REFERENCES drafts(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_draft_annotations_draft ON draft_annotations(draft_id);
+
     -- Failed generation output is a recoverable candidate, never a draft or
     -- finalized fact. It remains project-local and requires an explicit user
     -- action before entering an unsaved editor buffer.
