@@ -25,6 +25,28 @@ vi.mock('../../../services/workflows/creative-workflow-launcher', () => ({
   launchCreativeWorkflow,
 }))
 
+const OUTLINE = [
+  '# 情节大纲',
+  '',
+  '全书围绕灵脉异变展开，主角从铁砧镇一路追查到终局。',
+  '',
+  '## 第一卷',
+  '',
+  '第1–20章：核对记录',
+  '林舟逐条核对旧案记录，确认灵脉异变的第一个信号。',
+  '',
+  '第21章：破门',
+  '宗门废墟之下，林舟第一次触碰旧铁锤里的传承。',
+  '',
+  '## 第二卷',
+  '',
+  '第22–100章：反噬',
+  '记忆损耗的代价持续推进，并在终局兑现。',
+  '',
+  '> 本大纲已覆盖至第 20 章（全书 100 章），其余章节将在后续批次继续生成。',
+  '',
+].join('\n')
+
 const project = {
   id: PROJECT_SESSION.projectId,
   sessionLease: PROJECT_SESSION.leaseId,
@@ -38,6 +60,7 @@ let container: HTMLDivElement
 let core: Record<string, unknown>
 let roster: Record<string, unknown>
 let checkpoint: Record<string, unknown> | undefined
+let coreUpdates: Array<Record<string, unknown>>
 const originalLocale = useLocaleStore.getState()
 const originalWorkflow = useWorkflowStore.getState()
 
@@ -54,6 +77,7 @@ beforeEach(() => {
   core = { synopsis: '', totalChapters: 100, writingLanguage: 'zh-CN' }
   roster = { status: 'ready' }
   checkpoint = undefined
+  coreUpdates = []
   useLocaleStore.setState({ locale: 'zh-CN', initialized: true })
   useProjectStore.setState({ currentProject: project as never })
   useWorkflowStore.setState({
@@ -64,9 +88,16 @@ beforeEach(() => {
   Object.defineProperty(window, 'velaAPI', {
     configurable: true,
     value: {
-      invoke: vi.fn(async (channel: string) => {
+      invoke: vi.fn(async (channel: string, ...args: unknown[]) => {
         if (channel === 'db:project-core-get') return core
         if (channel === 'db:character-roster-read') return roster
+        if (channel === 'db:project-core-update') {
+          const payload = args[0] as Record<string, unknown>
+          coreUpdates.push(payload)
+          // 保存后 loadStatus 会重新读库，这里让 mock 返回已保存的内容。
+          core = { ...core, ...payload }
+          return { success: true }
+        }
         if (channel === 'fs:read-json') {
           return checkpoint ? { success: true, data: checkpoint } : { success: false, error: 'not found' }
         }
@@ -191,5 +222,59 @@ describe('SynopsisEditor', () => {
     await vi.waitFor(() => {
       expect(container.textContent).not.toContain('建议先在「故事架构」完成')
     })
+  })
+
+  it('lists the chapter-range nodes of the outline and shows the selected section', async () => {
+    core = { synopsis: OUTLINE, totalChapters: 100, writingLanguage: 'zh-CN' }
+    await renderEditor()
+
+    const list = container.textContent
+    expect(list).toContain('第1–20章')
+    expect(list).toContain('第21章')
+    expect(list).toContain('第22–100章')
+    expect(list).toContain('总览')
+
+    // 默认选中第一段，右侧显示该段正文。
+    await expect.element(page.getByRole('textbox', { name: '当前章节区间的大纲正文' }))
+      .toHaveValue('全书围绕灵脉异变展开，主角从铁砧镇一路追查到终局。')
+
+    await act(async () => page.getByText('第21章', { exact: true }).click())
+    await expect.element(page.getByRole('textbox', { name: '当前章节区间的大纲正文' }))
+      .toHaveValue('宗门废墟之下，林舟第一次触碰旧铁锤里的传承。')
+    expect(container.textContent).toContain('第21章：破门')
+  })
+
+  it('saves an edited section back into the whole outline without touching other ranges', async () => {
+    core = { synopsis: OUTLINE, totalChapters: 100, writingLanguage: 'zh-CN' }
+    await renderEditor()
+
+    await act(async () => page.getByText('第21章', { exact: true }).click())
+    const editor = page.getByRole('textbox', { name: '当前章节区间的大纲正文' })
+    await act(async () => editor.fill('林舟破门而入，却发现传承早已被人取走。'))
+
+    expect(container.textContent).toContain('未保存')
+    await act(async () => page.getByRole('button', { name: '保存' }).click())
+
+    await vi.waitFor(() => expect(coreUpdates).toHaveLength(1))
+    expect(coreUpdates[0].synopsis).toBe(OUTLINE.replace(
+      '宗门废墟之下，林舟第一次触碰旧铁锤里的传承。',
+      '林舟破门而入，却发现传承早已被人取走。',
+    ))
+    await vi.waitFor(() => expect(container.textContent).not.toContain('未保存'))
+    // 其余章节区间原样保留。
+    expect(container.textContent).toContain('第22–100章')
+  })
+
+  it('falls back to one whole-document section when the outline has no chapter labels', async () => {
+    core = {
+      synopsis: '# 情节大纲\n\n第一幕：主角失去家园。\n\n第二幕：主角夺回主动权。',
+      totalChapters: 100,
+      writingLanguage: 'zh-CN',
+    }
+    await renderEditor()
+
+    await expect.element(page.getByRole('heading', { name: '全文' })).toBeVisible()
+    await expect.element(page.getByRole('textbox', { name: '当前章节区间的大纲正文' }))
+      .toHaveValue('第一幕：主角失去家园。\n\n第二幕：主角夺回主动权。')
   })
 })
