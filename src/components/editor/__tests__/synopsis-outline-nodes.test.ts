@@ -6,6 +6,7 @@ import {
   maxCoveredChapter,
   parseChapterNumber,
   parseSynopsis,
+  pickCurrentNodeId,
   replaceSynopsisNodeBody,
   synopsisNodeBody,
 } from '../synopsis-outline-nodes'
@@ -134,6 +135,32 @@ describe('groupSynopsisNodes', () => {
       ['第11–20章', 1],
       ['第91–100章', 1],
     ])
+  })
+})
+
+describe('pickCurrentNodeId', () => {
+  // 段落相对文档顶部的位置；传入前换算成相对视口顶部的距离。
+  const documentTops = [
+    { id: 'a', top: 0 },
+    { id: 'b', top: 200 },
+    { id: 'c', top: 400 },
+  ]
+  const at = (scrollTop: number) => documentTops.map(offset => ({ id: offset.id, top: offset.top - scrollTop }))
+
+  it('returns the section sitting at the top of the viewport', () => {
+    expect(pickCurrentNodeId(at(0), 0, 400, 1000)).toBe('a')
+    expect(pickCurrentNodeId(at(200), 200, 400, 1000)).toBe('b')
+    expect(pickCurrentNodeId(at(400), 400, 400, 1000)).toBe('c')
+    // 两段之间滚动时仍归属上一段。
+    expect(pickCurrentNodeId(at(300), 300, 400, 1000)).toBe('b')
+  })
+
+  it('returns the last section when the document is scrolled to the bottom', () => {
+    expect(pickCurrentNodeId(at(600), 600, 400, 1000)).toBe('c')
+  })
+
+  it('returns null for an empty document', () => {
+    expect(pickCurrentNodeId([], 0, 400, 1000)).toBeNull()
   })
 })
 

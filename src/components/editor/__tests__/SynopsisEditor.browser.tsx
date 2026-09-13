@@ -224,45 +224,47 @@ describe('SynopsisEditor', () => {
     })
   })
 
-  it('folds the outline into ten-chapter groups and shows the selected section', async () => {
+  it('renders the whole outline as one document and drives it from the ten-chapter table of contents', async () => {
     core = { synopsis: OUTLINE, totalChapters: 100, writingLanguage: 'zh-CN' }
     await renderEditor()
 
-    // 只展开选中项所在的分组，其余按每 10 章折叠。
-    const list = container.textContent
-    expect(list).toContain('总览')
-    expect(list).toContain('第1–10章')
-    expect(list).toContain('第21–30章')
-    expect(list).not.toContain('第22–100章')
+    // 左侧是每 10 章折叠的目录。
+    const toc = () => container.querySelector('[data-testid="synopsis-toc"]')?.textContent ?? ''
+    expect(toc()).toContain('总览')
+    expect(toc()).toContain('第1–10章')
+    expect(toc()).toContain('第21–30章')
+    expect(toc()).not.toContain('第22–100章')
 
-    // 默认选中第一段（总览），右侧显示该段正文。
-    await expect.element(page.getByRole('textbox', { name: '当前章节区间的大纲正文' }))
-      .toHaveValue('全书围绕灵脉异变展开，主角从铁砧镇一路追查到终局。')
+    // 右侧是整份拼接好的大纲，所有段落都在同一篇文档里。
+    const doc = container.querySelector('[data-testid="synopsis-document"]') as HTMLElement
+    expect(doc.textContent).toContain('第1–20章')
+    expect(doc.textContent).toContain('第21章')
+    expect(doc.textContent).toContain('第22–100章')
+    expect(doc.textContent).toContain('本大纲已覆盖至第 20 章')
+    expect(doc.querySelectorAll('[data-node-id]')).toHaveLength(4)
 
-    // 展开第 21–30 章分组后选中其中的结构节点。
+    // 展开分组并点击目录项 → 该项成为当前段落（右侧文档随之滚动定位）。
     await act(async () => page.getByText('第21–30章', { exact: true }).click())
-    expect(container.textContent).toContain('第22–100章')
+    expect(toc()).toContain('第22–100章')
     await act(async () => page.getByText('第21章', { exact: true }).click())
-    await expect.element(page.getByRole('textbox', { name: '当前章节区间的大纲正文' }))
-      .toHaveValue('宗门废墟之下，林舟第一次触碰旧铁锤里的传承。')
-    expect(container.textContent).toContain('第21章：破门')
+    expect(container.querySelector('[aria-current="true"]')?.textContent).toContain('第21章')
 
     // 再次点击分组标题可折叠回去。
     await act(async () => page.getByText('第21–30章', { exact: true }).click())
-    expect(container.textContent).not.toContain('第22–100章')
+    expect(toc()).not.toContain('第22–100章')
   })
 
   it('saves an edited section back into the whole outline without touching other ranges', async () => {
     core = { synopsis: OUTLINE, totalChapters: 100, writingLanguage: 'zh-CN' }
+    container.style.height = '400px'
     await renderEditor()
 
     await act(async () => page.getByText('第21–30章', { exact: true }).click())
-    await act(async () => page.getByText('第21章', { exact: true }).click())
-    const editor = page.getByRole('textbox', { name: '当前章节区间的大纲正文' })
+    const editor = page.getByRole('textbox', { name: '第21章的大纲正文' })
     await act(async () => editor.fill('林舟破门而入，却发现传承早已被人取走。'))
 
-    expect(container.textContent).toContain('未保存')
-    await act(async () => page.getByRole('button', { name: '保存' }).click())
+    expect(container.textContent).toContain('未保存 1 段')
+    await act(async () => page.getByRole('button', { name: '保存「第21章」' }).click())
 
     await vi.waitFor(() => expect(coreUpdates).toHaveLength(1))
     expect(coreUpdates[0].synopsis).toBe(OUTLINE.replace(
@@ -274,6 +276,32 @@ describe('SynopsisEditor', () => {
     expect(container.textContent).toContain('第22–100章')
   })
 
+  it('saves several edited sections in one write without shifting earlier offsets', async () => {
+    core = { synopsis: OUTLINE, totalChapters: 100, writingLanguage: 'zh-CN' }
+    container.style.height = '500px'
+    await renderEditor()
+
+    await act(async () => page.getByRole('textbox', { name: '第1–20章的大纲正文' })
+      .fill('林舟核对到第三条线索时，发现封锁令的签发时间被人改过。'))
+    await act(async () => page.getByRole('textbox', { name: '第22–100章的大纲正文' })
+      .fill('记忆代价在终局一次性兑现，林舟失去了自己的名字。'))
+    expect(container.textContent).toContain('未保存 2 段')
+
+    await act(async () => page.getByRole('button', { name: '保存全部' }).click())
+
+    await vi.waitFor(() => expect(coreUpdates).toHaveLength(1))
+    const saved = String(coreUpdates[0].synopsis)
+    expect(saved).toBe(OUTLINE
+      .replace(
+        '林舟逐条核对旧案记录，确认灵脉异变的第一个信号。',
+        '林舟核对到第三条线索时，发现封锁令的签发时间被人改过。',
+      )
+      .replace(
+        '记忆损耗的代价持续推进，并在终局兑现。',
+        '记忆代价在终局一次性兑现，林舟失去了自己的名字。',
+      ))
+  })
+
   it('falls back to one whole-document section when the outline has no chapter labels', async () => {
     core = {
       synopsis: '# 情节大纲\n\n第一幕：主角失去家园。\n\n第二幕：主角夺回主动权。',
@@ -283,7 +311,7 @@ describe('SynopsisEditor', () => {
     await renderEditor()
 
     await expect.element(page.getByRole('heading', { name: '全文' })).toBeVisible()
-    await expect.element(page.getByRole('textbox', { name: '当前章节区间的大纲正文' }))
+    await expect.element(page.getByRole('textbox', { name: '全文的大纲正文' }))
       .toHaveValue('第一幕：主角失去家园。\n\n第二幕：主角夺回主动权。')
   })
 })

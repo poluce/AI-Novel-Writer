@@ -309,7 +309,6 @@ export function maxCoveredChapter(nodes: readonly SynopsisNode[]): number {
 
 /** 左侧列表按每 10 章折叠成一组。 */
 export const SYNOPSIS_GROUP_SPAN = 10
-
 export interface SynopsisNodeGroup {
   id: string
   /** `总览` 或 `第1–10章`。 */
@@ -358,4 +357,27 @@ export function groupSynopsisNodes(
     })
   }
   return groups
+}
+
+/**
+ * 目录高亮：根据右侧文档的滚动位置算出当前所在的段落。
+ *
+ * `offsets` 是各段落相对滚动容器顶部的距离；滚动到底部时直接取最后一段，
+ * 避免最后一段因为不够高而永远无法被选中。
+ */
+export function pickCurrentNodeId(
+  offsets: ReadonlyArray<{ id: string; top: number }>,
+  scrollTop: number,
+  clientHeight: number,
+  scrollHeight: number,
+  threshold = 32,
+): string | null {
+  if (offsets.length === 0) return null
+  if (scrollTop + clientHeight >= scrollHeight - 4) return offsets[offsets.length - 1].id
+  let current = offsets[0].id
+  for (const offset of offsets) {
+    if (offset.top <= threshold) current = offset.id
+    else break
+  }
+  return current
 }

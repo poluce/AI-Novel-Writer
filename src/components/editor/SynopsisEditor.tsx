@@ -6,7 +6,6 @@ import { useLocaleStore } from '../../stores/locale-store'
 import { useEditorStore } from '../../stores/editor-store'
 import { Button } from '../ui/Button'
 import { EmptyState } from '../ui/EmptyState'
-import { Textarea } from '../ui/Textarea'
 import { toast } from '../ui/Toast'
 import { ipc } from '../../services/ipc-client'
 import { requireIpcSuccess } from '../../services/ipc-result'
@@ -28,9 +27,11 @@ import { sameProjectSessionContext } from '../../shared/project-session-context'
 import {
   groupSynopsisNodes,
   parseSynopsis,
+  pickCurrentNodeId,
   replaceSynopsisNodeBody,
   synopsisNodeBody,
   type ParsedSynopsis,
+  type SynopsisNode,
 } from './synopsis-outline-nodes'
 import {
   hasVisiblePartialSynopsisMarker,
@@ -92,6 +93,9 @@ export default function SynopsisEditor({ projectKey }: { projectKey: string }) {
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({})
   const lastCompletedRunRef = useRef<string | null>(null)
   const requestGate = useRef(new LatestRequestGate())
+  /** 右侧整份文档的滚动容器与各段落元素（左侧目录滚动定位用）。 */
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const sectionRefs = useRef<Record<string, HTMLElement | null>>({})
 
   const loadStatus = useCallback(async () => {
     await Promise.resolve()
@@ -315,6 +319,40 @@ export default function SynopsisEditor({ projectKey }: { projectKey: string }) {
     })
   }
 
+  /** 左侧目录点击：选中并把右侧文档滚动到该段。 */
+  const scrollToNode = useCallback((nodeId: string) => {
+    setSelectedNodeId(nodeId)
+    const container = scrollRef.current
+    const element = sectionRefs.current[nodeId]
+    if (!container || !element) return
+    const top = element.getBoundingClientRect().top
+      - container.getBoundingClientRect().top
+      + container.scrollTop
+    container.scrollTo({ top: Math.max(0, top - 8) })
+  }, [])
+
+  /** 右侧滚动时反查当前所在段落，让目录高亮跟随。 */
+  const handleDocumentScroll = useCallback(() => {
+    const container = scrollRef.current
+    const nodes = parsed.nodes
+    if (!container || nodes.length === 0) return
+    const containerTop = container.getBoundingClientRect().top
+    const offsets: Array<{ id: string; top: number }> = []
+    for (const node of nodes) {
+      const element = sectionRefs.current[node.id]
+      if (!element) continue
+      offsets.push({ id: node.id, top: element.getBoundingClientRect().top - containerTop })
+    }
+    const current = pickCurrentNodeId(
+      offsets,
+      container.scrollTop,
+      container.clientHeight,
+      container.scrollHeight,
+    )
+    if (!current) return
+    setSelectedNodeId(previous => (previous === current ? previous : current))
+  }, [parsed.nodes])
+
   if (!projectMatches) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -329,7 +367,6 @@ export default function SynopsisEditor({ projectKey }: { projectKey: string }) {
 
   const pendingBatch = !incomplete && !recoveryFailed && coveredTo > 0 && coveredTo < totalChapters
   const disabled = loading || busy || isArchRunning
-  const selectedNode = parsed.nodes.find(node => node.id === selectedNodeId) ?? null
   const groups = groupSynopsisNodes(parsed.nodes)
   const selectedGroupId = groups.find(group => group.nodes.some(node => node.id === selectedNodeId))?.id ?? null
   // 默认只展开当前选中项所在的分组，其余按每 10 章折叠；手动展开/折叠优先。
@@ -337,48 +374,50 @@ export default function SynopsisEditor({ projectKey }: { projectKey: string }) {
   const toggleGroup = (groupId: string) => {
     setCollapsedGroups(current => ({ ...current, [groupId]: !(current[groupId] ?? groupId === selectedGroupId) }))
   }
-  const selectedBody = selectedNode
-    ? drafts[selectedNode.id] ?? synopsisNodeBody(selectedNode)
-    : ''
-  const selectedDirty = selectedNode ? drafts[selectedNode.id] !== undefined : false
   const dirtyCount = Object.keys(drafts).length
+  const markerText = parsed.markerStart === null ? '' : outlineText.slice(parsed.markerStart).trim()
 
-  /** 编辑右侧正文；与原文一致时撤销该节点的草稿标记。 */
-  const handleNodeBodyChange = (value: string) => {
-    if (!selectedNode) return
+  /** 编辑某个结构节点的正文；与原文一致时撤销该节点的草稿标记。 */
+  const handleNodeBodyChange = (node: SynopsisNode, value: string) => {
     setDrafts(current => {
-      if (value === synopsisNodeBody(selectedNode)) {
-        if (current[selectedNode.id] === undefined) return current
+      if (value === synopsisNodeBody(node)) {
+        if (current[node.id] === undefined) return current
         const next = { ...current }
-        delete next[selectedNode.id]
+        delete next[node.id]
         return next
       }
-      return { ...current, [selectedNode.id]: value }
+      return { ...current, [node.id]: value }
     })
   }
 
-  const handleDiscardNode = () => {
-    if (!selectedNode) return
+  const handleDiscardNodes = (nodeIds: readonly string[]) => {
     setDrafts(current => {
-      if (current[selectedNode.id] === undefined) return current
+      let changed = false
       const next = { ...current }
-      delete next[selectedNode.id]
-      return next
+      for (const nodeId of nodeIds) {
+        if (next[nodeId] === undefined) continue
+        delete next[nodeId]
+        changed = true
+      }
+      return changed ? next : current
     })
   }
 
-  /** 只把该节点的正文替换回整份大纲，其余字节保持不变。 */
-  const handleSaveNode = async () => {
-    const node = selectedNode
-    if (!node) return
-    const body = drafts[node.id]
-    if (body === undefined) return
+  /** 把草稿段的正文替换回整份大纲并保存；从后往前替换，前面的偏移不受影响。 */
+  const saveNodes = async (nodeIds: readonly string[]) => {
     const projectSession = captureProjectSession(currentProject)
     if (!projectMatches || !projectSession || !isProjectSessionPath(projectSession, projectKey)) return
     if (!isProjectSessionCurrent(projectSession)) return
+    const targets = parsed.nodes
+      .filter(node => nodeIds.includes(node.id) && drafts[node.id] !== undefined)
+      .sort((a, b) => b.bodyStart - a.bodyStart)
+    if (targets.length === 0) return
     setSaving(true)
     try {
-      const nextText = replaceSynopsisNodeBody(outlineText, node, body)
+      let nextText = outlineText
+      for (const node of targets) {
+        nextText = replaceSynopsisNodeBody(nextText, node, drafts[node.id])
+      }
       requireIpcSuccess(
         await ipc.invokeWithProjectSession(
           projectSession,
@@ -393,7 +432,7 @@ export default function SynopsisEditor({ projectKey }: { projectKey: string }) {
       setParsed(parseSynopsis(nextText))
       setDrafts(current => {
         const next = { ...current }
-        delete next[node.id]
+        for (const node of targets) delete next[node.id]
         return next
       })
       const tabId = createProjectArchTabId(projectKey, SYNOPSIS_FILE_PATH)
@@ -437,11 +476,24 @@ export default function SynopsisEditor({ projectKey }: { projectKey: string }) {
           {dirtyCount > 0 && (
             <span className="inline-flex items-center gap-1 text-[0.7rem]" style={{ color: 'var(--color-accent)' }}>
               <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: 'currentColor' }} />
-              {text('未保存', 'Unsaved')}
+              {text(`未保存 ${dirtyCount} 段`, `${dirtyCount} unsaved`)}
             </span>
           )}
         </div>
         <div className="flex items-center gap-1.5">
+          {dirtyCount > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              disabled={saving}
+              onClick={() => void saveNodes(Object.keys(drafts))}
+              title={text('保存全部未保存的段落', 'Save every unsaved section')}
+            >
+              <Save size={12} />
+              {saving ? text('保存中...', 'Saving...') : text('保存全部', 'Save all')}
+            </Button>
+          )}
           {incomplete && (
             <Button
               size="sm"
@@ -615,7 +667,7 @@ export default function SynopsisEditor({ projectKey }: { projectKey: string }) {
               </span>
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto p-1">
+            <div className="flex-1 overflow-y-auto p-1" data-testid="synopsis-toc">
               {groups.map(group => {
                 const open = isGroupOpen(group.id)
                 const groupDirty = group.nodes.some(node => drafts[node.id] !== undefined)
@@ -665,7 +717,8 @@ export default function SynopsisEditor({ projectKey }: { projectKey: string }) {
                                   ? 'bg-[var(--color-active)] text-[var(--color-text)]'
                                   : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)]'
                               }`}
-                              onClick={() => setSelectedNodeId(node.id)}
+                              onClick={() => scrollToNode(node.id)}
+                              aria-current={active ? 'true' : undefined}
                               title={node.title || node.label}
                             >
                               <div className="flex items-center gap-1.5">
@@ -701,50 +754,14 @@ export default function SynopsisEditor({ projectKey }: { projectKey: string }) {
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto">
-          {selectedNode ? (
-            <div className="max-w-3xl mx-auto px-5 py-4">
-              <div className="flex items-center justify-between gap-3 mb-3">
-                <div className="min-w-0">
-                  <h3 className="text-sm font-bold truncate" style={{ color: 'var(--color-text)' }}>
-                    {selectedNode.label}
-                    {selectedNode.title ? `：${selectedNode.title}` : ''}
-                  </h3>
-                  <div className="text-[0.7rem] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-                    {text(
-                      '只保存本段；其余章节区间原样保留。',
-                      'Only this section is saved; the rest of the outline stays as-is.',
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  {selectedDirty && (
-                    <Button variant="ghost" size="sm" className="gap-1.5" onClick={handleDiscardNode} disabled={saving}>
-                      <RotateCcw size={12} />
-                      {text('放弃修改', 'Discard')}
-                    </Button>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5"
-                    onClick={() => void handleSaveNode()}
-                    disabled={!selectedDirty || saving}
-                  >
-                    <Save size={12} />
-                    {saving ? text('保存中...', 'Saving...') : text('保存', 'Save')}
-                  </Button>
-                </div>
-              </div>
-              <Textarea
-                value={selectedBody}
-                onChange={event => handleNodeBodyChange(event.target.value)}
-                aria-label={text('当前章节区间的大纲正文', 'Outline body for this chapter range')}
-                className="min-h-[380px] leading-relaxed font-mono text-[0.75rem]"
-                placeholder={text('写下这个章节区间的结构拐点…', 'Describe the turning points for this chapter range…')}
-              />
-            </div>
-          ) : (
+        {/* 右侧：整份大纲拼接成一篇文档，左侧目录负责滚动定位 */}
+        <div
+          ref={scrollRef}
+          onScroll={handleDocumentScroll}
+          data-testid="synopsis-document"
+          className="flex-1 overflow-y-auto relative"
+        >
+          {parsed.nodes.length === 0 ? (
             <div className="h-full flex items-center justify-center">
               <EmptyState
                 icon={<Map size={36} />}
@@ -755,9 +772,140 @@ export default function SynopsisEditor({ projectKey }: { projectKey: string }) {
                 opacity={0.4}
               />
             </div>
+          ) : (
+            <div className="max-w-3xl mx-auto px-6 py-5">
+              <h1 className="text-base font-bold mb-4" style={{ color: 'var(--color-text)' }}>
+                {parsed.title || text('情节大纲', 'Plot outline')}
+              </h1>
+
+              <div className="space-y-1">
+                {parsed.nodes.map(node => {
+                  const body = drafts[node.id] ?? synopsisNodeBody(node)
+                  const dirty = drafts[node.id] !== undefined
+                  const active = node.id === selectedNodeId
+                  return (
+                    <section
+                      key={node.id}
+                      ref={element => { sectionRefs.current[node.id] = element }}
+                      data-node-id={node.id}
+                      className="rounded-md px-3 py-2 transition-colors"
+                      style={{ backgroundColor: active ? 'var(--color-hover)' : 'transparent' }}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <h2 className="text-sm font-bold truncate" style={{ color: 'var(--color-text)' }}>
+                          {node.label}
+                          {node.title ? `：${node.title}` : ''}
+                        </h2>
+                        {node.volume && (
+                          <span
+                            className="text-[0.7rem] px-1 py-0.5 rounded flex-shrink-0"
+                            style={{ backgroundColor: 'var(--color-active)', color: 'var(--color-text-muted)' }}
+                          >
+                            {node.volume}
+                          </span>
+                        )}
+                        {dirty && (
+                          <span
+                            aria-hidden="true"
+                            className="h-1.5 w-1.5 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: 'var(--color-accent)' }}
+                          />
+                        )}
+                        <span className="flex-1" />
+                        {dirty && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="gap-1"
+                              disabled={saving}
+                              onClick={() => handleDiscardNodes([node.id])}
+                              aria-label={text(`放弃「${node.label}」的修改`, `Discard changes to ${node.label}`)}
+                              title={text(`放弃「${node.label}」的修改`, `Discard changes to ${node.label}`)}
+                            >
+                              <RotateCcw size={11} />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="gap-1"
+                              disabled={saving}
+                              onClick={() => void saveNodes([node.id])}
+                              aria-label={text(`保存「${node.label}」`, `Save ${node.label}`)}
+                              title={text(`保存「${node.label}」`, `Save ${node.label}`)}
+                            >
+                              <Save size={11} />
+                              {text('保存', 'Save')}
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                      <AutoGrowTextarea
+                        value={body}
+                        onChange={value => handleNodeBodyChange(node, value)}
+                        ariaLabel={text(`${node.label}的大纲正文`, `Outline body of ${node.label}`)}
+                        placeholder={text('写下这个章节区间的结构拐点…', 'Describe the turning points for this chapter range…')}
+                      />
+                    </section>
+                  )
+                })}
+              </div>
+
+              {markerText && (
+                <p
+                  className="mt-5 pt-3 text-[0.7rem] leading-relaxed border-t"
+                  style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}
+                >
+                  {markerText}
+                </p>
+              )}
+            </div>
           )}
         </div>
       </div>
     </div>
+  )
+}
+
+/** 右侧文档里的段落正文：随内容自动增高，看起来像连续正文而不是输入框。 */
+function AutoGrowTextarea({
+  value,
+  onChange,
+  ariaLabel,
+  placeholder,
+}: {
+  value: string
+  onChange: (value: string) => void
+  ariaLabel: string
+  placeholder: string
+}) {
+  const ref = useRef<HTMLTextAreaElement | null>(null)
+
+  useEffect(() => {
+    const element = ref.current
+    if (!element) return
+    const resize = () => {
+      element.style.height = 'auto'
+      element.style.height = `${element.scrollHeight}px`
+    }
+    resize()
+    // 面板宽度变化会改变折行，需要重新量一次高度。
+    window.addEventListener('resize', resize)
+    return () => window.removeEventListener('resize', resize)
+  }, [value])
+
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      rows={1}
+      onChange={event => onChange(event.target.value)}
+      aria-label={ariaLabel}
+      placeholder={placeholder}
+      className="w-full resize-none bg-transparent outline-none rounded-sm px-1 py-0.5 text-xs leading-relaxed font-mono"
+      style={{ color: 'var(--color-text-secondary)', minHeight: 24 }}
+      onFocus={event => { event.currentTarget.style.backgroundColor = 'var(--color-panel)' }}
+      onBlur={event => { event.currentTarget.style.backgroundColor = 'transparent' }}
+    />
   )
 }
