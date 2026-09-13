@@ -42,6 +42,8 @@ tailwind.config.js.bak
 .workbuddy/
 .release-gate*.txt
 /.vitest-attachments/
+# 浏览器测试失败时写出的截图，不入库
+__screenshots__/
 
 # 本地工具索引与会话
 .codegraph/
