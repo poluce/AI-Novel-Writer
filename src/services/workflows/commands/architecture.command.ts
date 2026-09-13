@@ -579,6 +579,33 @@ const REQUIRED_CONFIG_TEXT_FIELDS = [
 
 type UiText = (zhCNText: string, enUSText: string) => string
 
+/**
+ * 正在重新生成的架构块已有内容。
+ *
+ * 重新生成必须建立在作者已确认的现有文本之上；因此把当前值作为权威参考随提示词
+ * 一起发送，明确禁止整段重写、删除或反转作者明确设定。
+ */
+function existingAuthorContentBlock(
+  existing: string | null | undefined,
+  language: WritingLanguage,
+  labelZh: string,
+  labelEn: string,
+): string {
+  const content = (existing ?? '').trim()
+  if (!content) return ''
+  return promptLanguageText(
+    language,
+    `【作者已有${labelZh}（权威参考）】
+以下是作者已经确认并保留的现有${labelZh}。请在完整保留其中事实、人物、设定与结构的前提下补充或润色，不得整段重写、删除或反转作者的明确设定：
+
+${content}`,
+    `[Existing author ${labelEn} — authoritative reference]
+The author already confirmed this ${labelEn}. Preserve its facts, characters, settings, and structure while refining or extending it. Never rewrite it wholesale, delete it, or reverse explicit author decisions:
+
+${content}`,
+  )
+}
+
 function buildNovelConfigJSONContract(
   totalChapters: number,
   wordsPerChapter: number,
@@ -1162,8 +1189,25 @@ export class GenerateCoreSeedCommand extends BaseWorkflowCommand<string> {
       .withStepGuidance(((context.data.stepGuidance as Record<string, string>) || {}).premise || '')
       .withReferenceWorks(config.referenceWorks || '')
 
-    const result = await this.callLLMWithBuilder(
-      promptBuilder,
+    const core = await ipc.invokeWithProjectSession(
+      projectSession,
+      'db:project-core-get',
+      expectedProjectPath,
+    )
+    this.assertNotCancelled(context)
+    const existingPremise = existingAuthorContentBlock(
+      core?.premise,
+      writingLanguage,
+      '故事前提',
+      'story premise',
+    )
+    const premisePrompt = existingPremise
+      ? `${existingPremise}\n\n${promptBuilder.build()}`
+      : promptBuilder.build()
+
+    const result = await this.callLLM(
+      premisePrompt,
+      promptBuilder.getSystemRole(),
       callbacks,
       { purpose: 'generate-core-seed', reasoningStage: 'planning', writingSkillStage: 'planning', submitTool: 'submit_text' },
       context,
@@ -1308,9 +1352,16 @@ export class GenerateCharactersCommand extends BaseWorkflowCommand<string> {
       MIN_CHARACTER_SLOTS,
       MAX_CHARACTER_SLOTS,
     )
-    const manifestPrompt = creativeGuidance
-      ? `${creativeGuidance}\n\n${manifestTask}`
-      : manifestTask
+    const existingCharacters = existingAuthorContentBlock(
+      core?.charactersArch,
+      writingLanguage,
+      '角色图谱',
+      'character graph',
+    )
+    const manifestPrompt = [
+      existingCharacters,
+      creativeGuidance ? `${creativeGuidance}\n\n${manifestTask}` : manifestTask,
+    ].filter(Boolean).join('\n\n')
     const manifestSection = (sectionName: string, key: keyof typeof manifestContext) => ({
       sectionName,
       messageIndex: 1,
@@ -1654,8 +1705,18 @@ export class GenerateWorldBuildingCommand extends BaseWorkflowCommand<string> {
       .withGlobalGuidance(config.globalGuidance || missingValue)
       .withStepGuidance(((context.data.stepGuidance as Record<string, string>) || {}).worldbuilding || '')
 
-    const result = await this.callLLMWithBuilder(
-      promptBuilder,
+    // 上游角色图谱 + 本块已有世界观，都作为作者权威参考随提示词发送。
+    const authorityBlocks = [
+      existingAuthorContentBlock(core?.charactersArch, writingLanguage, '角色图谱', 'character graph'),
+      existingAuthorContentBlock(core?.worldbuilding, writingLanguage, '世界观', 'worldbuilding'),
+    ].filter(Boolean)
+    const worldBuildingPrompt = authorityBlocks.length > 0
+      ? `${authorityBlocks.join('\n\n')}\n\n${promptBuilder.build()}`
+      : promptBuilder.build()
+
+    const result = await this.callLLM(
+      worldBuildingPrompt,
+      promptBuilder.getSystemRole(),
       callbacks,
       { purpose: 'generate-world-building', reasoningStage: 'planning', writingSkillStage: 'planning', submitTool: 'submit_text' },
       context,

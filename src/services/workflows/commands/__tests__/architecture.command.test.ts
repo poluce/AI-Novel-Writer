@@ -638,6 +638,29 @@ describe('GenerateCharactersCommand structured roster seam', () => {
         return 'empty-premise-request'
       }),
     })
+    useProjectStore.setState({
+      currentProject: {
+        ...project(projectAPath),
+        novelConfig,
+        premise: '',
+      } as never,
+    })
+    vi.stubGlobal('window', {
+      velaAPI: {
+        invoke: vi.fn(async (channel: string) => {
+          if (channel === 'prompt:load-global') return { templates: [], diagnostics: [] }
+          if (channel === 'fs:check-exists') return false
+          if (channel === 'db:project-core-get') return { premise: '' }
+          throw new Error(`Unexpected IPC channel: ${channel}`)
+        }),
+        on: vi.fn(),
+        once: vi.fn(),
+        send: vi.fn(),
+        setZoomLevel: vi.fn(),
+        setZoomFactor: vi.fn(),
+        getZoomLevel: vi.fn(),
+      },
+    })
     const runContext = {
       ...context,
       writingLanguage: 'zh-CN' as const,
@@ -670,6 +693,22 @@ describe('GenerateCharactersCommand structured roster seam', () => {
       defaultModelId: 'model-1',
       generateStream: vi.fn(() => new Promise<string>(() => {})),
     })
+    vi.stubGlobal('window', {
+      velaAPI: {
+        invoke: vi.fn(async (channel: string) => {
+          if (channel === 'prompt:load-global') return { templates: [], diagnostics: [] }
+          if (channel === 'fs:check-exists') return false
+          if (channel === 'db:project-core-get') return { premise: '' }
+          throw new Error(`Unexpected IPC channel: ${channel}`)
+        }),
+        on: vi.fn(),
+        once: vi.fn(),
+        send: vi.fn(),
+        setZoomLevel: vi.fn(),
+        setZoomFactor: vi.fn(),
+        getZoomLevel: vi.fn(),
+      },
+    })
     const runContext = {
       ...context,
       writingLanguage: 'en-US' as const,
@@ -691,6 +730,125 @@ describe('GenerateCharactersCommand structured roster seam', () => {
     const visibleLogs = vi.mocked(stepCallbacks.log).mock.calls.map(([message]) => message).join('\n')
     expect(visibleLogs).toContain('Generating story premise...')
     expect(visibleLogs).not.toMatch(/[\u3400-\u9fff]/u)
+  })
+
+  it('passes the existing premise, character graph, and worldbuilding to regeneration as authoritative context', async () => {
+    const novelConfig = {
+      writingLanguage: 'zh-CN',
+      genre: '悬疑',
+      targetAudience: '全龄',
+      totalChapters: 20,
+      wordsPerChapter: 2500,
+    } as const
+    useProjectStore.setState({
+      currentProject: { ...project(projectAPath), novelConfig } as never,
+    })
+    const existingPremise = `# 故事前提\n\n${'顾舟必须在潮门关闭前找回失踪的姐姐。'.repeat(4)}`
+    const existingCharacters = '顾舟：主角，执着于姐姐失踪的真相。'
+    const existingWorldbuilding = '潮门每逢子时显形，门后是无法回头的旧城。'
+    const observed = new Map<string, string>()
+    let generationIndex = 0
+    useLLMStore.setState({
+      defaultModelId: 'model-1',
+      generateStream: vi.fn(async (
+        messages: Parameters<ReturnType<typeof useLLMStore.getState>['generateStream']>[0],
+        streamCallbacks,
+        _modelId,
+        options,
+      ) => {
+        generationIndex += 1
+        observed.set(options?.purpose ?? `unknown-${generationIndex}`, messages.map(message => message.content).join('\n'))
+        streamCallbacks.onDone?.('修订后的架构内容。', undefined, 'stop')
+        return `authority-context-request-${generationIndex}`
+      }),
+    })
+    const invoke = vi.fn(async (channel: string) => {
+      if (channel === 'prompt:load-global') return { templates: [], diagnostics: [] }
+      if (channel === 'fs:check-exists') return false
+      if (channel === 'fs:read-json') return { success: false, error: 'not found' }
+      if (channel === 'fs:write-json') return { success: true }
+      if (channel === 'db:project-core-get') {
+        return {
+          premise: existingPremise,
+          charactersArch: existingCharacters,
+          worldbuilding: existingWorldbuilding,
+        }
+      }
+      if (channel === 'db:project-core-update') return { success: true }
+      throw new Error(`Unexpected IPC channel: ${channel}`)
+    })
+    vi.stubGlobal('window', {
+      velaAPI: { invoke, on: vi.fn(), once: vi.fn(), send: vi.fn(), setZoomLevel: vi.fn(), setZoomFactor: vi.fn(), getZoomLevel: vi.fn() },
+    })
+    const runContext = {
+      ...context,
+      writingLanguage: 'zh-CN' as const,
+      uiLocale: 'zh-CN' as const,
+      data: {},
+    }
+    const snapshot = { expectedProjectPath: projectAPath, novelConfig } as never
+
+    await new GenerateCoreSeedCommand(snapshot, workflowRuntimeDependencies)
+      .execute({ step: {}, context: runContext, callbacks })
+    await new GenerateWorldBuildingCommand(snapshot, workflowRuntimeDependencies)
+      .execute({ step: {}, context: runContext, callbacks })
+
+    const premiseRequest = observed.get('generate-core-seed') ?? ''
+    expect(premiseRequest).toContain('作者已有故事前提（权威参考）')
+    expect(premiseRequest).toContain('顾舟必须在潮门关闭前找回失踪的姐姐。')
+
+    const worldRequest = observed.get('generate-world-building') ?? ''
+    expect(worldRequest).toContain('作者已有角色图谱（权威参考）')
+    expect(worldRequest).toContain(existingCharacters)
+    expect(worldRequest).toContain('作者已有世界观（权威参考）')
+    expect(worldRequest).toContain(existingWorldbuilding)
+  })
+
+  it('passes the existing character graph to character regeneration as authoritative context', async () => {
+    const existingCharacters = '顾舟：主角，执着于姐姐失踪的真相。林岚：记者，握有旧报纸。'
+    const observed = new Map<string, string>()
+    useLLMStore.setState({
+      defaultModelId: 'model-1',
+      generateStream: vi.fn(async (
+        messages: Parameters<ReturnType<typeof useLLMStore.getState>['generateStream']>[0],
+        streamCallbacks,
+        _modelId,
+        options,
+      ) => {
+        observed.set(options?.purpose ?? 'unknown', messages.map(message => message.content).join('\n'))
+        streamCallbacks.onError?.('captured request')
+        return 'character-authority-request'
+      }),
+    })
+    const invoke = vi.fn(async (channel: string) => {
+      if (channel === 'prompt:load-global') return { templates: [], diagnostics: [] }
+      if (channel === 'fs:check-exists') return false
+      if (channel === 'db:project-core-get') {
+        return {
+          premise: '顾舟必须在潮门关闭之前找回失踪多年的姐姐，并揭开旧城每逢午夜显形的真相；他每一次推开潮门都会永久失去一段与姐姐有关的记忆，而线索只存在于他正在遗忘的那些记忆里。',
+          charactersArch: existingCharacters,
+        }
+      }
+      throw new Error(`Unexpected IPC channel: ${channel}`)
+    })
+    vi.stubGlobal('window', {
+      velaAPI: { invoke, on: vi.fn(), once: vi.fn(), send: vi.fn(), setZoomLevel: vi.fn(), setZoomFactor: vi.fn(), getZoomLevel: vi.fn() },
+    })
+    const runContext = {
+      ...context,
+      writingLanguage: 'zh-CN' as const,
+      uiLocale: 'zh-CN' as const,
+      data: {},
+    }
+    const snapshot = { expectedProjectPath: projectAPath, novelConfig: {} } as never
+
+    // 清单调用在流错误后失败关闭；这里断言实际发出的请求带有作者已有角色图谱。
+    await expect(new GenerateCharactersCommand(snapshot)
+      .execute({ step: {}, context: runContext, callbacks })).rejects.toThrow()
+
+    const manifestRequest = observed.get('character-architecture-manifest') ?? ''
+    expect(manifestRequest).toContain('作者已有角色图谱（权威参考）')
+    expect(manifestRequest).toContain(existingCharacters)
   })
 
   it('sends English built-in instructions for premise, character, world, and synopsis requests', async () => {
