@@ -10,7 +10,7 @@ import { useLocaleStore } from '../../../stores/locale-store'
 
 /**
  * 对话区域主组件
- * - 空状态：居中显示欢迎词 + 输入框 + 最近会话（参考 agent1.html pt-[30vh] 设计）
+ * - 空状态：上方欢迎词与最近会话，输入框固定在底部
  * - 有会话：消息列表 + 底部固定输入框
  */
 export default function AgentConversation() {
@@ -44,28 +44,17 @@ function EmptyState() {
 
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div
-        className="px-4"
-        style={{ paddingTop: 'max(22vh, 48px)', paddingBottom: 24 }}
-      >
-        {/* 标题 */}
+    <div className="flex flex-col h-full">
+      <div className="flex-1 overflow-y-auto px-4 py-4">
         <div className="mb-1 pl-1 text-base font-semibold" style={{ color: 'var(--color-text)' }}>
           {text(APP_BRAND.zhName, APP_BRAND.enName)}
         </div>
-        {/* 副标题 */}
         <div className="mb-3 pl-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
           {text('你的 AI 创作助手 — 支持', 'Your AI creative assistant — use')} <code className="px-1 py-0.5 rounded text-[0.68rem]" style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-accent)' }}>/</code> {text('命令和', 'commands and')} <code className="px-1 py-0.5 rounded text-[0.68rem]" style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-accent)' }}>@</code> {text('引用', 'mentions')}
         </div>
 
-        {/* 输入框 */}
-        <AgentInputBox />
-
-
-
-        {/* 最近会话（如有） */}
         {recentConvs.length > 0 && (
-          <div className="mt-6">
+          <div className="mt-4">
             <div className="flex flex-col gap-0">
               {recentConvs.map(conv => (
                 <RecentConversationItem
@@ -91,10 +80,17 @@ function EmptyState() {
           </div>
         )}
 
-        {/* 底部提示 */}
         <div className="pt-8 text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
           {text('AI 生成内容仅供参考，重要信息请自行核实。', 'AI-generated content is for reference only. Verify important information.')}
         </div>
+      </div>
+
+      <div
+        className="flex-shrink-0 px-3 pb-3 pt-2"
+        style={{ borderTop: '1px solid var(--color-border)' }}
+      >
+        <AgentToolbar />
+        <AgentInputBox />
       </div>
     </div>
   )
