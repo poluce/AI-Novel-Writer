@@ -10,7 +10,6 @@ import { useMCPStore } from '../../stores/mcp-store'
 import { useProjectStore } from '../../stores/project-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
 
-const ACTIVE_PREVIEW_LIMIT = 500
 const RECENT_PROJECT_LIMIT = 5
 
 interface PreviousAppSurface {
@@ -81,9 +80,6 @@ export function captureAgentEditorSnapshot(): AgentEditorSnapshot {
     type: tab.type,
     active: tab.id === editorState.activeTabId,
     unsaved: Boolean(tab.dirty),
-    ...(tab.id === editorState.activeTabId && tab.content
-      ? { preview: tab.content.slice(0, ACTIVE_PREVIEW_LIMIT) }
-      : {}),
   }))
 
   const workflowState = useWorkflowStore.getState()

@@ -1,11 +1,10 @@
 import type { AgentEditorSnapshot } from '../../src/shared/agent-events'
 import { writingLanguageText, type WritingLanguage } from '../../src/shared/writing-language'
 
-const ACTIVE_PREVIEW_LIMIT = 500
-
 /**
  * Format the renderer L1 snapshot as an ephemeral user message.
  * Tool catalogs stay on AgentTool schemas — this is app-shell awareness.
+ * Active-file bodies are not included; the agent should read them with tools.
  */
 export function buildL1AgentContext(
   snapshot: AgentEditorSnapshot | null | undefined,
@@ -78,11 +77,11 @@ export function buildL1AgentContext(
     parts.push(`## ${label('编辑器状态', 'Editor state')}\n${label('打开的文件', 'Open files')}:\n${tabSummaries}`)
 
     const activeTab = snapshot.tabs.find(tab => tab.active)
-    if (activeTab?.preview) {
-      const preview = activeTab.preview.length > ACTIVE_PREVIEW_LIMIT
-        ? `${activeTab.preview.slice(0, ACTIVE_PREVIEW_LIMIT)}\n${label('…（内容过长已截断，可通过 read_file 工具获取完整内容）', '... (preview truncated; use read_file to retrieve the complete content)')}`
-        : activeTab.preview
-      parts.push(`### ${label('当前活跃文件内容', 'Active file content')}\n${label('文件名', 'File')}: ${activeTab.name}\n\`\`\`\n${preview}\n\`\`\``)
+    if (activeTab) {
+      parts.push(label(
+        `用户正在查看「${activeTab.name}」（${activeTab.type}）。需要正文时请用工具读取，不要假设已经看到文件内容。`,
+        `The user is viewing "${activeTab.name}" (${activeTab.type}). Read the body with tools; do not assume file contents are already in context.`,
+      ))
     }
   }
 

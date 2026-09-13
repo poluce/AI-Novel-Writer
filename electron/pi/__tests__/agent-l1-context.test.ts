@@ -24,11 +24,10 @@ describe('buildL1AgentContext', () => {
     expect(text).toContain('左侧栏: 主页')
   })
 
-  it('formats editor tabs and truncates the active preview', () => {
-    const preview = '林舟推开门。'.repeat(120)
+  it('names the file the user is viewing without injecting its body', () => {
     const text = buildL1AgentContext({
       tabs: [
-        { name: '第1章', type: 'chapter', active: true, unsaved: true, preview },
+        { name: '第1章', type: 'chapter', active: true, unsaved: true },
         { name: '角色卡', type: 'character', active: false, unsaved: false },
       ],
       project: { open: true, name: '测试书' },
@@ -38,14 +37,16 @@ describe('buildL1AgentContext', () => {
     expect(text).toContain('## 编辑器状态')
     expect(text).toContain('第1章 (chapter) [当前活跃] [未保存]')
     expect(text).toContain('角色卡 (character)')
-    expect(text).toContain('当前活跃文件内容')
-    expect(text).toContain('可通过 read_file 工具获取完整内容')
+    expect(text).toContain('用户正在查看「第1章」')
+    expect(text).toContain('需要正文时请用工具读取')
+    expect(text).not.toContain('当前活跃文件内容')
+    expect(text).not.toContain('林舟')
     expect(text).not.toContain('<tool_call>')
   })
 
   it('localizes labels and uses the workflow type in English', () => {
     const text = buildL1AgentContext({
-      tabs: [{ name: 'Chapter 1', type: 'chapter', active: true, unsaved: false, preview: 'Hello' }],
+      tabs: [{ name: 'Chapter 1', type: 'chapter', active: true, unsaved: false }],
       workflow: { title: '起草第一章', type: 'chapter_creation', currentStepIndex: 0, stepCount: 3 },
       project: { open: true, name: 'Book' },
       changes: [{ kind: 'project', from: 'closed', to: 'open:/tmp/book' }],

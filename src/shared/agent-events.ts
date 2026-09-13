@@ -36,7 +36,6 @@ export interface AgentEditorTabSnapshot {
   type: string
   active: boolean
   unsaved: boolean
-  preview?: string
 }
 
 export interface AgentWorkflowSnapshot {

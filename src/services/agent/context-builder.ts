@@ -176,12 +176,11 @@ function buildL1EditorContext(
 
     parts.push(`## ${label('编辑器状态', 'Editor state')}\n${label('打开的文件', 'Open files')}:\n${tabSummaries}`)
 
-    // 如果当前活跃 Tab 有内容且不太长，注入内容摘要
-    if (activeTab?.content && activeTab.content.length > 0) {
-      const preview = activeTab.content.length > 500
-        ? activeTab.content.slice(0, 500) + `\n${label('…（内容过长已截断，可通过 read_file 工具获取完整内容）', '... (preview truncated; use read_file to retrieve the complete content)')}`
-        : activeTab.content
-      parts.push(`### ${label('当前活跃文件内容', 'Active file content')}\n${label('文件名', 'File')}: ${activeTab.name}\n\`\`\`\n${preview}\n\`\`\``)
+    if (activeTab) {
+      parts.push(label(
+        `用户正在查看「${activeTab.name}」（${activeTab.type}）。需要正文时请用工具读取，不要假设已经看到文件内容。`,
+        `The user is viewing "${activeTab.name}" (${activeTab.type}). Read the body with tools; do not assume file contents are already in context.`,
+      ))
     }
   }
 
