@@ -35,6 +35,7 @@ import {
   getCharacterRosterRepairPresentation,
 } from './character-roster-repair-state'
 import { useCharacterRosterRepair } from './use-character-roster-repair'
+import { openBuiltinEditor } from '../panels/sidebar/sidebar-file-openers'
 import {
   captureProjectSession,
   isProjectSessionCurrent,
@@ -42,6 +43,9 @@ import {
 } from '../project-session-gate'
 
 type ArchStepKey = 'premise' | 'characters' | 'worldbuilding' | 'synopsis'
+
+/** 情节大纲已拆为独立页面，不再参与故事架构的批量生成。 */
+const ARCHITECTURE_STEP_KEYS = ['premise', 'characters', 'worldbuilding'] as const
 
 /** 与 Sidebar / WorldBuildingEditor 保持一致的架构文件元信息 */
 const ARCH_META: Record<ArchStepKey, { iconName: string; label: string; labelEn: string; desc: string; descEn: string }> = {
@@ -96,6 +100,9 @@ function ArchFileViewerSession({
 }: Props) {
   const stepKey = detectStepKey(filePath)
   const isCharacterProjection = stepKey === 'characters'
+  const architectureStepKey = stepKey && (ARCHITECTURE_STEP_KEYS as readonly string[]).includes(stepKey)
+    ? stepKey as (typeof ARCHITECTURE_STEP_KEYS)[number]
+    : null
   const meta = stepKey ? ARCH_META[stepKey] : null
   const currentProject = useProjectStore(s => s.currentProject)
   const text = useLocaleStore(s => s.text)
@@ -520,8 +527,8 @@ function ArchFileViewerSession({
             </Button>
           )}
 
-          {/* AI 生成按钮 */}
-          {stepKey && meta && (
+          {/* AI 生成按钮：架构三块打开架构弹窗；情节大纲跳到独立的「情节大纲」页面 */}
+          {stepKey && meta && architectureStepKey && (
             <Button
               variant="ai"
               size="sm"
@@ -533,6 +540,22 @@ function ArchFileViewerSession({
             >
               {checkingArch ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
               {generated ? text('AI 重新生成', 'AI Regenerate') : text('AI 生成', 'AI Generate')}
+            </Button>
+          )}
+          {stepKey === 'synopsis' && (
+            <Button
+              variant="ai"
+              size="sm"
+              onClick={() => openBuiltinEditor(
+                'synopsis-editor',
+                text('情节大纲', 'Plot outline'),
+                'synopsis',
+              )}
+              disabled={!projectMatches}
+              title={text('在「情节大纲」页面生成或续批', 'Generate or continue it on the Plot outline page')}
+            >
+              <Sparkles size={12} />
+              {text('生成情节大纲', 'Generate outline')}
             </Button>
           )}
         </div>
@@ -617,13 +640,13 @@ function ArchFileViewerSession({
         />
       </div>
 
-      {/* AI 生成确认弹窗 */}
-      {stepKey && (
+      {/* AI 生成确认弹窗（仅架构三块） */}
+      {architectureStepKey && (
         <ArchitectureConfirmDialog
           isOpen={showDialog}
           onClose={() => setShowDialog(false)}
           archStatus={fullArchStatus}
-          initialSelectedSteps={[stepKey]}
+          initialSelectedSteps={[architectureStepKey]}
           onConfirm={handleConfirm}
         />
       )}

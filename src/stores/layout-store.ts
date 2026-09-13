@@ -10,7 +10,7 @@ export type BottomTab = 'tasks' | 'log' | 'models'
 export type RightView = 'agent' | 'ai-output'
 
 /** 左侧主导航当前视觉激活项 */
-export type LeftRailItem = SidebarView | 'blueprint' | 'world' | 'plot-tree' | BottomTab
+export type LeftRailItem = SidebarView | 'blueprint' | 'world' | 'synopsis' | 'plot-tree' | BottomTab
 
 /** 设置弹窗分类 */
 export type SettingsSection = 'llm' | 'embedding' | 'proxy' | 'editor' | 'prompts' | 'skills' | 'about'

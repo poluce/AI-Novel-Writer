@@ -72,18 +72,18 @@ afterEach(async () => {
 
 describe('ArchFileViewer locale', () => {
   it.each([
-    ['premise', '故事前提'],
-    ['characters', '角色图谱'],
-    ['worldbuilding', '世界观'],
-    ['synopsis', '情节大纲'],
-  ])('recognizes the actual core protocol %s and restores generation controls', async (key, label) => {
+    ['premise', '故事前提', 'AI 生成「故事前提」'],
+    ['characters', '角色图谱', 'AI 生成「角色图谱」'],
+    ['worldbuilding', '世界观', 'AI 生成「世界观」'],
+    ['synopsis', '情节大纲', '在「情节大纲」页面生成或续批'],
+  ])('recognizes the actual core protocol %s and restores generation controls', async (key, label, actionTitle) => {
     useLocaleStore.setState({ locale: 'zh-CN' })
     await act(async () => root.render(
       <ArchFileViewer tabId={`arch-${key}`} filePath={`vela://core/${key}`}
         projectKey={PROJECT_PATH} content="" savedContent="" />,
     ))
     expect(container.textContent).toContain(label)
-    expect(container.querySelector(`[title="AI 生成「${label}」"]`)).not.toBeNull()
+    expect(container.querySelector(`[title="${actionTitle}"]`)).not.toBeNull()
     if (key === 'characters') {
       expect(container.textContent).toContain('角色图谱由角色名单自动生成，只读展示')
       expect(container.querySelector('.cm-content')?.getAttribute('contenteditable')).toBe('false')

@@ -8,12 +8,10 @@ describe('createDefaultArchitectureSelection', () => {
       premise: false,
       characters: true,
       worldbuilding: false,
-      synopsis: false,
     })).toEqual({
       premise: true,
       characters: false,
       worldbuilding: true,
-      synopsis: true,
     })
   })
 
@@ -22,12 +20,10 @@ describe('createDefaultArchitectureSelection', () => {
       premise: false,
       characters: false,
       worldbuilding: false,
-      synopsis: false,
     }, ['characters'])).toEqual({
       premise: true,
       characters: true,
       worldbuilding: true,
-      synopsis: true,
     })
   })
 
@@ -36,12 +32,18 @@ describe('createDefaultArchitectureSelection', () => {
       premise: true,
       characters: false,
       worldbuilding: true,
-      synopsis: false,
     }, ['characters'])).toEqual({
       premise: false,
       characters: true,
       worldbuilding: false,
-      synopsis: true,
+    })
+  })
+
+  it('never reports the plot outline as an architecture step', () => {
+    expect(createDefaultArchitectureSelection({ synopsis: false })).toEqual({
+      premise: true,
+      characters: true,
+      worldbuilding: true,
     })
   })
 })

@@ -1,4 +1,4 @@
-import { X, FileText, Settings, Users, ArrowLeftRight, MoreHorizontal, BookOpen, History, ClipboardCheck, Globe, Save, ChevronLeft, ChevronRight, PenTool, Check } from 'lucide-react'
+import { X, FileText, Settings, Users, ArrowLeftRight, MoreHorizontal, BookOpen, History, ClipboardCheck, Globe, Save, ChevronLeft, ChevronRight, PenTool, Check, Map } from 'lucide-react'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { ContextMenu, type ContextMenuEntry } from '../ui/ContextMenu'
 import {
@@ -10,6 +10,7 @@ import NovelConfigEditor from '../editor/NovelConfigEditor'
 import CharacterEditor from '../editor/CharacterEditor'
 import ChapterCardEditor from '../editor/ChapterCardEditor'
 import WorldBuildingEditor from '../editor/WorldBuildingEditor'
+import SynopsisEditor from '../editor/SynopsisEditor'
 import ArchFileViewer from '../editor/ArchFileViewer'
 import DraftEditor from '../editor/DraftEditor'
 import VersionHistory from '../editor/VersionHistory'
@@ -497,6 +498,7 @@ export default function EditorArea({ onNewProject: _onNewProject }: EditorAreaPr
     if (type === 'diff') return <ArrowLeftRight size={14} />
     if (type === 'chapter-card') return <BookOpen size={14} />
     if (type === 'world-building') return <Globe size={14} />
+    if (type === 'synopsis') return <Map size={14} />
     if (type === 'version-history') return <History size={14} />
     if (type === 'review-report') return <ClipboardCheck size={14} />
     return <FileText size={14} />
@@ -720,6 +722,9 @@ export default function EditorArea({ onNewProject: _onNewProject }: EditorAreaPr
         )}
         {activeTab?.type === 'world-building' && activeTab.projectKey && (
           <WorldBuildingEditor key={activeTab.id} projectKey={activeTab.projectKey} />
+        )}
+        {activeTab?.type === 'synopsis' && activeTab.projectKey && (
+          <SynopsisEditor key={activeTab.id} projectKey={activeTab.projectKey} />
         )}
         {activeTab?.type === 'narrative-thread' && activeTab.projectKey === currentProject.path && (
           <NarrativeThreadEditor

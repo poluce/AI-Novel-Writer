@@ -14,6 +14,7 @@ import {
   isUsableSynopsisCheckpoint,
   synopsisFactsFingerprint,
 } from '../../../services/workflows/commands/architecture.command'
+import SynopsisEditor from '../../editor/SynopsisEditor'
 import WorldBuildingEditor from '../../editor/WorldBuildingEditor'
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -131,10 +132,9 @@ describe('workflow launch language seams', () => {
     container = document.createElement('div')
     document.body.append(container)
     root = createRoot(container)
-    await act(async () => root?.render(<WorldBuildingEditor projectKey={currentProject.path} />))
+    await act(async () => root?.render(<SynopsisEditor projectKey={currentProject.path} />))
 
     await expect.element(page.getByText('不完整 · 检查点不可恢复', { exact: true })).toBeVisible()
-    await expect.element(page.getByText('3/4 已生成', { exact: true })).toBeVisible()
     expect(container.textContent).not.toContain('断点续写大纲')
 
     const confirmedBody = `Chapters 1-20: ${'The crew follows each clue and preserves cause and effect. '.repeat(4)}`.trim()
@@ -157,10 +157,10 @@ describe('workflow launch language seams', () => {
   })
 
   it.each([
-    { uiLocale: 'zh-CN', writingLanguage: 'zh-CN', heading: '故事架构', status: '3/4 已生成', refresh: '刷新状态', generate: 'AI 生成架构', generateTitle: 'AI 生成故事架构（选择要生成的步骤）', title: 'AI 生成故事架构', button: /确认生成/, expectedLog: '生成故事前提...', expectedPrompt: '你是一位经验丰富的故事架构师', unexpectedPrompt: 'Build a compact story premise' },
-    { uiLocale: 'zh-CN', writingLanguage: 'en-US', heading: '故事架构', status: '3/4 已生成', refresh: '刷新状态', generate: 'AI 生成架构', generateTitle: 'AI 生成故事架构（选择要生成的步骤）', title: 'AI 生成故事架构', button: /确认生成/, expectedLog: '生成故事前提...', expectedPrompt: 'Build a compact story premise', unexpectedPrompt: '你是一位经验丰富的故事架构师' },
-    { uiLocale: 'en-US', writingLanguage: 'zh-CN', heading: 'Story architecture', status: '3/4 generated', refresh: 'Refresh status', generate: 'Generate story architecture', generateTitle: 'Generate story architecture (choose steps to generate)', title: 'Generate story architecture with AI', button: /Generate \(/, expectedLog: 'Generating story premise...', expectedPrompt: '你是一位经验丰富的故事架构师', unexpectedPrompt: 'Build a compact story premise' },
-    { uiLocale: 'en-US', writingLanguage: 'en-US', heading: 'Story architecture', status: '3/4 generated', refresh: 'Refresh status', generate: 'Generate story architecture', generateTitle: 'Generate story architecture (choose steps to generate)', title: 'Generate story architecture with AI', button: /Generate \(/, expectedLog: 'Generating story premise...', expectedPrompt: 'Build a compact story premise', unexpectedPrompt: '你是一位经验丰富的故事架构师' },
+    { uiLocale: 'zh-CN', writingLanguage: 'zh-CN', heading: '故事架构', status: '2/3 已生成', refresh: '刷新状态', generate: 'AI 生成架构', generateTitle: 'AI 生成故事架构（选择要生成的步骤）', title: 'AI 生成故事架构', button: /确认生成/, expectedLog: '生成故事前提...', expectedPrompt: '你是一位经验丰富的故事架构师', unexpectedPrompt: 'Build a compact story premise' },
+    { uiLocale: 'zh-CN', writingLanguage: 'en-US', heading: '故事架构', status: '2/3 已生成', refresh: '刷新状态', generate: 'AI 生成架构', generateTitle: 'AI 生成故事架构（选择要生成的步骤）', title: 'AI 生成故事架构', button: /确认生成/, expectedLog: '生成故事前提...', expectedPrompt: 'Build a compact story premise', unexpectedPrompt: '你是一位经验丰富的故事架构师' },
+    { uiLocale: 'en-US', writingLanguage: 'zh-CN', heading: 'Story architecture', status: '2/3 generated', refresh: 'Refresh status', generate: 'Generate story architecture', generateTitle: 'Generate story architecture (choose steps to generate)', title: 'Generate story architecture with AI', button: /Generate \(/, expectedLog: 'Generating story premise...', expectedPrompt: '你是一位经验丰富的故事架构师', unexpectedPrompt: 'Build a compact story premise' },
+    { uiLocale: 'en-US', writingLanguage: 'en-US', heading: 'Story architecture', status: '2/3 generated', refresh: 'Refresh status', generate: 'Generate story architecture', generateTitle: 'Generate story architecture (choose steps to generate)', title: 'Generate story architecture with AI', button: /Generate \(/, expectedLog: 'Generating story premise...', expectedPrompt: 'Build a compact story premise', unexpectedPrompt: '你是一位经验丰富的故事架构师' },
   ] as const)(
     'launches the production architecture workflow with UI $uiLocale and writing $writingLanguage independent',
     async ({ uiLocale, writingLanguage, heading, status, refresh, generate, generateTitle, title, button, expectedLog, expectedPrompt, unexpectedPrompt }) => {
@@ -293,7 +293,7 @@ describe('workflow launch language seams', () => {
       await expect.element(page.getByText(textForLocale(uiLocale, '科幻 · time-loop mystery', 'Science fiction · time-loop mystery'), { exact: true })).toBeVisible()
       await expect.element(page.getByText(textForLocale(uiLocale, '全龄', 'All ages'), { exact: true })).toBeVisible()
       const stepLabels = Array.from(dialog.querySelectorAll('label'))
-      expect(stepLabels).toHaveLength(4)
+      expect(stepLabels).toHaveLength(3)
       await act(async () => page.getByRole('button', { name: button }).click())
       await act(async () => {
         await vi.waitFor(() => expect(useWorkflowStore.getState().history).toHaveLength(1))

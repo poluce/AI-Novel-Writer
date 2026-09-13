@@ -10,6 +10,7 @@ import {
   Settings,
   ScrollText,
   Cpu,
+  Map,
 } from 'lucide-react'
 import { useLayoutStore, type SidebarView, type BottomTab } from '../../stores/layout-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
@@ -159,6 +160,17 @@ export default function LeftToolWindowBar() {
             setSidebarView('project', 'world')
             if (!hasOpenProject) return
             openBuiltinEditor('world-building-editor', text('故事架构', 'Story architecture'), 'world-building')
+          }}
+        />
+        <LeftNavButton
+          icon={Map}
+          label={text('大纲', 'Outline')}
+          active={activeRailItem === 'synopsis'}
+          title={text('情节大纲', 'Plot outline')}
+          onClick={() => {
+            setSidebarView('project', 'synopsis')
+            if (!hasOpenProject) return
+            openBuiltinEditor('synopsis-editor', text('情节大纲', 'Plot outline'), 'synopsis')
           }}
         />
         <LeftNavButton

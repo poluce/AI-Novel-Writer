@@ -43,6 +43,7 @@ export default function Sidebar() {
     characters: text('角色管理', 'Characters'),
     blueprint:  text('章节蓝图', 'Chapter blueprint'),
     world:      text('故事架构', 'Story architecture'),
+    synopsis:   text('情节大纲', 'Plot outline'),
     'plot-tree': text('剧情树', 'Plot tree'),
   }
   const headerTitle = viewTitles[activeRailItem] ?? viewTitles[sidebarView]

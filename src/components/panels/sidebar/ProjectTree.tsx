@@ -46,7 +46,6 @@ const ARCH_FILE_EN: Record<string, { label: string; desc: string }> = {
   premise: { label: 'Premise', desc: 'Core premise and conflict' },
   characters: { label: 'Character map', desc: 'Character arcs and relationships' },
   worldbuilding: { label: 'World building', desc: 'World rules and systems' },
-  synopsis: { label: 'Plot synopsis', desc: 'Overall plot structure' },
 }
 
 export default function ProjectTree() {
@@ -234,6 +233,7 @@ export default function ProjectTree() {
 
   // 故事架构进度
   const archDone = ARCH_FILES.filter(f => archStatus[f.key]).length
+  const synopsisDone = !!archStatus.synopsis
   const clearDisabled = activeRuns.length > 0
   const openConfigEditor = () => useEditorStore.getState().openFile({
     id: 'config',
@@ -241,6 +241,11 @@ export default function ProjectTree() {
     type: 'config',
     projectKey: currentProject.path,
   })
+  const openSynopsisEditor = () => openBuiltinEditor(
+    'synopsis-editor',
+    text('情节大纲', 'Plot outline'),
+    'synopsis',
+  )
 
   return (
     <div className="writer-project-tree min-h-full text-sm py-1">
@@ -301,7 +306,25 @@ export default function ProjectTree() {
       {/* 2. 故事架构 — 点击标题行打开编辑器，子文件仍可单独点开 */}
       <WorldBuildingGroup archStatus={archStatus} archDone={archDone} onCleared={refreshAll} />
 
-      {/* 3. 章节蓝图 — 点击打开编辑器页 */}
+      {/* 3. 情节大纲 — 与故事架构并列的一级条目 */}
+      <LeafItem
+        iconName="map"
+        label={text('情节大纲', 'Plot outline')}
+        desc={text('三幕结构、拐点节奏、伏笔闭环', 'Three-act structure, pacing, and setup/payoff')}
+        badge={synopsisDone ? text('已生成', 'Generated') : text('待生成', 'Pending')}
+        badgeDone={synopsisDone}
+        onClick={openSynopsisEditor}
+        onContextMenu={e => showSidebarMenu([
+          {
+            key: 'open',
+            label: text('打开情节大纲', 'Open plot outline'),
+            icon: <FolderOpen size={13} />,
+            onClick: openSynopsisEditor,
+          },
+        ], e)}
+      />
+
+      {/* 4. 章节蓝图 — 点击打开编辑器页 */}
       <LeafItem
         iconName="layout-list"
         label={text('章节蓝图', 'Chapter blueprints')}
@@ -333,10 +356,10 @@ export default function ProjectTree() {
         onClick={() => openBuiltinEditor('narrative-thread-editor', text('伏笔与叙事线索', 'Foreshadowing & narrative threads'), 'narrative-thread')}
       />
 
-      {/* 4. 草稿箱 — 独立分区，按章节分组展示草稿 */}
+      {/* 5. 草稿箱 — 独立分区，按章节分组展示草稿 */}
       <DraftBoxGroup draftsByChapter={draftsByChapter} />
 
-      {/* 5. 正文章节 — 仅显示已定稿 */}
+      {/* 6. 正文章节 — 仅显示已定稿 */}
       <ManuscriptGroup files={manuscriptFiles} projectPath={p} />
     </div>
   )

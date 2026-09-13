@@ -40,12 +40,14 @@ const originalWorkflowState = useWorkflowStore.getState()
 let container: HTMLDivElement
 let root: Root
 let invoke: ReturnType<typeof vi.fn>
+let worldbuilding = ''
 let synopsis = ''
 let blueprintCount = 0
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 beforeEach(() => {
+  worldbuilding = ''
   synopsis = ''
   blueprintCount = 0
   useLocaleStore.setState({ locale: 'en-US', initialized: true })
@@ -75,7 +77,7 @@ beforeEach(() => {
       return {
         premise: 'P'.repeat(60),
         charactersArch: 'C'.repeat(60),
-        worldbuilding: 'W'.repeat(60),
+        worldbuilding,
         synopsis,
       }
     }
@@ -120,12 +122,14 @@ describe('ProjectTree architecture status refresh', () => {
     await act(async () => {
       await vi.waitFor(() => expect(coreReadCount()).toBeGreaterThanOrEqual(2))
     })
-    expect(container.textContent).toContain('Story architecture3/4')
+    expect(container.textContent).toContain('Story architecture2/3')
+    expect(container.textContent).toContain('Plot outlinePending')
     const readsBeforeCommit = coreReadCount()
 
+    worldbuilding = 'W'.repeat(60)
     synopsis = 'S'.repeat(60)
     await act(async () => globalEventBus.emit('ARCH_FILE_UPDATED', {
-      fileName: 'synopsis.md',
+      fileName: 'worldbuilding.md',
       projectPath: PROJECT_PATH,
       projectSession: PROJECT_SESSION,
       runId: 'architecture-run',
@@ -134,7 +138,8 @@ describe('ProjectTree architecture status refresh', () => {
     await act(async () => {
       await vi.waitFor(() => expect(coreReadCount()).toBeGreaterThan(readsBeforeCommit))
     })
-    expect(container.textContent).toContain('Story architecture4/4')
+    expect(container.textContent).toContain('Story architecture3/3')
+    expect(container.textContent).toContain('Plot outlineGenerated')
   })
 
   it('reflects committed blueprint count when the blueprint resource event arrives', async () => {
