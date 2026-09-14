@@ -12,6 +12,12 @@ const releaseMonitorScript = resolve('scripts/monitor-win-release-gate.ps1')
 const upgradeFixtureScript = resolve('scripts/upgrade-data-fixture.mjs')
 const electronNodeRunner = resolve('node_modules/electron/dist/electron.exe')
 const WINDOWS_POWERSHELL_INTEGRATION_TIMEOUT_MS = 30_000
+/**
+ * Windows PowerShell 5.1 默认按控制台代码页输出（中文机器上是 CP936），
+ * 而这里用 utf8 读取子进程输出，会把中文窗口标题读成乱码。调用库函数前
+ * 显式把输出编码固定为无 BOM 的 UTF-8。
+ */
+const UTF8_OUTPUT_PRELUDE = '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $OutputEncoding = [Console]::OutputEncoding'
 
 function windowsPowerShellIt(
   name: string,
@@ -210,7 +216,7 @@ function runProbeLibrary(script: string): string {
       '-ExecutionPolicy',
       'Bypass',
       '-Command',
-      `. ${quotePowerShell(probeScript)} -LoadProbeLibrary\n${script}`,
+      `${UTF8_OUTPUT_PRELUDE}\n. ${quotePowerShell(probeScript)} -LoadProbeLibrary\n${script}`,
     ],
     { encoding: 'utf8' },
   )
@@ -224,7 +230,8 @@ function runInstallerLibrary(script: string): string {
       '-ExecutionPolicy',
       'Bypass',
       '-Command',
-      `$installer = (Get-Command powershell.exe).Source
+      `${UTF8_OUTPUT_PRELUDE}
+$installer = (Get-Command powershell.exe).Source
 . ${quotePowerShell(installerScript)} -InstallerPath $installer -InstallerTimeoutSeconds 12 -PostExitQuietSeconds 5 -LoadInstallerLibrary
 ${script}`,
     ],
@@ -240,7 +247,7 @@ function runReleaseMonitorLibrary(script: string): string {
       '-ExecutionPolicy',
       'Bypass',
       '-Command',
-      `. ${quotePowerShell(releaseMonitorScript)} -LoadMonitorLibrary\n${script}`,
+      `${UTF8_OUTPUT_PRELUDE}\n. ${quotePowerShell(releaseMonitorScript)} -LoadMonitorLibrary\n${script}`,
     ],
     { encoding: 'utf8' },
   )

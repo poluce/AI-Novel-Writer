@@ -1,4 +1,4 @@
-param(
+﻿param(
   [string]$PreviousInstallerPath = $env:AI_NOVEL_PREVIOUS_INSTALLER,
   [string]$PreviousPortableZipPath = $env:AI_NOVEL_PREVIOUS_PORTABLE_ZIP,
   [int]$ObservationSeconds = 30
