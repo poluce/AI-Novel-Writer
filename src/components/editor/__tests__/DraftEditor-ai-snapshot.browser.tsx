@@ -27,7 +27,7 @@ const SCREEN_BODY = '屏幕上的未保存正文'
 
 let root: Root
 let container: HTMLDivElement
-async function defaultInvoke(channel: string): Promise<unknown> {
+async function defaultInvoke(channel: string, ..._args: unknown[]): Promise<unknown> {
   if (channel === 'db:draft-get-meta') {
     return {
       id: 7,
@@ -250,7 +250,9 @@ describe('DraftEditor AI source snapshot', () => {
       note: '这段要重写',
       createdAt: 1,
     }
-    let releaseDraftEight: (() => void) | null = null
+    // 延迟放行的闸门：用来制造"第 8 章的批注还没读回来"的窗口。
+    let openDraftEightGate: () => void = () => {}
+    const draftEightGate = new Promise<void>((resolve) => { openDraftEightGate = resolve })
     invoke.mockImplementation(async (channel: string, ...args: unknown[]) => {
       if (channel === 'db:draft-get-meta') {
         const base = await defaultInvoke(channel) as Record<string, unknown>
@@ -259,7 +261,7 @@ describe('DraftEditor AI source snapshot', () => {
       if (channel === 'db:draft-list-annotations') {
         if (args[0] === 8) {
           // 第 8 章的批注读取挂住：这一段正是"上一章批注还在内存里"的窗口。
-          await new Promise<void>((resolve) => { releaseDraftEight = resolve })
+          await draftEightGate
           return []
         }
         return args[0] === 7 ? [annotation] : []
@@ -295,7 +297,7 @@ describe('DraftEditor AI source snapshot', () => {
     await switchToDraft(8)
     expect(container.querySelectorAll('.cm-draft-annotation')).toHaveLength(0)
 
-    releaseDraftEight?.()
+    openDraftEightGate()
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)) })
     expect(container.querySelectorAll('.cm-draft-annotation')).toHaveLength(0)
   })
