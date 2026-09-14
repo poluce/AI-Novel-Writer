@@ -140,7 +140,12 @@ export class AgentSession {
     this.agent.restoreMessages(messages)
     this.persistedCount = messages.length
     // 旧存档是丢结构的历史：当作已入档，避免把种子再写一遍。
-    void this.store?.appendMessages(this.conversationId ?? '', messages)
+    const store = this.store
+    const conversationId = this.conversationId
+    if (!store || !conversationId) return
+    void store.appendMessages(conversationId, messages).catch((error) => {
+      logFailure('Agent', 'failed to seed conversation session', error, { conversationId })
+    })
   }
 
   setTools(tools: AnyAgentTool[]): void {
