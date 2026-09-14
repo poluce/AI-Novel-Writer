@@ -92,26 +92,6 @@ export function recoverableDraftProse(text: string): string {
   return cleaned
 }
 
-const THINKING_TAGS = ['<think>', '</think>'] as const
-
-/**
- * Convert the cumulative raw stream into safe provisional prose. A suffix that
- * could still become a thinking tag is withheld so split tags never flash in
- * the writing panel before the next chunk arrives.
- */
-export function visibleDraftStreamText(rawText: string): string {
-  const lower = rawText.toLowerCase()
-  let safeEnd = rawText.length
-  const longestTag = Math.max(...THINKING_TAGS.map(tag => tag.length))
-  for (let length = 1; length < longestTag && length <= rawText.length; length += 1) {
-    const suffix = lower.slice(-length)
-    if (THINKING_TAGS.some(tag => tag.startsWith(suffix))) {
-      safeEnd = rawText.length - length
-    }
-  }
-  return sanitizeDraftText(rawText.slice(0, safeEnd))
-}
-
 /**
  * 生成期间在正文区显示「生成中…」占位。正文改走 submit_* 工具参数后不再流式，
  * 这里不再累积片段，也不再用片段当恢复候选（恢复只认终结结果里的可见正文）。

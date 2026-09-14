@@ -5,7 +5,6 @@ import { useLocaleStore } from '../../stores/locale-store'
 import { useProjectStore } from '../../stores/project-store'
 import { Button } from '../ui/Button'
 import { cn } from '../../lib/utils'
-import type { VersionRecord } from '../../services/version-service'
 import { ipc } from '../../services/ipc-client'
 import { requireIpcSuccess } from '../../services/ipc-result'
 import { countDraftUnits } from '../../shared/draft-units'
@@ -14,6 +13,16 @@ import {
   isProjectSessionCurrent,
   isProjectSessionPath,
 } from '../project-session-gate'
+
+/** 版本记录（版本历史面板自己的视图类型） */
+interface VersionRecord {
+  id: number
+  version: number
+  type: string
+  word_count: number
+  created_at: string
+  dependencies_stale: boolean
+}
 
 /** 章节元数据 */
 interface ChapterMeta {

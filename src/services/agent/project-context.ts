@@ -36,8 +36,6 @@ export interface AgentExecutionContext {
 
 export const PROJECT_CHANGED_ERROR = '当前项目已切换，本次工具结果已丢弃'
 export const PROJECT_CHANGED_ERROR_EN = 'The current project changed, so this tool result was discarded'
-export const AGENT_TOOL_CANCELLED_ERROR = '本次工具操作已在提交前取消'
-export const AGENT_TOOL_CANCELLED_ERROR_EN = 'This tool operation was cancelled before commit'
 
 export function agentToolText(
   context: AgentExecutionContext | undefined,
@@ -67,34 +65,10 @@ export function createAgentExecutionContext(
   })
 }
 
-export function requireAgentProjectSession(
-  context?: AgentExecutionContext,
-): ProjectSessionContext {
-  const session = context?.projectSession
-  if (!session) {
-    throw new Error(agentToolText(
-      context,
-      '缺少冻结项目会话，已拒绝工具项目访问',
-      'No frozen project session is available; project tool access was denied',
-    ))
-  }
-  return session
-}
-
 export function isAgentProjectCurrent(context?: AgentExecutionContext): boolean {
   const session = context?.projectSession
   return !!session && sameProjectSessionContext(
     session,
     projectSessionContextFromProject(useProjectStore.getState().currentProject),
   )
-}
-
-export function assertAgentProjectCurrent(context?: AgentExecutionContext): void {
-  if (!isAgentProjectCurrent(context)) {
-    throw new Error(agentToolText(
-      context,
-      PROJECT_CHANGED_ERROR,
-      PROJECT_CHANGED_ERROR_EN,
-    ))
-  }
 }

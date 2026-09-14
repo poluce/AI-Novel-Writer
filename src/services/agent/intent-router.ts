@@ -38,13 +38,6 @@ export interface MentionTarget {
 }
 
 /** 提及解析结果 */
-export interface ParsedMention {
-  target: MentionTarget
-  /** 在原文中的起止位置 */
-  start: number
-  end: number
-}
-
 // ===== / 命令管理 =====
 
 /** 内置 / 命令列表 */

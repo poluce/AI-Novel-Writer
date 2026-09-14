@@ -76,12 +76,6 @@ export const FONT_OPTIONS: FontOption[] = [
   },
 ]
 
-// ─── 向后兼容：旧版 WRITING_FONT_OPTIONS 别名 ──────────────────────────────
-/** @deprecated 请使用 FONT_OPTIONS */
-export const WRITING_FONT_OPTIONS = FONT_OPTIONS
-/** @deprecated 请使用 FontId */
-export type WritingFont = FontId
-
 // ─── 缩放常量 ─────────────────────────────────────────────────────────────
 
 const ZOOM_STEP = 0.05
