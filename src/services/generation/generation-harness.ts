@@ -152,8 +152,6 @@ export interface PhysicalGenerationRequest {
   signal: AbortSignal
   /** One-shot submit_* contract forwarded to the main-process pi-ai path. */
   submitTool?: SubmitToolName
-  /** Provisional provider text. Callers must reconcile it with the terminal completion. */
-  onChunk?: (chunk: string) => void
 }
 
 export interface ProviderCompletion {
@@ -202,8 +200,6 @@ export type GenerationOutcome =
 
 export interface GenerationExecutionOptions {
   signal?: AbortSignal
-  /** Provisional provider text. It is never terminal or persistence evidence. */
-  onChunk?: (chunk: string) => void
 }
 
 export interface GenerationSessionBudget {
@@ -688,7 +684,6 @@ export function createGenerationHarness(dependencies: {
                 plan,
                 signal: controller.signal,
                 ...(task.submitTool ? { submitTool: task.submitTool } : {}),
-                onChunk: options?.onChunk,
               }),
               terminationPromise,
             ])

@@ -169,7 +169,6 @@ function createResponseStream(
     const index = nextResponseIndex++
     const output = responses[index]
     if (output === undefined) throw new Error(`unexpected character generation attempt ${index + 1}`)
-    streamCallbacks.onChunk?.(output)
     streamCallbacks.onDone?.(output, undefined, finishReasons[index] ?? 'stop')
     return Promise.resolve(`character-request-${index + 1}`)
   })
@@ -1862,8 +1861,7 @@ describe('GenerateCharactersCommand structured roster seam', () => {
       if (generateStream.mock.calls.length === 1) {
         useLLMStore.setState({ defaultModelId: 'model-2' })
       }
-      streamCallbacks.onChunk?.(output)
-      streamCallbacks.onDone?.(output, undefined, finishReason)
+        streamCallbacks.onDone?.(output, undefined, finishReason)
       return Promise.resolve(`truncated-character-request-${generateStream.mock.calls.length}`)
     })
     useLLMStore.setState({ defaultModelId: 'model-1', generateStream })
@@ -2088,8 +2086,7 @@ describe('GenerateCharactersCommand structured roster seam', () => {
     ) => {
       const output = responses[generateStream.mock.calls.length - 1]
       if (!output) throw new Error('unexpected character generation attempt')
-      streamCallbacks.onChunk?.(output)
-      streamCallbacks.onDone?.(output, undefined, 'stop')
+        streamCallbacks.onDone?.(output, undefined, 'stop')
       return Promise.resolve(`character-request-${generateStream.mock.calls.length}`)
     })
     useLLMStore.setState({ defaultModelId: 'model-1', generateStream })

@@ -346,21 +346,14 @@ describe('GenerationRuntime renderer lease adapter', () => {
     expect(JSON.stringify(streamCall)).not.toContain('baseUrl')
   })
 
-  it('delivers authored stream text before the terminal completion arrives', async () => {
+  it('resolves the renderer stream from the terminal completion event', async () => {
     let streamRequestId = ''
     mocks.invoke.mockImplementation(async (channel: string, ...args: unknown[]) => {
       if (channel === 'llm:begin-execution-lease') return { success: true, lease: LEASE }
       if (channel === 'llm:close-execution-lease') return { success: true }
       if (channel === 'llm:generate-stream') {
-        const requestId = String(args[0])
-        streamRequestId = requestId
-        queueMicrotask(() => {
-          mocks.listeners.get('llm:stream-chunk')?.({
-            requestId,
-            chunk: '林岚推开门。',
-          } as never)
-        })
-        return { requestId, started: true }
+        streamRequestId = String(args[0])
+        return { requestId: streamRequestId, started: true }
       }
       throw new Error(`unexpected channel: ${channel}`)
     })
@@ -373,18 +366,17 @@ describe('GenerationRuntime renderer lease adapter', () => {
         deadlineMs: 60_000,
       },
     })
-    const streamed = vi.fn()
     let completed = false
     const execution = runtime.execute(async ({ session }) => session.complete({
-      purpose: 'renderer-progressive-preview',
+      purpose: 'renderer-terminal-completion',
       output: 'visible-text',
       messages: [{ role: 'user', content: 'write' }],
-    }, { onChunk: streamed })).then(result => {
+    })).then(result => {
       completed = true
       return result
     })
 
-    await vi.waitFor(() => expect(streamed).toHaveBeenCalledWith('林岚推开门。'))
+    await vi.waitFor(() => expect(streamRequestId).not.toBe(''))
     expect(completed).toBe(false)
     mocks.listeners.get('llm:stream-done')?.({
       requestId: streamRequestId,
@@ -401,7 +393,6 @@ describe('GenerationRuntime renderer lease adapter', () => {
       if (channel === 'llm:generate-stream') {
         const requestId = String(args[0])
         queueMicrotask(() => {
-          mocks.listeners.get('llm:stream-chunk')?.({ requestId, chunk: 'HEAD' } as never)
           mocks.listeners.get('llm:stream-done')?.({
             requestId,
             fullText: 'HEAD',
@@ -420,21 +411,18 @@ describe('GenerationRuntime renderer lease adapter', () => {
         deadlineMs: 60_000,
       },
     })
-    const streamed = vi.fn()
-
     await expect(runtime.execute(({ session }) => session.complete({
       purpose: 'damaged-provider-candidate',
       output: 'visible-text',
       messages: [{ role: 'user', content: 'write' }],
-    }, { onChunk: streamed }))).resolves.toMatchObject({
+    }))).resolves.toMatchObject({
       status: 'incomplete',
       content: 'HEAD',
       finishReason: 'error',
     })
-    expect(streamed).toHaveBeenCalledWith('HEAD')
   })
 
-  it('ignores stream chunks that arrive after cancellation', async () => {
+  it('rejects a cancelled renderer stream even if a late completion event arrives', async () => {
     let streamRequestId = ''
     mocks.invoke.mockImplementation(async (channel: string, ...args: unknown[]) => {
       if (channel === 'llm:begin-execution-lease') return { success: true, lease: LEASE }
@@ -455,23 +443,23 @@ describe('GenerationRuntime renderer lease adapter', () => {
         deadlineMs: 60_000,
       },
     })
-    const streamed = vi.fn()
     const cancellation = new AbortController()
     const execution = runtime.execute(async ({ session }) => session.complete({
-      purpose: 'renderer-cancelled-preview',
+      purpose: 'renderer-cancelled-stream',
       output: 'visible-text',
       messages: [{ role: 'user', content: 'write' }],
-    }, { signal: cancellation.signal, onChunk: streamed }))
+    }, { signal: cancellation.signal }))
     await vi.waitFor(() => expect(streamRequestId).not.toBe(''))
-    const chunkListener = mocks.listeners.get('llm:stream-chunk')
-
-    chunkListener?.({ requestId: streamRequestId, chunk: '取消前正文' } as never)
-    expect(streamed).toHaveBeenLastCalledWith('取消前正文')
     cancellation.abort()
     await expect(execution).rejects.toMatchObject({ code: 'CANCELLED' })
 
-    chunkListener?.({ requestId: streamRequestId, chunk: '取消后晚到正文' } as never)
-    expect(streamed).toHaveBeenCalledTimes(1)
+    // 取消之后晚到的完成事件不能再改动结果（settled 守卫）。
+    mocks.listeners.get('llm:stream-done')?.({
+      requestId: streamRequestId,
+      fullText: '取消后晚到正文',
+      finishReason: 'stop',
+    } as never)
+    await expect(execution).rejects.toMatchObject({ code: 'CANCELLED' })
   })
 
   it('maps a typed unknown explicit model result before opening any stream', async () => {

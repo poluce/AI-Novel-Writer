@@ -155,7 +155,6 @@ describe('legacy character roster repair public workflow seam', () => {
       _messages: Parameters<typeof originalGenerateStream>[0],
       callbacks: Parameters<typeof originalGenerateStream>[1],
     ) => {
-      callbacks.onChunk?.(modelResponse)
       callbacks.onDone?.(modelResponse, undefined, 'stop')
       return Promise.resolve('legacy-repair-request')
     })

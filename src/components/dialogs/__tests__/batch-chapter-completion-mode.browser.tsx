@@ -244,7 +244,6 @@ function installIpc() {
         useLLMStore.setState({ defaultModelId: 'changed-default-model' })
       }
       const complete = () => {
-        emit('llm:stream-chunk', { requestId, chunk: completion })
         emit('llm:stream-done', { requestId, fullText: completion, finishReason: 'stop' })
       }
       if (deferDraftCompletion && request.purpose === 'chapter-draft') {

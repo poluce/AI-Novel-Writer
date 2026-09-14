@@ -205,7 +205,7 @@ function fakeRuntime(
   completeAttempt: (
     attempt: number,
     task: GenerationTask,
-    options?: { signal?: AbortSignal; onChunk?: (chunk: string) => void },
+    options?: { signal?: AbortSignal },
   ) => GenerationOutcome | Promise<GenerationOutcome>,
 ) {
   let attempt = 0
@@ -506,9 +506,9 @@ describe('GenerateDraftCommand generation runtime boundary', () => {
     expect(invoke).not.toHaveBeenCalledWith('db:draft-create', expect.anything(), expect.anything())
   }
 
-  it('persists visible prose from an interrupted stream before returning the error', async () => {
-    const runtime = fakeRuntime((_attempt, _task, options) => {
-      options?.onChunk?.('<think>private reasoning</think>林岚推开驾驶室的门。')
+  it('creates no recovery candidate when the provider fails before any visible prose', async () => {
+    // 正文改走 submit_* 工具参数后不再有流式碎片：没有终结结果就没有可恢复正文。
+    const runtime = fakeRuntime(() => {
       throw Object.assign(new Error('connection reset'), { code: 'PROVIDER_REQUEST_FAILED' })
     })
     const { invoke, context, callbacks, command } = setup({ runtime, wordsTarget: 500 })
@@ -519,30 +519,26 @@ describe('GenerateDraftCommand generation runtime boundary', () => {
       callbacks,
     })).rejects.toThrow('connection reset')
 
-    expect(invoke).toHaveBeenCalledWith(
+    expect(invoke).not.toHaveBeenCalledWith(
       'db:recovery-candidate-record',
-      expect.objectContaining({
-        runId: context.runId,
-        stepId: 'draft-step',
-        chapterNumber: 1,
-        sourceDraft: null,
-        visibleText: '林岚推开驾驶室的门。',
-        failureCode: 'PROVIDER_REQUEST_FAILED',
-      }),
-      projectPath,
-      context.projectSession,
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
     )
+    expect(callbacks.log).toHaveBeenCalledWith(expect.stringContaining('未创建恢复候选'))
     expectNoDraftPersistence(invoke)
   })
 
   it('freezes the generation-start draft identity in a recovery candidate', async () => {
-    const runtime = fakeRuntime((_attempt, _task, options) => {
-      options?.onChunk?.('已有草稿之上的候选正文。')
+    // 初始生成拿到可见正文、续写阶段失败：候选正文来自终结结果，身份按生成开始时的草稿冻结。
+    const runtime = fakeRuntime((attempt) => {
+      if (attempt === 1) return outcome('已有草稿之上的候选正文。', 'length')
       throw new Error('connection reset')
     })
     const { invoke, context, callbacks, command } = setup({
       runtime,
       sourceDraft: { id: 42, version: 3 },
+      wordsTarget: 500,
     })
 
     await expect(command.execute({ step: { id: 'draft-step' }, context, callbacks }))
@@ -550,16 +546,19 @@ describe('GenerateDraftCommand generation runtime boundary', () => {
 
     expect(invoke).toHaveBeenCalledWith(
       'db:recovery-candidate-record',
-      expect.objectContaining({ sourceDraft: { id: 42, version: 3 } }),
+      expect.objectContaining({
+        sourceDraft: { id: 42, version: 3 },
+        visibleText: '已有草稿之上的候选正文。',
+      }),
       projectPath,
       context.projectSession,
     )
   })
 
-  it('persists received prose when cancellation wins the generation race', async () => {
+  it('keeps the visible prose when cancellation wins the continuation race', async () => {
     const activeContext: { value?: WorkflowContext } = {}
-    const runtime = fakeRuntime((_attempt, _task, options) => {
-      options?.onChunk?.('取消前已经收到的正文。')
+    const runtime = fakeRuntime((attempt) => {
+      if (attempt === 1) return outcome('取消前已经收到的正文。', 'length')
       if (activeContext.value) activeContext.value.cancelled = true
       throw Object.assign(new Error('aborted'), { code: 'CANCELLED' })
     })
@@ -1967,11 +1966,7 @@ describe('GenerateDraftCommand generation runtime boundary', () => {
 
   it('shows a generating placeholder before completion and reconciles to the persisted terminal draft', async () => {
     let resolveAttempt: ((value: GenerationOutcome) => void) | undefined
-    let streamChunk: ((chunk: string) => void) | undefined
-    const runtime = fakeRuntime((_attempt, _task, options) => {
-      streamChunk = (options as { onChunk?: (chunk: string) => void } | undefined)?.onChunk
-      return new Promise<GenerationOutcome>(resolve => { resolveAttempt = resolve })
-    })
+    const runtime = fakeRuntime(() => new Promise<GenerationOutcome>(resolve => { resolveAttempt = resolve }))
     const setupResult = setup({ runtime })
     const replaceText = vi.fn()
     const callbacks = Object.assign(setupResult.callbacks, { replaceText })
@@ -1981,46 +1976,10 @@ describe('GenerateDraftCommand generation runtime boundary', () => {
       context: setupResult.context,
       callbacks,
     })
-    await vi.waitFor(() => expect(streamChunk).toBeTypeOf('function'))
+    await vi.waitFor(() => expect(resolveAttempt).toBeTypeOf('function'))
 
-    streamChunk!('<thi')
-    streamChunk!('nk>不得展示的推理')
-    streamChunk!('</thi')
-    streamChunk!('nk>\n林岚推开门。')
-
+    // 正文不再流式：等待期间只有占位文案，终结结果到达后一次性替换。
     expect(replaceText).toHaveBeenLastCalledWith('生成中…')
-    expect(JSON.stringify(replaceText.mock.calls)).not.toContain('不得展示的推理')
-    expect(JSON.stringify(replaceText.mock.calls)).not.toContain('林岚推开门。')
-
-    resolveAttempt!(outcome(`${'终稿正文'.repeat(1250)}。`, 'stop'))
-    await execution
-
-    const persisted = setupResult.invoke.mock.calls.find(([channel]) => channel === 'db:draft-create')
-    const persistedText = (persisted?.[1] as { content: string }).content
-    expect(replaceText).toHaveBeenLastCalledWith(persistedText)
-  })
-
-  it('bounds provisional renders for a burst of small chunks and still reconciles the terminal draft', async () => {
-    let resolveAttempt: ((value: GenerationOutcome) => void) | undefined
-    let streamChunk: ((chunk: string) => void) | undefined
-    const runtime = fakeRuntime((_attempt, _task, options) => {
-      streamChunk = (options as { onChunk?: (chunk: string) => void } | undefined)?.onChunk
-      return new Promise<GenerationOutcome>(resolve => { resolveAttempt = resolve })
-    })
-    const setupResult = setup({ runtime })
-    const replaceText = vi.fn()
-    const callbacks = Object.assign(setupResult.callbacks, { replaceText })
-
-    const execution = setupResult.command.execute({
-      step: {},
-      context: setupResult.context,
-      callbacks,
-    })
-    await vi.waitFor(() => expect(streamChunk).toBeTypeOf('function'))
-
-    for (let index = 0; index < 12_000; index += 1) streamChunk!('文')
-
-    expect(replaceText.mock.calls).toEqual([['生成中…']])
 
     const terminalDraft = `${'终稿正文'.repeat(1250)}。`
     resolveAttempt!(outcome(terminalDraft, 'stop'))
@@ -2029,71 +1988,6 @@ describe('GenerateDraftCommand generation runtime boundary', () => {
     const persisted = setupResult.invoke.mock.calls.find(([channel]) => channel === 'db:draft-create')
     const persistedText = (persisted?.[1] as { content: string }).content
     expect(replaceText).toHaveBeenLastCalledWith(persistedText)
-  })
-
-  it('bounds continuation renders for a burst of small chunks and keeps the accepted continuation', async () => {
-    let resolveContinuation: ((value: GenerationOutcome) => void) | undefined
-    let streamContinuation: ((chunk: string) => void) | undefined
-    const initialDraft = '初'.repeat(4000)
-    const runtime = fakeRuntime((attempt, _task, options) => {
-      if (attempt === 1) return outcome(initialDraft, 'length', 1)
-      streamContinuation = (options as { onChunk?: (chunk: string) => void } | undefined)?.onChunk
-      return new Promise<GenerationOutcome>(resolve => { resolveContinuation = resolve })
-    })
-    const setupResult = setup({ runtime })
-    const replaceText = vi.fn()
-    const callbacks = Object.assign(setupResult.callbacks, { replaceText })
-
-    const execution = setupResult.command.execute({
-      step: {},
-      context: setupResult.context,
-      callbacks,
-    })
-    await vi.waitFor(() => expect(streamContinuation).toBeTypeOf('function'))
-    const callsBeforeContinuation = replaceText.mock.calls.length
-
-    for (let index = 0; index < 12_000; index += 1) streamContinuation!('续')
-
-    expect(replaceText.mock.calls.length - callsBeforeContinuation).toBe(0)
-
-    const terminalContinuation = `${'续'.repeat(1000)}。`
-    resolveContinuation!(outcome(terminalContinuation, 'stop', 2))
-    await execution
-
-    const persisted = setupResult.invoke.mock.calls.find(([channel]) => channel === 'db:draft-create')
-    expect((persisted?.[1] as { content: string }).content).toBe(
-      `${initialDraft}\n\n${terminalContinuation}`,
-    )
-  })
-
-  it('keeps provisional text as a recovery candidate after a failed attempt and ignores late chunks', async () => {
-    let lateChunk: ((chunk: string) => void) | undefined
-    const runtime = fakeRuntime((_attempt, _task, options) => {
-      lateChunk = (options as { onChunk?: (chunk: string) => void } | undefined)?.onChunk
-      lateChunk?.('不会落盘的正文')
-      throw new Error('provider disconnected')
-    })
-    const setupResult = setup({ runtime })
-    const replaceText = vi.fn()
-    const callbacks = Object.assign(setupResult.callbacks, { replaceText })
-
-    await expect(setupResult.command.execute({
-      step: {},
-      context: setupResult.context,
-      callbacks,
-    })).rejects.toThrow('provider disconnected')
-
-    expect(replaceText).toHaveBeenLastCalledWith('不会落盘的正文')
-    lateChunk?.('晚到的正文')
-    expect(replaceText).toHaveBeenLastCalledWith('不会落盘的正文')
-    expect(JSON.stringify(replaceText.mock.calls)).not.toContain('晚到的正文')
-    expect(setupResult.invoke).toHaveBeenCalledWith(
-      'db:recovery-candidate-record',
-      expect.objectContaining({ visibleText: '不会落盘的正文' }),
-      expect.anything(),
-      expect.anything(),
-    )
-    expectNoDraftPersistence(setupResult.invoke)
   })
 
   it('preserves the accepted preview after persistence even if a later refresh fails', async () => {

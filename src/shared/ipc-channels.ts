@@ -287,10 +287,6 @@ export interface ProjectChannels {
     args: [projectId: string, data: Partial<ProjectData>, expectedProjectPath: string]
     return: { success: boolean; error?: string }
   }
-  'project:update-config': {
-    args: [projectId: string, data: Partial<ProjectData>, expectedProjectPath: string]
-    return: { success: boolean; error?: string }
-  }
   'project:recent-list': {
     args: []
     return: Array<{ name: string; path: string; updatedAt: string }>
@@ -474,7 +470,6 @@ export interface LLMChannels {
 }
 
 export interface LLMStreamEvents {
-  'llm:stream-chunk': { requestId: string; chunk: string }
   'llm:stream-done': {
     requestId: string
     fullText: string
@@ -728,10 +723,6 @@ import type {
   CharacterRosterSnapshot,
 } from './character-roster'
 import type {
-  FinalizedDraftImportReceipt,
-  FinalizedDraftImportRequest,
-} from './finalized-draft-import'
-import type {
   AuthorManuscriptImportPreview,
   AuthoritativeChapterSequence,
 } from './author-manuscript-import'
@@ -855,10 +846,6 @@ export interface DatabaseChannels {
   }
 
   // 4. drafts
-  'db:draft-import-finalized-batch': {
-    args: [request: FinalizedDraftImportRequest, expectedProjectPath: string]
-    return: { success: boolean; receipt?: FinalizedDraftImportReceipt; error?: string }
-  }
   'db:draft-create': { args: [params: { chapterNumber: number; version: number; source: 'write' | 'rewrite'; content: string; wordCount: number; sourceDependencies?: DraftSourceDependency[] }, expectedProjectPath: string]; return: { success: boolean; id?: number; error?: string } }
   'db:draft-list': { args: [chapterNumber: number, expectedProjectPath: string]; return: DraftMeta[] }
   'db:draft-list-all': { args: [expectedProjectPath: string]; return: DraftMeta[] }
@@ -969,12 +956,10 @@ export interface DatabaseChannels {
   }
 
   // 5. revisions
-  'db:revision-create': { args: [params: { baseDraftId: number; revisionType: 'refine' | 'review-fix'; userPrompt?: string; reviewSourceId?: number; content: string; wordCount: number; expectedSource?: ExpectedDraftSource }, expectedProjectPath: string]; return: { success: boolean; id?: number; revisionIndex?: number; errorCode?: SourceDraftGuardErrorCode; error?: string } }
   'db:revision-replace-pending': { args: [params: { baseDraftId: number; revisionType: 'refine' | 'review-fix'; userPrompt?: string; reviewSourceId?: number; content: string; wordCount: number; expectedSource?: ExpectedDraftSource }, expectedProjectPath: string]; return: { success: boolean; id?: number; revisionIndex?: number; errorCode?: SourceDraftGuardErrorCode; error?: string } }
   'db:revision-list': { args: [baseDraftId: number, expectedProjectPath: string]; return: RevisionMeta[] }
   'db:revision-get-pending': { args: [baseDraftId: number, expectedProjectPath: string]; return: RevisionMeta[] }
   'db:revision-get-full': { args: [id: number, expectedProjectPath: string]; return: RevisionFull | null }
-  'db:revision-next-index': { args: [baseDraftId: number, expectedProjectPath: string]; return: number }
   'db:revision-merge': {
     args: [request: {
       revisionId: number
@@ -995,8 +980,6 @@ export interface DatabaseChannels {
       error?: string
     }
   }
-  'db:revision-mark-merged': { args: [id: number, mergedToDraftId: number, expectedProjectPath: string]; return: { success: boolean; error?: string } }
-  'db:revision-mark-discarded': { args: [id: number, expectedProjectPath: string]; return: { success: boolean; error?: string } }
 
   // 6. reviews
   'db:review-create': { args: [params: { baseDraftId: number; reviewIndex?: number; content: string; expectedSource?: ExpectedDraftSource }, expectedProjectPath: string]; return: { success: boolean; id?: number; reviewIndex?: number; errorCode?: SourceDraftGuardErrorCode; error?: string } }
@@ -1014,7 +997,6 @@ export interface DatabaseChannels {
   'db:post-process-is-all-passed': { args: [sourceType: string, sourceId: string, expectedProjectPath: string]; return: boolean }
 
   // 沿用旧表
-  'db:log-llm-call': { args: [call: Record<string, unknown>, expectedProjectPath: string]; return: { success: boolean } }
   'db:get-llm-stats': {
     args: [expectedProjectPath: string]
     return: {
@@ -1029,7 +1011,6 @@ export interface DatabaseChannels {
   }
   'db:get-llm-history': { args: [limit: number | undefined, expectedProjectPath: string]; return: unknown[] }
   'db:save-summary-snapshot': { args: [chapterNumber: number, characterStates: string, expectedProjectPath: string]; return: { success: boolean } }
-  'db:get-latest-summary': { args: [expectedProjectPath: string]; return: { characterStates: string; chapterNumber: number } | null }
 }
 
 // ===== 知识库频道 =====
@@ -1051,7 +1032,6 @@ export interface KnowledgeBaseChannels {
   'kb:clear-all': { args: [expectedProjectPath: string]; return: { success: boolean; error?: string } }
   'kb:stats': { args: [expectedProjectPath: string]; return: AppResult<{ documentCount: number; totalChunks: number; vectorDimension: number }> }
   'dialog:select-knowledge-files': { args: []; return: ExternalFileGrant[] | null }
-  'dialog:select-knowledge-folder': { args: []; return: ExternalDirectoryGrant | null }
   'kb:get-vectorless-count': { args: [expectedProjectPath: string]; return: AppResult<{ count: number }> }
   /**
    * This is a local status read only. It never sends text to an embedding

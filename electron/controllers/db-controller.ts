@@ -25,7 +25,6 @@ import type { DraftAnnotation } from '../../src/shared/draft-annotation'
 import type { DraftSourceDependency } from '../../src/shared/draft-source-dependency'
 import { FinalizedDraftImportRepository } from '../repositories/finalized-draft-import-repository'
 import { FinalizationRepository } from '../repositories/finalization-repository'
-import type { FinalizedDraftImportRequest } from '../../src/shared/finalized-draft-import'
 import { ImportGlobalFactsRepository } from '../repositories/import-global-facts-repository'
 import type { ImportGlobalFactsRequest } from '../../src/shared/import-global-facts'
 import { ImportRunRepository } from '../repositories/import-run-repository'
@@ -91,7 +90,6 @@ const MUTATING_DATABASE_CHANNELS = new Set([
   'db:blueprint-delete',
   'db:blueprint-clear-all',
   'db:character-roster-commit',
-  'db:draft-import-finalized-batch',
   'db:draft-create',
   'db:draft-update-status',
   'db:draft-update-content',
@@ -101,17 +99,13 @@ const MUTATING_DATABASE_CHANNELS = new Set([
   'db:recovery-candidate-update',
   'db:recovery-candidate-resolve',
   'db:finalization-link-knowledge-document',
-  'db:revision-create',
   'db:revision-replace-pending',
-  'db:revision-mark-merged',
-  'db:revision-mark-discarded',
   'db:review-create',
   'db:consistency-exemption-save',
   'db:consistency-exemption-revoke',
   'db:post-process-create-run',
   'db:post-process-mark-step-ok',
   'db:post-process-mark-step-failed',
-  'db:log-llm-call',
   'db:save-summary-snapshot',
   'db:narrative-thread-plan-create',
   'db:narrative-thread-plan-update',
@@ -616,23 +610,6 @@ export function registerDatabaseController() {
     }
   })
 
-  // ============================================================
-  // 4. drafts — 草稿
-  // ============================================================
-  ipcMain.handle('db:draft-import-finalized-batch', async (
-    _event,
-    request: FinalizedDraftImportRequest,
-    expectedProjectPath: string,
-  ) => {
-    const currentProjectPath = getCurrentProjectPath()
-    assertRequiredExpectedProjectPath(currentProjectPath, expectedProjectPath)
-    if (!currentProjectPath) throw new Error('项目数据库未打开')
-    return {
-      success: true,
-      receipt: FinalizedDraftImportRepository.commit(currentProjectPath, request),
-    }
-  })
-
   ipcMain.handle('db:draft-create', async (_event, params: {
     chapterNumber: number
     version: number
@@ -955,31 +932,6 @@ export function registerDatabaseController() {
     }
   })
 
-  // ============================================================
-  // 5. revisions — 修稿
-  // ============================================================
-  ipcMain.handle('db:revision-create', async (_event, params: {
-    baseDraftId: number
-    revisionType: 'refine' | 'review-fix'
-    userPrompt?: string
-    reviewSourceId?: number
-    content: string
-    wordCount: number
-    expectedSource?: ExpectedDraftSource
-  }, expectedProjectPath: string) => {
-    try {
-      assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
-      const created = RevisionRepository.create(params)
-      return { success: true, id: created.id, revisionIndex: created.revisionIndex }
-    } catch (err) {
-      return {
-        success: false,
-        ...(isSourceDraftChangedError(err) ? { errorCode: SOURCE_DRAFT_CHANGED } : {}),
-        error: String(err),
-      }
-    }
-  })
-
   ipcMain.handle('db:revision-replace-pending', async (_event, params: {
     baseDraftId: number
     revisionType: 'refine' | 'review-fix'
@@ -1017,11 +969,6 @@ export function registerDatabaseController() {
     return RevisionRepository.getFull(id)
   })
 
-  ipcMain.handle('db:revision-next-index', async (_event, baseDraftId: number, expectedProjectPath: string) => {
-    assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
-    return RevisionRepository.getNextIndex(baseDraftId)
-  })
-
   ipcMain.handle('db:revision-merge', async (_event, request: Parameters<typeof RevisionRepository.mergeIntoDraft>[0], expectedProjectPath: string) => {
     try {
       assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
@@ -1031,29 +978,6 @@ export function registerDatabaseController() {
     }
   })
 
-  ipcMain.handle('db:revision-mark-merged', async (_event, id: number, mergedToDraftId: number, expectedProjectPath: string) => {
-    try {
-      assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
-      RevisionRepository.markMerged(id, mergedToDraftId)
-      return { success: true }
-    } catch (err) {
-      return { success: false, error: String(err) }
-    }
-  })
-
-  ipcMain.handle('db:revision-mark-discarded', async (_event, id: number, expectedProjectPath: string) => {
-    try {
-      assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
-      RevisionRepository.markDiscarded(id)
-      return { success: true }
-    } catch (err) {
-      return { success: false, error: String(err) }
-    }
-  })
-
-  // ============================================================
-  // 6. reviews — 审稿
-  // ============================================================
   ipcMain.handle('db:review-create', async (_event, params: {
     baseDraftId: number
     reviewIndex?: number
@@ -1150,20 +1074,6 @@ export function registerDatabaseController() {
     return PostProcessRepository.isAllCriticalPassed(sourceType, sourceId)
   })
 
-  // ============================================================
-  // 沿用旧表
-  // ============================================================
-  ipcMain.handle('db:log-llm-call', async (_event, call, expectedProjectPath: string) => {
-    try {
-      assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
-      LLMHistoryRepository.logCall(call)
-      return { success: true }
-    } catch (error) {
-      console.error('[db:log-llm-call] Error:', error)
-      return { success: false }
-    }
-  })
-
   ipcMain.handle('db:get-llm-stats', async (_event, expectedProjectPath: string) => {
     assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
     return LLMHistoryRepository.getStats()
@@ -1180,8 +1090,4 @@ export function registerDatabaseController() {
     return { success: true }
   })
 
-  ipcMain.handle('db:get-latest-summary', async (_event, expectedProjectPath: string) => {
-    assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
-    return SummaryRepository.getLatestSnapshot()
-  })
 }

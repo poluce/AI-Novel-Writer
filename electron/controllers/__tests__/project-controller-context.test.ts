@@ -764,19 +764,9 @@ describe('project controller project identity', () => {
       { ...data, path: projectB },
       projectA,
     )
-    const updateWithoutIdentity = await handler('project:update-config')({}, 'main', data)
-    const updateWithStaleIdentity = await handler('project:update-config')(
-      {},
-      'main',
-      data,
-      projectB,
-    )
-
     expect(saveWithoutIdentity).toMatchObject({ success: false })
     expect(saveWithStaleIdentity).toMatchObject({ success: false })
     expect(saveWithMismatchedPayload).toMatchObject({ success: false })
-    expect(updateWithoutIdentity).toMatchObject({ success: false })
-    expect(updateWithStaleIdentity).toMatchObject({ success: false })
     expect(mocks.projectCoreUpdate).not.toHaveBeenCalled()
   })
 
@@ -806,8 +796,6 @@ describe('project controller project identity', () => {
 
     await expect(handler('project:save')({}, 'project-A', data, projectA, projectSession()))
       .resolves.toMatchObject({ success: true, recentProjectUpdated: true })
-    await expect(handler('project:update-config')({}, 'project-A', data, projectA, projectSession()))
-      .resolves.toEqual({ success: true })
     expect(mocks.projectCoreUpdate).toHaveBeenCalled()
     expect(mocks.transaction).toHaveBeenCalled()
   })
@@ -855,8 +843,8 @@ describe('project controller project identity', () => {
       novelConfig: { genre: 'mystery' },
     }
 
-    await expect(handler('project:update-config')({}, 'project-A', data, projectA, projectSession()))
-      .resolves.toEqual({ success: true })
+    await expect(handler('project:save')({}, 'project-A', data, projectA, projectSession()))
+      .resolves.toMatchObject({ success: true })
     expect(mocks.projectCoreUpdate).toHaveBeenCalledOnce()
     expect(mocks.projectCoreUpdate.mock.calls[0]?.[0]).not.toHaveProperty('creativeStrategy')
   })

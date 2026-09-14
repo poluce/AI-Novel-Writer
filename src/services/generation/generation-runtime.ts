@@ -34,7 +34,6 @@ export interface LeaseCompletionRequest {
   plan: Readonly<PhysicalGenerationPlan>
   signal: AbortSignal
   submitTool?: SubmitToolName
-  onChunk?: (chunk: string) => void
 }
 
 /** Renderer adapter for the authoritative main-process model lease seam. */
@@ -204,9 +203,6 @@ function createDefaultEnvironment(): GenerationRuntimeEnvironment {
         llmStore.generateStream(
           [...request.messages],
           {
-            onChunk: chunk => {
-              if (!settled && !request.signal.aborted) request.onChunk?.(chunk)
-            },
             onDone: (content, usage, finishReason) => succeed({ content, usage, finishReason }),
             onError: fail,
           },
@@ -359,7 +355,6 @@ export async function createGenerationRuntime(
           plan: request.plan,
           signal: request.signal,
           ...(request.submitTool ? { submitTool: request.submitTool } : {}),
-          onChunk: request.onChunk,
         })
       },
     },

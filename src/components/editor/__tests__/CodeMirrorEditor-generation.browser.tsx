@@ -81,7 +81,6 @@ beforeEach(() => {
       pendingRequestId = requestId
       if (!deferStream) {
         queueMicrotask(() => {
-          listeners.get('llm:stream-chunk')?.({ requestId, chunk: '残缺片段' } as never)
           listeners.get('llm:stream-done')?.({
             requestId,
             fullText: '残缺片段',
@@ -174,7 +173,6 @@ describe('CodeMirror editor AI generation boundary', () => {
 
     await act(async () => {
       const requestId = pendingRequestId!
-      listeners.get('llm:stream-chunk')?.({ requestId, chunk: '替换甲' } as never)
       listeners.get('llm:stream-done')?.({
         requestId,
         fullText: '替换甲',

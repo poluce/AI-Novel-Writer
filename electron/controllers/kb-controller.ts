@@ -302,21 +302,4 @@ export function registerKBController() {
     })
   })
 
-  ipcMain.handle('dialog:select-knowledge-folder', async (event) => {
-    const result = await dialog.showOpenDialog({
-      properties: ['openDirectory'],
-      title: text('选择要批量导入的文件夹', 'Choose a folder to import'),
-    })
-    if (result.canceled || result.filePaths.length === 0) return null
-    const folderPath = result.filePaths[0]
-    const grant = externalFileGrants.issueDirectory({
-      webContentsId: event.sender.id,
-      directoryPath: folderPath,
-      operations: ['list', 'read'],
-      ttlMs: KNOWLEDGE_BASE_GRANT_TTL_MS,
-      maxUses: 1,
-    })
-    event.sender.once('destroyed', () => externalFileGrants.revoke(grant.grantId))
-    return { grantId: grant.grantId, displayName: folderPath.split(/[\\/]/).pop() || folderPath }
-  })
 }

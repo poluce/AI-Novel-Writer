@@ -659,43 +659,6 @@ export function registerProjectController() {
     }
   })
 
-  // 项目配置更新遵循相同规则。
-  ipcMain.handle('project:update-config', async (
-    _event,
-    _projectId: string,
-    data: Partial<ProjectData>,
-    expectedProjectPath?: string,
-    context?: ProjectSessionContext,
-  ) => {
-    try {
-      assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
-      assertRequiredProjectSession(_projectId, data, getCurrentProjectPath(), context)
-      if (data.novelConfig) {
-        ProjectCoreRepository.update({
-          genre: data.novelConfig.genre,
-          subGenre: data.novelConfig.subGenre,
-          targetAudience: data.novelConfig.targetAudience,
-          totalChapters: data.novelConfig.totalChapters,
-          wordsPerChapter: data.novelConfig.wordsPerChapter,
-          ...creativeStrategyCoreUpdate(data.novelConfig),
-          ...narrativeThreadSettingsCoreUpdate(data.novelConfig),
-          plotStructure: data.novelConfig.plotStructure,
-          narrativePov: data.novelConfig.narrativePOV,
-          goldenFinger: data.novelConfig.goldenFinger,
-          globalGuidance: data.novelConfig.globalGuidance,
-          coreOutline: data.novelConfig.coreOutline,
-          worldSetting: data.novelConfig.worldSetting,
-          protagonistProfile: data.novelConfig.protagonistProfile,
-          writingStyle: data.novelConfig.writingStyle ?? '',
-          referenceWorks: data.novelConfig.referenceWorks ?? '',
-        })
-      }
-      return { success: true }
-    } catch (error) {
-      return { success: false, error: String(error) }
-    }
-  })
-
   ipcMain.handle('project:recent-list', async () => {
     return loadRecentProjects()
   })

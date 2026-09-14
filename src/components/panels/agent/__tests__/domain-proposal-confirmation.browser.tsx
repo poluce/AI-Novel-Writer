@@ -143,7 +143,7 @@ describe('Agent domain proposal confirmation', () => {
     await page.getByRole('button', { name: 'Cancel this Agent task' }).click()
     expect(cancelGeneration).toHaveBeenCalledOnce()
     expect(resolveToolConfirmation).not.toHaveBeenCalled()
-    expect(invoke.mock.calls.every(([channel]) => channel !== 'project:update-config' && channel !== 'db:blueprint-upsert')).toBe(true)
+    expect(invoke.mock.calls.every(([channel]) => channel !== 'db:blueprint-upsert')).toBe(true)
   })
 
   it('previews English config impacts and sends only the selected unwritten blueprint diff to the existing gate', async () => {
@@ -234,6 +234,6 @@ describe('Agent domain proposal confirmation', () => {
     await page.getByRole('button', { name: '取消本次助手任务' }).click()
     expect(cancelGeneration).toHaveBeenCalledOnce()
     expect(resolveToolConfirmation).not.toHaveBeenCalled()
-    expect(invoke.mock.calls.every(([channel]) => channel !== 'project:update-config' && channel !== 'db:blueprint-upsert')).toBe(true)
+    expect(invoke.mock.calls.every(([channel]) => channel !== 'db:blueprint-upsert')).toBe(true)
   })
 })

@@ -530,31 +530,6 @@ describe('database controller project context guard', () => {
     expect(mocks.characterRosterCommit).toHaveBeenCalledWith(request)
   })
 
-  it('commits a finalized import against the current main-process project root exactly once', async () => {
-    const request = {
-      operationId: 'import-run-A',
-      chapters: [{ chapterNumber: 1, title: '启程', content: '雨声很急。', wordCount: 5 }],
-    }
-    mocks.finalizedDraftImportCommit.mockReturnValueOnce({
-      operationId: request.operationId,
-      payloadHash: 'a'.repeat(64),
-      chapterNumbers: [1],
-      drafts: [],
-      idempotent: false,
-    })
-
-    await expect(handler('db:draft-import-finalized-batch')(
-      {},
-      request,
-      'C:/projects/A',
-    )).resolves.toMatchObject({
-      success: true,
-      receipt: { operationId: 'import-run-A' },
-    })
-    expect(mocks.finalizedDraftImportCommit).toHaveBeenCalledOnce()
-    expect(mocks.finalizedDraftImportCommit).toHaveBeenCalledWith('C:/projects/A', request)
-  })
-
   it('passes one global-facts import request through the guarded atomic seam', async () => {
     const request = {
       operationId: 'import-global-A',

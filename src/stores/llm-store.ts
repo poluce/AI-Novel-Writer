@@ -15,9 +15,8 @@ import type { SubmitToolName } from '../shared/submit-contract'
 import { projectSessionContextFromProject } from '../shared/project-session-context'
 import { useProjectStore } from './project-store'
 
-/** 流式生成的回调 */
+/** 一次性生成的回调（正文不再流式：主进程只在完成时回一次） */
 interface StreamCallbacks {
-  onChunk?: (chunk: string) => void
   onDone?: (fullText: string, usage: TokenUsage | undefined, finishReason: LLMFinishReason) => void
   onError?: (error: string) => void
 }
@@ -198,13 +197,7 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
       ?? useProjectStore.getState().currentProject?.novelConfig.creativeStrategy
       ?? 'auto'
 
-    // 注册流式事件监听
-    const unsubChunk = ipc.on('llm:stream-chunk', (data) => {
-      if (data.requestId === requestId) {
-        callbacks.onChunk?.(data.chunk)
-      }
-    })
-
+    // 注册完成/失败事件监听
     const unsubDone = ipc.on('llm:stream-done', (data) => {
       if (data.requestId === requestId) {
         callbacks.onDone?.(data.fullText, data.usage, data.finishReason ?? 'unknown')
@@ -220,7 +213,6 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
     })
 
     const cleanup = () => {
-      unsubChunk()
       unsubDone()
       unsubError()
       const reqs = new Map(get().activeRequests)

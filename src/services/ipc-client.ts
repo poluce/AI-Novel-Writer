@@ -63,7 +63,6 @@ function isProjectScopedChannel(channel: string): boolean {
     || channel.startsWith('chapter:')
     || channel.startsWith('fs:')
     || channel === 'project:save'
-    || channel === 'project:update-config'
     || channel === 'project:delete'
 }
 
@@ -116,7 +115,7 @@ export const ipc = {
    * 监听主进程推送的事件（返回取消订阅函数）
    *
    * @example
-   * const unsub = ipc.on('llm:stream-chunk', (data) => console.log(data.chunk))
+   * const unsub = ipc.on('llm:stream-done', (data) => console.log(data.fullText))
    * // 组件卸载时取消
    * unsub()
    */

@@ -112,26 +112,16 @@ export function visibleDraftStreamText(rawText: string): string {
   return sanitizeDraftText(rawText.slice(0, safeEnd))
 }
 
-function createDraftStreamPreview(
+/**
+ * 生成期间在正文区显示「生成中…」占位。正文改走 submit_* 工具参数后不再流式，
+ * 这里不再累积片段，也不再用片段当恢复候选（恢复只认终结结果里的可见正文）。
+ */
+function createDraftGeneratingPlaceholder(
   replaceText: ((text: string) => void) | undefined,
-  composeVisibleText: (rawText: string) => string,
   options: { generatingLabel?: string } = {},
-): { push(chunk: string): void; snapshot(): string; stop(): void } {
-  let active = true
-  let rawText = ''
+): { stop(): void } {
   if (options.generatingLabel) replaceText?.(options.generatingLabel)
-
-  return {
-    push(chunk) {
-      if (active) rawText += chunk
-    },
-    snapshot() {
-      return composeVisibleText(rawText)
-    },
-    stop() {
-      active = false
-    },
-  }
+  return { stop() { /* 占位由下一步的结果文本覆盖，无需额外收尾 */ } }
 }
 
 export const DRAFT_GENERATION_BUDGET = Object.freeze({
@@ -594,9 +584,8 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
           }
           this.assertNotCancelled(context)
           callbacks.setProgress(10)
-          const preview = createDraftStreamPreview(
+          const preview = createDraftGeneratingPlaceholder(
             callbacks.replaceText,
-            visibleDraftStreamText,
             { generatingLabel: uiText('生成中…', 'Generating…') },
           )
           let initialOutcome: GenerationOutcome
@@ -612,15 +601,9 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
               ],
             }, {
               signal: cancellation.signal,
-              onChunk: chunk => {
-                if (context.cancelled) return
-                preview.push(chunk)
-              },
             })
-          } catch (error) {
-            recoverableDraftCandidate = preview.snapshot()
-            throw error
           } finally {
+            // 正文不再流式：失败时没有可恢复的碎片，恢复候选只来自终结结果。
             preview.stop()
           }
           const initialCompletion = completionFromOutcome(initialOutcome)
@@ -931,10 +914,7 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
         visible_tail: visibleTail,
       })
 
-      const preview = createDraftStreamPreview(
-        params.callbacks.replaceText,
-        rawText => appendVisibleDraftContinuation(draft, visibleDraftStreamText(rawText)),
-      )
+      const preview = createDraftGeneratingPlaceholder(params.callbacks.replaceText)
       let outcome: GenerationOutcome
       try {
         outcome = await params.session.complete({
@@ -950,14 +930,7 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
           ],
         }, {
           signal: params.signal,
-          onChunk: chunk => {
-            if (params.context.cancelled) return
-            preview.push(chunk)
-          },
         })
-      } catch (error) {
-        params.onRecoverableCandidate(preview.snapshot())
-        throw error
       } finally {
         preview.stop()
       }

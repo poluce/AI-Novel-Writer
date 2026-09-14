@@ -77,7 +77,7 @@ function callbacks(): StepCallbacks {
 
 function testPostProcessGeneration(): FinalizePostProcessGeneration {
   return {
-    complete(builder, stepCallbacks) {
+    complete(builder) {
       const llmStore = useLLMStore.getState()
       return new Promise<string>((resolve, reject) => {
         llmStore.generateStream(
@@ -86,7 +86,6 @@ function testPostProcessGeneration(): FinalizePostProcessGeneration {
             { role: 'user', content: builder.build() },
           ],
           {
-            onChunk: chunk => stepCallbacks.appendText(chunk),
             onDone: (content, _usage, finishReason) => {
               const terminalReason = finishReason ?? 'unknown'
               if (terminalReason !== 'stop') {
@@ -1111,7 +1110,7 @@ describe('workflow mutation failure boundaries', () => {
         }
       }
       if (channel === 'db:revision-get-pending') return []
-      if (channel === 'db:revision-create' || channel === 'db:revision-replace-pending') {
+      if (channel === 'db:revision-replace-pending') {
         return { success: false, error: 'revision rejected' }
       }
       throw new Error(`unexpected IPC: ${channel}`)
