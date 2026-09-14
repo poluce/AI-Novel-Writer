@@ -8,6 +8,8 @@ import {
   fauxToolCall,
 } from '@earendil-works/pi-ai/providers/faux'
 
+import { fauxChatModel } from './faux-model'
+
 import { createPiAgent } from '../pi-agent'
 import type { PiToolCallInfo } from '../pi-agent'
 
@@ -40,7 +42,7 @@ describe('createPiAgent', () => {
     let doneText = ''
 
     const handle = createPiAgent({
-      model: faux.getModel(),
+      model: fauxChatModel(faux),
       streamFn: models.streamSimple.bind(models),
       systemPrompt: 'You are a calculator.',
       tools: [addTool],
@@ -90,7 +92,7 @@ describe('createPiAgent', () => {
       fauxAssistantMessage('ok'),
     ])
     const handle = createPiAgent({
-      model: faux.getModel(),
+      model: fauxChatModel(faux),
       streamFn: models.streamSimple.bind(models),
       systemPrompt: 'You are a calculator.',
       tools: [slowTool('slow_a'), slowTool('slow_b')],
@@ -120,7 +122,7 @@ describe('createPiAgent', () => {
     let error = ''
     let done = false
     const handle = createPiAgent({
-      model: faux.getModel(),
+      model: fauxChatModel(faux),
       streamFn: models.streamSimple.bind(models),
       systemPrompt: 'x',
       tools: [],
@@ -151,7 +153,7 @@ describe('createPiAgent', () => {
     let confirmations = 0
 
     const handle = createPiAgent({
-      model: faux.getModel(),
+      model: fauxChatModel(faux),
       streamFn: models.streamSimple.bind(models),
       systemPrompt: 'Calculator.',
       tools: [addTool],
@@ -187,7 +189,7 @@ describe('createPiAgent', () => {
     ])
     let confirmations = 0
     const handle = createPiAgent({
-      model: faux.getModel(),
+      model: fauxChatModel(faux),
       streamFn: models.streamSimple.bind(models),
       systemPrompt: 'Docs.',
       tools: [mcpTool],
@@ -227,7 +229,7 @@ describe('createPiAgent', () => {
 
     let doneText = ''
     const handle = createPiAgent({
-      model: faux.getModel(),
+      model: fauxChatModel(faux),
       streamFn: models.streamSimple.bind(models),
       systemPrompt: 'Writer.',
       tools: [writeTool],

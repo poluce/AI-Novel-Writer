@@ -1,5 +1,4 @@
-import type { AgentMessage, AgentTool, StreamFn } from '@earendil-works/pi-agent-core'
-import type { Model } from '@earendil-works/pi-ai'
+import type { AgentMessage, StreamFn } from '@earendil-works/pi-agent-core'
 
 import {
   createPiAgent,
@@ -9,15 +8,17 @@ import { buildL1AgentContext } from './agent-l1-context'
 import type { AgentEditorSnapshot, PiAgentEvent } from '../../src/shared/agent-events'
 import type { AgentPromptHistoryTurn } from '../../src/shared/agent-conversation-archive'
 import type { WritingLanguage } from '../../src/shared/writing-language'
+import type { AnyAgentTool } from './tool-types'
+import type { PiModelRuntime } from './pi-models'
 
 export type { PiAgentEvent } from '../../src/shared/agent-events'
 
 export interface AgentSessionOptions {
   /** Pre-built pi-ai runtime (see `createPiModels`). */
-  model: Model<any>
+  model: PiModelRuntime['model']
   streamFn: StreamFn
   systemPrompt: string
-  tools: AgentTool<any>[]
+  tools: AnyAgentTool[]
   confirmationToolNames?: ReadonlySet<string>
   language: WritingLanguage
   /** Emit a normalized event toward the renderer (IPC send in production). */
@@ -33,10 +34,12 @@ export class AgentSession {
   private readonly agent: PiAgentHandle
   private readonly pendingConfirmations = new Map<string, (confirmed: boolean) => void>()
   private editorSnapshot: AgentEditorSnapshot | null = null
+  private systemPrompt: string
   private readonly language: WritingLanguage
 
   constructor(options: AgentSessionOptions) {
     this.language = options.language
+    this.systemPrompt = options.systemPrompt
     this.agent = createPiAgent({
       model: options.model,
       streamFn: options.streamFn,
@@ -83,8 +86,19 @@ export class AgentSession {
     )) as AgentMessage[])
   }
 
-  setTools(tools: AgentTool<any>[]): void {
+  setTools(tools: AnyAgentTool[]): void {
     this.agent.setTools(tools)
+  }
+
+  /**
+   * Refresh the system prompt on the live session. The skill catalog and L0
+   * project facts are rebuilt per turn, so the next request picks up a newly
+   * installed skill without restarting the conversation.
+   */
+  setSystemPrompt(systemPrompt: string): void {
+    if (systemPrompt === this.systemPrompt) return
+    this.systemPrompt = systemPrompt
+    this.agent.setSystemPrompt(systemPrompt)
   }
 
   private injectL1(messages: AgentMessage[]): AgentMessage[] {

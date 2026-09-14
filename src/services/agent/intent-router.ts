@@ -7,6 +7,7 @@
  * 3. 路由用户消息到对应的处理逻辑
  */
 
+import { skillDescription, skillDisplayName } from './skill-catalog'
 import { skillRegistry, type LoadedSkill } from './skill-registry'
 import type { Locale } from '../../i18n/types'
 
@@ -88,12 +89,8 @@ export function getAllSlashCommands(locale: Locale = 'zh-CN'): SlashCommand[] {
     if (skill.metadata.userInvocable !== false) {
       commands.push({
         name: skill.metadata.name,
-        displayName: locale === 'en-US'
-          ? (skill.writingSkill.metadata.displayName ?? skill.metadata.name)
-          : (skill.metadata.displayName ?? skill.metadata.name),
-        description: locale === 'en-US'
-          ? skill.writingSkill.metadata.description
-          : skill.metadata.description,
+        displayName: skillDisplayName(skill, locale),
+        description: skillDescription(skill, locale),
         source: 'skill',
         skill,
       })

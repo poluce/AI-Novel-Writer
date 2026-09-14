@@ -4,9 +4,11 @@ import { selectIsGenerating, useAgentStore } from '../../../stores/agent-store'
 import { useLayoutStore } from '../../../stores/layout-store'
 import { useProjectStore } from '../../../stores/project-store'
 import { APP_BRAND } from '../../../shared/brand'
-import { resolveWritingLanguage } from '../../../shared/writing-language'
+import { resolveWritingLanguage, type WritingLanguage } from '../../../shared/writing-language'
+import type { Locale } from '../../../i18n/types'
 import { captureAgentEditorSnapshot } from '../../../services/agent/editor-snapshot'
 import { buildL1AgentContext } from '../../../services/agent/l1-context'
+import { buildAgentSkillCatalog } from '../../../services/agent/skill-catalog'
 import AgentMessage from './AgentMessage'
 import AgentInputBox from './AgentInputBox'
 import { formatRelativeTime } from '../../../utils/time'
@@ -213,6 +215,14 @@ function toolbarChipStyle() {
   } as const
 }
 
+/** 助手提示词预览按项目写作语言渲染，与真实请求一致（无项目时退回界面语言）。 */
+function agentWritingLanguage(locale: Locale): WritingLanguage {
+  const project = useProjectStore.getState().currentProject
+  return project
+    ? resolveWritingLanguage(project.novelConfig.writingLanguage)
+    : locale
+}
+
 function AgentToolbar() {
   const text = useLocaleStore(s => s.text)
   const locale = useLocaleStore(s => s.locale)
@@ -234,10 +244,7 @@ function AgentToolbar() {
   }
 
   const openTurnContext = () => {
-    const project = useProjectStore.getState().currentProject
-    const language = project
-      ? resolveWritingLanguage(project.novelConfig.writingLanguage)
-      : locale
+    const language = agentWritingLanguage(locale)
     const snapshot = captureAgentEditorSnapshot({ commitSurface: false })
     setInspect({
       kind: 'turn',
@@ -247,7 +254,10 @@ function AgentToolbar() {
 
   const openSystemPrompt = async () => {
     try {
-      const result = await ipc.invoke('agent:system-prompt')
+      const result = await ipc.invoke(
+        'agent:system-prompt',
+        buildAgentSkillCatalog(agentWritingLanguage(locale)),
+      )
       setInspect({
         kind: 'system',
         body: result.success

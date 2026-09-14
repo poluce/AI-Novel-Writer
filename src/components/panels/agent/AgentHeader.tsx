@@ -3,6 +3,7 @@ import { useAgentStore } from '../../../stores/agent-store'
 import { useLayoutStore } from '../../../stores/layout-store'
 import { useMCPStore } from '../../../stores/mcp-store'
 import { skillRegistry, type LoadedSkill } from '../../../services/agent/skill-registry'
+import { skillDescription, skillDisplayName } from '../../../services/agent/skill-catalog'
 import { useRef, useState } from 'react'
 import { confirm } from '../../ui/Confirm'
 import { IconBtn } from '../../ui/IconBtn'
@@ -324,9 +325,7 @@ function SkillSubView({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span className="font-medium truncate" style={{ color: 'var(--color-text)' }}>
-                      {locale === 'en-US'
-                        ? (skill.writingSkill.metadata.displayName ?? skill.metadata.name)
-                        : (skill.metadata.displayName ?? skill.metadata.name)}
+                      {skillDisplayName(skill, locale)}
                     </span>
                     <span
                       className="text-[0.6rem] px-1 py-0 rounded flex-shrink-0"
@@ -339,9 +338,7 @@ function SkillSubView({
                     className="text-[0.68rem] truncate mt-0.5"
                     style={{ color: 'var(--color-text-muted)' }}
                   >
-                    {locale === 'en-US'
-                      ? skill.writingSkill.metadata.description
-                      : skill.metadata.description}
+                    {skillDescription(skill, locale)}
                   </div>
                 </div>
               </div>

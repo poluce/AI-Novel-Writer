@@ -2,6 +2,7 @@ import type { AgentTool } from '@earendil-works/pi-agent-core'
 import { Type, type TSchema } from '@earendil-works/pi-ai'
 
 import type { SubmitToolName } from '../../src/shared/submit-contract'
+import type { AnyAgentTool } from './tool-types'
 
 /**
  * Submit-contract tools for one-shot pi-ai calls. The model returns the
@@ -234,7 +235,7 @@ export function submitJsonTool(): AgentTool<ReturnType<typeof jsonSchema>> {
   )
 }
 
-export function createSubmitTool(name: SubmitToolName): AgentTool<any> {
+export function createSubmitTool(name: SubmitToolName): AnyAgentTool {
   switch (name) {
     case 'submit_draft': return submitDraftTool()
     case 'submit_revision': return submitRevisionTool()

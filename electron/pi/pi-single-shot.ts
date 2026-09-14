@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto'
 
-import type { AgentTool } from '@earendil-works/pi-agent-core'
 import { validateToolCall, type Tool } from '@earendil-works/pi-ai'
 
 import { acquirePiOneShotSlot, registerPiInFlight } from './in-flight'
 import { createPiModels } from './pi-models'
 
 import type { LLMFinishReason, ModelProfile } from '../../src/shared/ipc-channels'
+import type { AnyAgentTool } from './tool-types'
 
 export interface SingleShotResult {
   /** Validated submit_* arguments, or undefined when the model returned text only. */
@@ -43,7 +43,7 @@ export class UnexpectedSubmitToolError extends Error {
   }
 }
 
-function asPiTool(tool: AgentTool<any>): Tool {
+function asPiTool(tool: AnyAgentTool): Tool {
   return {
     name: tool.name,
     description: tool.description,
@@ -66,7 +66,7 @@ export async function streamSingleShot(
   profile: ModelProfile,
   systemPrompt: string,
   userPrompt: string,
-  submitTool: AgentTool<any>,
+  submitTool: AnyAgentTool,
   options: StreamSingleShotOptions = {},
 ): Promise<SingleShotResult> {
   throwIfAborted(options.signal)

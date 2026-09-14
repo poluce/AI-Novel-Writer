@@ -141,7 +141,10 @@
 
 > 仅多轮会话。一次性入口见 P4，不要在本阶段包成 Agent。
 
-**架构事实（已核实）**：Agent 循环 + 工具现运行在**渲染进程**（`src/services/agent/`），经 `ipc.invoke` 调主进程的 DB/FS/LLM；渲染进程不持 API Key（只发 `modelId`，主进程解析）。故 pi-ai 流式必须发生在**主进程**：P2 的 `streamFn` = 渲染 Agent → 主进程 pi-ai 流式 → 事件回传（新增 IPC 流式通道）；工具仍留在渲染层（P3 只换接口不搬位置）。`electron/pi/pi-models.ts`（ModelProfile → pi-ai Models）已落地为共享调用层基础（commit c5f70fc）。
+**架构事实（P2 当时的判断 vs 现状）**：P2 开工时的架构是「Agent 循环 + 工具在渲染进程（`src/services/agent/`），经 `ipc.invoke` 调主进程 DB/FS/LLM」，当时的计划是只把 pi-ai 流式放主进程、工具留在渲染层。**实际落地走得更彻底**：循环、工具、会话状态全部搬进主进程（`electron/pi/`），渲染层只剩 prompt / confirm / abort 与事件展示。
+
+- 现在的事实：`AgentSessionManager` 持 `AgentSession`（`electron/pi/agent-session.ts`），工具是主进程的 `AnyAgentTool`（`electron/pi/tool-builder.ts`），需要渲染层能力的两三个工具（`open_editor` / `start_workflow` / 确认 UI）经 `agent:renderer-action` 反向调用渲染层并等回执。
+- 密钥仍在主进程：渲染层只发 `modelId`；`electron/pi/pi-models.ts`（ModelProfile → pi-ai Models）是共享调用层基础（commit c5f70fc）。
 
 - [x] 自研 ReAct 循环（`agent-engine.ts`）→ Pi Agent 实例；**Agent 面板功能不得降级**（工具卡片、确认弹窗、错误提示照常工作）
 - [x] 上下文注入迁移：L0 项目事实已在主进程拼进 system prompt；L1 编辑器/工作流快照经 `transformContext` 每轮注入（不写入持久对话）
@@ -164,7 +167,7 @@
 > 工作流编排（步骤、进度、暂停/取消、后处理、资源锁）**保持现状**。
 > 下列入口全部改为 **pi-ai 一次流式** + 强制 `submit_*`（或可见文本工具），**不要** `new Agent()`。
 
-- [x] 共用：一次性生成走 pi-ai；切书/取消 abort 该次 stream（与 P2 Agent abort 同一张在途表）——`electron/pi/in-flight.ts`；`streamSingleShot` 与 `AgentSessionManager` 共用；工作流入口尚未改走此层
+- [x] 共用：一次性生成走 pi-ai；切书/取消 abort 该次 stream（与 P2 Agent abort 同一张在途表）——`electron/pi/in-flight.ts`；`streamSingleShot` 与 `AgentSessionManager` 共用；**12 个工作流入口已全部改走此层**（`base-command.callLLMResult` → `generation-runtime` → `llmStore.generateStream` → IPC `llm:generate-stream` → `completeSingleShot`），自研 provider 路径已无残留
 - [x] **一次性调用骨架**：`pi-ai` 流式 + `tools`（仅提交合同工具）+ `toolChoice` 强制；命中 `submit_*` 即 `validateToolCall`，错名拒绝，未命中按可见文本处理
 - [x] **不挂读取工具**：`streamSingleShot` 只接受一个 submit 工具；上下文继续由 command 预先组装
 - [x] 提交工具的 schema 与现有输出合同对应：`electron/pi/submit-tools.ts`；提示词改为 `[Submission]`；领域校验仍在 command
@@ -206,12 +209,12 @@
 
 > 验收标准：**功能可用、数据可读、能力不降级**，回归测试是重点。
 
-- [x] agent 相关测试：自研 `agent-engine` 已删；`context-builder` / `tool-registry` / Skill 测试仍在。主进程 Pi Agent 有 `electron/pi/__tests__`
+- [x] agent 相关测试：自研 `agent-engine` / `context-builder` / `tool-registry` 均已删除，对应测试一并删除；Skill 测试保留，主进程 Pi Agent 有 `electron/pi/__tests__`
 - [x] **主进程测试迁移**：migration / package-contract / KB 等在补上 `electron.exe` 后通过；`ipc-handlers-skin` 需 mock `registerAgentController`
 - [x] 12 个工作流命令测试仍覆盖产物、错误路径、取消语义（走 submit_* / generation runtime）
 - [x] 工具功能测试：`electron/pi/tools`（内置 + MCP + Skill）
 - [x] 新增能力门控测试（`toolCalling: false` 的生成模型被拒绝并提示）
-- [x] 手工回归清单（待有 Electron 的 Windows 机执行；正文生成完再显示属预期）：
+- [ ] 手工回归清单（**仍待作者在桌面应用内点验**；正文生成完再显示属预期）——自动化侧只做到「脚本可跑通」，交互点验没有替代品：
   1. 打开旧项目：模型配置、`~/.vela/prompts/` 与 `.vela/prompts/`、MCP、Skill 仍可读
   2. 单章起草：步骤显示「生成中…」，完成后一次性替换为 `submit_draft` 正文
   3. 审稿 / 修稿 / 定稿：报告与修订仍走提交工具，不把 JSON 当正文
@@ -220,9 +223,9 @@
   6. MCP：连接 stdio/SSE 后助手能调用 `mcp__server__name`
   7. 写作助手：写入工具需确认；`toolCalling: false` 模型被拒绝
   8. 切书：在途生成 abort，助手会话不跨书保活
-- [x] **数据读取回归**：列入上表第 1 条；代码路径未改配置/提示词/MCP/Skill 落盘位置
-- [x] 全量回归：`tsc --noEmit`、`check:i18n`、`pnpm build` 已通过；Windows + UTF-8 下 `vitest run` **313 files / 2725 passed / 9 skipped**（补齐 `electron.exe` 后）
-- [x] Windows 原生运行验证（自动化）：本机 `electron.exe` **v41.10.7**；`prepare-native-for-electron` / `startup-native-isolation` / `main-skin-startup` 通过。GUI 手工清单见上，仍待作者在桌面应用内点验
+- [x] **数据读取回归**：列入上表第 1 条；代码路径未改配置/提示词/MCP/Skill 落盘位置（对话历史的落盘位置在第三批改变，见 P8）
+- [x] 全量回归：`tsc --noEmit`、`check:i18n`、`pnpm build` 已通过；Windows + UTF-8 下 `vitest run` **320 files / 2736 passed / 9 skipped**（补齐 `electron.exe` 后；用 `pnpm test:node` 跑，它会自动切换 better-sqlite3 的 ABI）
+- [x] Windows 原生运行验证（自动化）：本机 `electron.exe` **v41.10.7**；`prepare-native-for-electron` / `startup-native-isolation` / `main-skin-startup` 通过。GUI 手工清单见上一条，**尚未点验**
 
 ## 阶段 7：文档与发布（P7）
 

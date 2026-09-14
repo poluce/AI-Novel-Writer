@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { ToolCallInfo } from '../shared/agent-ui-types'
 import { skillRegistry, type LoadedSkill } from '../services/agent/skill-registry'
+import { buildAgentSkillCatalog, skillDisplayName } from '../services/agent/skill-catalog'
 import {
   getAllMentionTargets,
   getAllSlashCommands,
@@ -12,7 +13,7 @@ import {
   type ToolArtifact,
 } from '../shared/agent-artifacts'
 import { captureAgentEditorSnapshot } from '../services/agent/editor-snapshot'
-import { createAgentExecutionContext } from '../services/agent/tools/project-context'
+import { createAgentExecutionContext } from '../services/agent/project-context'
 import { writingLanguageText } from '../shared/writing-language'
 import { projectSessionContextFromProject } from '../shared/project-session-context'
 import type { ProjectSessionContext } from '../shared/ipc-channels'
@@ -477,9 +478,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
 
     if (skillInvocation) {
       const skill = skillInvocation.skill
-      const displayName = executionContext.writingLanguage === 'en-US'
-        ? (skill.writingSkill.metadata.displayName ?? skill.metadata.name)
-        : (skill.metadata.displayName ?? skill.metadata.name)
+      const displayName = skillDisplayName(skill, executionContext.writingLanguage)
       let skillContent = skill.localizedContent?.[executionContext.writingLanguage] ?? skill.content
       if (skillInvocation.input) {
         skillContent = skillContent
@@ -558,6 +557,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         modelId,
         captureAgentEditorSnapshot(),
         toAgentPromptHistory(conv.messages),
+        buildAgentSkillCatalog(executionContext.writingLanguage),
       )
       if (!result.success) {
         logFailure('Agent', 'renderer prompt returned failure', undefined, {

@@ -1,16 +1,16 @@
-import { useProjectStore } from '../../../stores/project-store'
-import type { ProjectSessionContext } from '../../../shared/ipc-channels'
-import type { Locale } from '../../../i18n/types'
+import { useProjectStore } from '../../stores/project-store'
+import type { ProjectSessionContext } from '../../shared/ipc-channels'
+import type { Locale } from '../../i18n/types'
 import {
   projectSessionContextFromProject,
   sameProjectSessionContext,
-} from '../../../shared/project-session-context'
+} from '../../shared/project-session-context'
 import {
   DEFAULT_WRITING_LANGUAGE,
   resolveWritingLanguage,
   writingLanguageText,
   type WritingLanguage,
-} from '../../../shared/writing-language'
+} from '../../shared/writing-language'
 
 /**
  * 渲染层一次 Agent 请求的冻结上下文。模型侧的工具由主进程 Pi Agent 持有，

@@ -4,6 +4,7 @@ import { createPiModels } from './pi-models'
 import { buildAgentTools, confirmationToolNames } from './tool-builder'
 
 import type { AgentEditorSnapshot, PiAgentEvent, RendererActionSink } from '../../src/shared/agent-events'
+import type { AgentSkillCatalogEntry } from '../../src/shared/agent-skills'
 import type { AgentPromptHistoryTurn } from '../../src/shared/agent-conversation-archive'
 import type { ModelProfile } from '../../src/shared/ipc-channels'
 import type { WritingLanguage } from '../../src/shared/writing-language'
@@ -12,7 +13,7 @@ import { logFailure, logInfo } from '../../src/shared/fail-log'
 export interface AgentSessionManagerOptions {
   /** Resolve a persisted model profile for a turn (modelId may be undefined). */
   resolveModel: (modelId: string | undefined) => ModelProfile | null
-  resolveSystemPrompt: (conversationId: string) => string
+  resolveSystemPrompt: (conversationId: string, skills?: readonly AgentSkillCatalogEntry[]) => string
   resolveLanguage: (conversationId: string) => WritingLanguage
   /** Forward a normalized agent event toward the renderer. */
   emit: (conversationId: string, event: PiAgentEvent) => void
@@ -35,6 +36,7 @@ export class AgentSessionManager {
     modelId?: string,
     editorSnapshot?: AgentEditorSnapshot,
     history?: readonly AgentPromptHistoryTurn[],
+    skills?: readonly AgentSkillCatalogEntry[],
   ): Promise<{ success: boolean; error?: string }> {
     try {
       const profile = this.options.resolveModel(modelId)
@@ -46,8 +48,9 @@ export class AgentSessionManager {
         provider: profile?.provider,
         chars: input.length,
       })
-      const session = this.getOrCreate(conversationId, modelId, history)
+      const session = this.getOrCreate(conversationId, modelId, history, skills)
       session.setEditorSnapshot(editorSnapshot)
+      session.setSystemPrompt(this.options.resolveSystemPrompt(conversationId, skills))
       session.setTools(buildAgentTools(this.options.resolveLanguage(conversationId), this.options.rendererAction))
       await session.prompt(input)
       logInfo('Agent', 'prompt finished', { conversationId, modelId })
@@ -83,6 +86,7 @@ export class AgentSessionManager {
     conversationId: string,
     modelId?: string,
     history?: readonly AgentPromptHistoryTurn[],
+    skills?: readonly AgentSkillCatalogEntry[],
   ): AgentSession {
     const existing = this.sessions.get(conversationId)
     if (existing) return existing
@@ -97,7 +101,7 @@ export class AgentSessionManager {
     const session = new AgentSession({
       model,
       streamFn: models.streamSimple.bind(models),
-      systemPrompt: this.options.resolveSystemPrompt(conversationId),
+      systemPrompt: this.options.resolveSystemPrompt(conversationId, skills),
       tools,
       confirmationToolNames: confirmationToolNames(),
       language,

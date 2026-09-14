@@ -1,10 +1,5 @@
 import { Agent } from '@earendil-works/pi-agent-core'
-import type {
-  AgentMessage,
-  AgentTool,
-  StreamFn,
-} from '@earendil-works/pi-agent-core'
-import type { Model } from '@earendil-works/pi-ai'
+import type { AgentMessage, StreamFn } from '@earendil-works/pi-agent-core'
 import { logFailure, logInfo } from '../../src/shared/fail-log'
 
 import type { ModelProfile } from '../../src/shared/ipc-channels'
@@ -13,6 +8,8 @@ import { afterUnknownCommit } from './commit-state'
 import { truncateToolResultContent } from './tool-result'
 import { withLlmCallAccounting } from './llm-call-accounting'
 import { createPiModels } from './pi-models'
+import type { AnyAgentTool } from './tool-types'
+import type { PiModelRuntime } from './pi-models'
 
 export type { PiToolCallInfo } from '../../src/shared/agent-events'
 
@@ -29,10 +26,10 @@ export interface PiAgentCallbacks {
 
 export interface CreatePiAgentOptions {
   /** Pre-built pi-ai runtime (see `createPiModels`). */
-  model: Model<any>
+  model: PiModelRuntime['model']
   streamFn: StreamFn
   systemPrompt: string
-  tools: AgentTool<any>[]
+  tools: AnyAgentTool[]
   /** Tool names that must be confirmed by the user before execution. */
   confirmationToolNames?: ReadonlySet<string>
   /** Inject ephemeral context (L1 editor snapshot) before convertToLlm. */
@@ -43,7 +40,8 @@ export interface CreatePiAgentOptions {
 export interface PiAgentHandle {
   prompt(input: string): Promise<void>
   abort(): void
-  setTools(tools: AgentTool<any>[]): void
+  setTools(tools: AnyAgentTool[]): void
+  setSystemPrompt(systemPrompt: string): void
   restoreMessages(messages: AgentMessage[]): void
   messages: AgentMessage[]
 }
@@ -212,6 +210,9 @@ export function createPiAgent(options: CreatePiAgentOptions): PiAgentHandle {
     setTools: (tools) => {
       agent.state.tools = tools
     },
+    setSystemPrompt: (systemPrompt) => {
+      agent.state.systemPrompt = systemPrompt
+    },
     restoreMessages: (messages) => {
       agent.state.messages = messages
     },
@@ -225,7 +226,7 @@ export function createPiAgent(options: CreatePiAgentOptions): PiAgentHandle {
 export function createPiAgentForProfile(options: {
   profile: ModelProfile
   systemPrompt: string
-  tools: AgentTool<any>[]
+  tools: AnyAgentTool[]
   confirmationToolNames?: ReadonlySet<string>
   callbacks: PiAgentCallbacks
 }): PiAgentHandle {

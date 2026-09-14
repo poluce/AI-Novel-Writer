@@ -8,6 +8,8 @@ import {
   fauxToolCall,
 } from '@earendil-works/pi-ai/providers/faux'
 
+import { fauxChatModel } from './faux-model'
+
 import { AgentSession } from '../agent-session'
 import type { PiAgentEvent } from '../agent-session'
 
@@ -34,7 +36,7 @@ function buildSession(decision: (callId: string) => boolean, events: PiAgentEven
   ])
 
   const session = new AgentSession({
-    model: faux.getModel(),
+    model: fauxChatModel(faux),
     streamFn: models.streamSimple.bind(models),
     systemPrompt: 'You are a calculator.',
     tools: [addTool],

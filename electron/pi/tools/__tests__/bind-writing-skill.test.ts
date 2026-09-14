@@ -26,6 +26,8 @@ describe('bind_writing_skill', () => {
 
   it('rejects an invalid stage', async () => {
     const tool = createBindWritingSkillTool('zh-CN')
-    await expect(tool.execute('c1', { skill_id: 'user:scene-craft', stage: 'bogus' } as any)).rejects.toThrow('stage 无效')
+    // 运行期非法值：故意绕过 schema 类型，验证工具自身的参数校验。
+    const invalidStage = { skill_id: 'user:scene-craft', stage: 'bogus' } as unknown as Parameters<typeof tool.execute>[1]
+    await expect(tool.execute('c1', invalidStage)).rejects.toThrow('stage 无效')
   })
 })

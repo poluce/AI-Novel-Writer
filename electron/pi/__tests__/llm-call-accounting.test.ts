@@ -25,7 +25,7 @@ describe('withLlmCallAccounting', () => {
       systemPrompt: 'sys',
       messages: [{ role: 'user', content: 'hi', timestamp: Date.now() }],
     })
-    for await (const _event of stream) { /* drain */ }
+    for await (const event of stream) void event
 
     expect(logCall).toHaveBeenCalledWith(expect.objectContaining({
       purpose: 'agent',

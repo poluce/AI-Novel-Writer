@@ -1,4 +1,3 @@
-import type { AgentTool } from '@earendil-works/pi-agent-core'
 
 import type { WritingLanguage } from '../../src/shared/writing-language'
 import type { RendererActionSink } from '../../src/shared/agent-events'
@@ -20,13 +19,14 @@ import { createReplaceDraftExcerptTool } from './tools/replace-draft-excerpt.too
 import { createProposeNovelConfigTool } from './tools/propose-novel-config.tool'
 import { createProposeChapterBlueprintTool } from './tools/propose-chapter-blueprint.tool'
 import { buildMcpAgentTools } from './tools/mcp.tool'
+import type { AnyAgentTool } from './tool-types'
 
 /**
  * Agent 级执行是并行的，这里只把写入类与 MCP 工具钉成 sequential，
  * 让它们不会互相重叠。结果截断由 Pi 的 afterToolCall 钩子统一处理
  * （见 pi-agent.ts），不再逐个包装 execute。
  */
-function withExecutionMode(tool: AgentTool<any>): AgentTool<any> {
+function withExecutionMode(tool: AnyAgentTool): AnyAgentTool {
   const sequential = confirmationToolNames().has(tool.name) || tool.name.startsWith('mcp__')
   return sequential ? { ...tool, executionMode: 'sequential' as const } : tool
 }
@@ -35,7 +35,7 @@ function withExecutionMode(tool: AgentTool<any>): AgentTool<any> {
 export function buildAgentTools(
   language: WritingLanguage,
   rendererAction: RendererActionSink,
-): AgentTool<any>[] {
+): AnyAgentTool[] {
   return [
     createReadArchitectureTool(language),
     createReadCharactersTool(language),

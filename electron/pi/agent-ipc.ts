@@ -4,6 +4,7 @@ import { AgentSessionManager } from './agent-session-manager'
 import { setPiProjectCloseHook } from './in-flight'
 import { createRendererActionDispatcher } from './renderer-action-dispatch'
 import type { AgentEditorSnapshot, RendererActionResult } from '../../src/shared/agent-events'
+import { isAgentSkillCatalog, type AgentSkillCatalogEntry } from '../../src/shared/agent-skills'
 import type { AgentPromptHistoryTurn } from '../../src/shared/agent-conversation-archive'
 
 import {
@@ -13,6 +14,7 @@ import {
   DEFAULT_GLOBAL_CONFIG,
 } from '../utils/config-utils'
 import { getCurrentProjectPath } from '../database'
+import { logFailure } from '../../src/shared/fail-log'
 import { ProjectCoreRepository } from '../repositories/project-core-repository'
 import { loadAssistantWritingIdentity } from './assistant-identity-loader'
 import { buildMainProcessAgentSystemPrompt } from './agent-system-prompt'
@@ -35,13 +37,30 @@ function resolveLanguage(): WritingLanguage {
   return core?.writingLanguage ?? DEFAULT_WRITING_LANGUAGE
 }
 
-function resolveSystemPrompt(): string {
+function resolveSystemPrompt(skills?: readonly AgentSkillCatalogEntry[]): string {
   const core = ProjectCoreRepository.get()
   const language = core?.writingLanguage ?? DEFAULT_WRITING_LANGUAGE
   return buildMainProcessAgentSystemPrompt(
     core,
     loadAssistantWritingIdentity(language, { projectPath: getCurrentProjectPath() }),
+    skills,
   )
+}
+
+/**
+ * The renderer owns skill loading (project session validation, localized
+ * copy), so the catalog arrives over IPC. A malformed payload is dropped
+ * instead of failing the turn: the prompt then simply lists no skills.
+ */
+function acceptedSkillCatalog(value: unknown): AgentSkillCatalogEntry[] | undefined {
+  if (value === undefined) return undefined
+  if (!isAgentSkillCatalog(value)) {
+    logFailure('Agent', 'rejected malformed skill catalog', undefined, {
+      received: Array.isArray(value) ? value.length : typeof value,
+    })
+    return undefined
+  }
+  return value
 }
 
 function mainWindow(): BrowserWindow | null {
@@ -88,7 +107,7 @@ export function registerAgentController(): void {
   })
   const manager = new AgentSessionManager({
     resolveModel,
-    resolveSystemPrompt: () => resolveSystemPrompt(),
+    resolveSystemPrompt: (_conversationId, skills) => resolveSystemPrompt(skills),
     resolveLanguage: () => resolveLanguage(),
     emit: (conversationId, event) => {
       mainWindow()?.webContents.send('agent:event', { conversationId, event })
@@ -107,8 +126,16 @@ export function registerAgentController(): void {
     modelId?: string,
     editorSnapshot?: AgentEditorSnapshot,
     history?: AgentPromptHistoryTurn[],
+    skills?: unknown,
   ) => {
-    return manager.prompt(conversationId, input, modelId, editorSnapshot, history)
+    return manager.prompt(
+      conversationId,
+      input,
+      modelId,
+      editorSnapshot,
+      history,
+      acceptedSkillCatalog(skills),
+    )
   })
 
   ipcMain.handle('agent:confirm', async (_event, conversationId: string, toolCallId: string, confirmed: boolean) => {
@@ -127,9 +154,9 @@ export function registerAgentController(): void {
     return { success: dispatcher.complete(requestId, result) }
   })
 
-  ipcMain.handle('agent:system-prompt', async () => {
+  ipcMain.handle('agent:system-prompt', async (_event, skills?: unknown) => {
     try {
-      return { success: true, prompt: resolveSystemPrompt() }
+      return { success: true, prompt: resolveSystemPrompt(acceptedSkillCatalog(skills)) }
     } catch (error) {
       return {
         success: false,

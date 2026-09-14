@@ -8,6 +8,7 @@ vi.mock('../agent-session', () => ({
     prompt = vi.fn(async () => {})
     setEditorSnapshot = vi.fn()
     setTools = vi.fn()
+    setSystemPrompt = vi.fn()
     confirm = vi.fn()
     abort = vi.fn()
   },
@@ -28,14 +29,18 @@ const buildToolsMock = buildAgentTools as ReturnType<typeof vi.fn>
 
 function buildManager() {
   const events: Array<{ conversationId: string; event: unknown }> = []
+  const systemPromptSkills: Array<unknown> = []
   const manager = new AgentSessionManager({
     resolveModel: () => ({ id: 'm1', name: 'M', provider: 'gemini', protocol: 'gemini', modelName: 'g', apiKey: 'k', baseUrl: 'https://x', temperature: 0.7, maxTokens: 100, purposes: ['generation'] }),
-    resolveSystemPrompt: () => 'sys',
+    resolveSystemPrompt: (_conversationId, skills) => {
+      systemPromptSkills.push(skills)
+      return 'sys'
+    },
     resolveLanguage: () => 'zh-CN',
     emit: (conversationId, event) => events.push({ conversationId, event }),
     rendererAction: () => {},
   })
-  return { manager, events }
+  return { manager, events, systemPromptSkills }
 }
 
 beforeEach(() => {
@@ -55,6 +60,17 @@ describe('AgentSessionManager', () => {
 
     expect(createPiModelsMock).toHaveBeenCalledTimes(1)
     expect(buildToolsMock.mock.calls.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('rebuilds the system prompt with the renderer skill catalog on every turn', async () => {
+    const { manager, systemPromptSkills } = buildManager()
+    const skills = [{ name: 'scene-craft', description: '场景塑造', location: 'managed://skills/scene-craft/SKILL.md', source: 'user' as const }]
+
+    await manager.prompt('conv-1', 'hi')
+    await manager.prompt('conv-1', 'again', undefined, undefined, undefined, skills)
+
+    // 会话创建时先建一次初始提示词，之后每一轮都用最新目录刷新。
+    expect(systemPromptSkills).toEqual([undefined, undefined, skills])
   })
 
   it('delegates confirm and abort to the session', async () => {

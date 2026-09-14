@@ -1,3 +1,5 @@
+import { formatSkillsForSystemPrompt, type Skill } from '@earendil-works/pi-agent-core'
+
 import type { PromptTemplate } from '../../src/prompts/types'
 import {
   ASSISTANT_WRITING_IDENTITY_KEY,
@@ -5,6 +7,10 @@ import {
   renderAssistantIdentity,
 } from '../../src/services/agent/assistant-identity'
 import { getBuiltinPromptTemplate } from '../../src/services/prompt-templates'
+import {
+  AGENT_SKILL_DESCRIPTION_MAX_CHARS,
+  type AgentSkillCatalogEntry,
+} from '../../src/shared/agent-skills'
 import { localizeNovelConfigFacts } from '../../src/shared/novel-config-localization'
 import { writingLanguageText, type WritingLanguage } from '../../src/shared/writing-language'
 import type { ProjectCoreData } from '../repositories/project-core-repository'
@@ -13,7 +19,8 @@ import type { ProjectCoreData } from '../repositories/project-core-repository'
  * Main-process system prompt for the multi-turn Pi Agent.
  *
  * Identity comes from Settings `assistant_writing_identity` (caller supplies
- * the resolved overlay). L0 project facts come from SQLite. Tool instructions
+ * the resolved overlay). L0 project facts come from SQLite. The skill catalog
+ * is rendered by Pi's own `formatSkillsForSystemPrompt`. Tool instructions
  * stay on AgentTool schemas — they must not be pasted into the system string
  * as XML. Editor-tab L1 belongs on transformContext; it is intentionally
  * absent here.
@@ -21,6 +28,7 @@ import type { ProjectCoreData } from '../repositories/project-core-repository'
 export function buildMainProcessAgentSystemPrompt(
   core: ProjectCoreData | null,
   identityTemplate?: PromptTemplate,
+  skills?: readonly AgentSkillCatalogEntry[],
 ): string {
   const language: WritingLanguage = core?.writingLanguage ?? 'zh-CN'
   const template = identityTemplate
@@ -32,7 +40,53 @@ export function buildMainProcessAgentSystemPrompt(
     appShellModeInstruction(language),
   )
   const l0 = buildL0ProjectContext(core, language)
-  return l0 ? `${identity}\n\n${l0}` : identity
+  const skillCatalog = buildSkillCatalogBlock(skills, language)
+  return [identity, l0, skillCatalog].filter((part): part is string => Boolean(part)).join('\n\n')
+}
+
+/**
+ * Pi's own skill listing (name / description / location) plus the two facts
+ * Pi cannot know: in this app skills are not read by the assistant, they take
+ * effect through `/技能名` and workflow stage bindings only.
+ */
+function buildSkillCatalogBlock(
+  skills: readonly AgentSkillCatalogEntry[] | undefined,
+  language: WritingLanguage,
+): string | null {
+  if (!skills || skills.length === 0) return null
+  const block = formatSkillsForSystemPrompt(skills.map(toPiSkill))
+  if (!block) return null
+  return `${block}\n\n${skillInvocationNote(language)}`
+}
+
+function toPiSkill(entry: AgentSkillCatalogEntry): Skill {
+  return {
+    name: entry.name,
+    description: entry.description.slice(0, AGENT_SKILL_DESCRIPTION_MAX_CHARS),
+    // Pi only reads `content` for explicit invocation; this listing never
+    // carries skill bodies into the system prompt.
+    content: '',
+    filePath: entry.location,
+    disableModelInvocation: entry.disableModelInvocation,
+  }
+}
+
+function skillInvocationNote(language: WritingLanguage): string {
+  return writingLanguageText(
+    language,
+    [
+      '本应用的技能由用户显式调用，助手不自行加载技能正文：',
+      '- 用户在输入框输入 `/技能名` 时，技能正文会注入到那一轮消息；写作工作流也可以在某个阶段绑定技能。',
+      '- 不要用 read_file 去读技能文件：用户级技能在项目目录之外，会被拒绝。',
+      '- 当任务与某个技能的描述相符时，直接用 `/技能名` 建议用户启用它。',
+    ].join('\n'),
+    [
+      'In this application skills are invoked by the user; the assistant never loads a skill body by itself:',
+      '- When the user types `/skill-name`, that skill body is injected into that turn; a writing workflow can also bind a skill to one of its stages.',
+      '- Do not open a skill file with read_file: user-level skills live outside the project boundary and the call will be rejected.',
+      '- When a task matches a skill description, simply suggest that the user run `/skill-name`.',
+    ].join('\n'),
+  )
 }
 
 function buildL0ProjectContext(core: ProjectCoreData | null, language: WritingLanguage): string | null {

@@ -76,4 +76,62 @@ describe('buildMainProcessAgentSystemPrompt', () => {
     expect(prompt).not.toContain('你是一位经验丰富的长篇小说写作助手')
     expect(prompt).toContain('项目名称: 潮门')
   })
+
+  it('lists available skills through Pi formatSkillsForSystemPrompt', () => {
+    const prompt = buildMainProcessAgentSystemPrompt(core(), undefined, [
+      {
+        name: 'review-chapter',
+        description: 'Reviews a chapter for plot logic and pacing.',
+        location: 'builtin://review-chapter',
+        source: 'builtin',
+      },
+      {
+        name: 'scene-craft',
+        description: '场景塑造',
+        location: 'C:\\Users\\me\\.vela\\skills\\scene-craft\\SKILL.md',
+        source: 'user',
+      },
+    ])
+    expect(prompt).toContain('The following skills provide specialized instructions for specific tasks.')
+    expect(prompt).toContain('<available_skills>')
+    expect(prompt).toContain('<name>review-chapter</name>')
+    expect(prompt).toContain('<description>Reviews a chapter for plot logic and pacing.</description>')
+    expect(prompt).toContain('<location>builtin://review-chapter</location>')
+    expect(prompt).toContain('C:\\Users\\me\\.vela\\skills\\scene-craft\\SKILL.md')
+    // 技能正文永远不进 system prompt：助手用 /技能名 让用户显式启用。
+    expect(prompt).toContain('/技能名')
+    expect(prompt).toContain('不要用 read_file 去读技能文件')
+  })
+
+  it('localizes the skill invocation note and omits the block without skills', () => {
+    const skill = {
+      name: 'scene-craft',
+      description: 'Scene craft',
+      location: '/home/me/.vela/skills/scene-craft/SKILL.md',
+      source: 'user' as const,
+    }
+    const english = buildMainProcessAgentSystemPrompt(core({ writingLanguage: 'en-US' }), undefined, [skill])
+    expect(english).toContain('In this application skills are invoked by the user')
+    expect(english).toContain('suggest that the user run `/skill-name`')
+    expect(english).not.toContain('/技能名')
+
+    const noSkills = buildMainProcessAgentSystemPrompt(core())
+    expect(noSkills).not.toContain('<available_skills>')
+    const emptySkills = buildMainProcessAgentSystemPrompt(core(), undefined, [])
+    expect(emptySkills).not.toContain('<available_skills>')
+  })
+
+  it('hides skills marked as not user-invocable from the model list', () => {
+    const prompt = buildMainProcessAgentSystemPrompt(core(), undefined, [
+      {
+        name: 'internal-only',
+        description: 'Hidden helper.',
+        location: 'builtin://internal-only',
+        source: 'builtin',
+        disableModelInvocation: true,
+      },
+    ])
+    expect(prompt).not.toContain('<available_skills>')
+    expect(prompt).not.toContain('internal-only')
+  })
 })

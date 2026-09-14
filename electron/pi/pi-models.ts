@@ -19,7 +19,11 @@ export function resolveGeminiBaseUrl(baseUrl: string): string {
 /** Zeroed cost table — the app keeps its own `llm_calls` accounting. */
 const ZERO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
 
-type PiChatModel = Model<'google-generative-ai'> | Model<'openai-completions'>
+/**
+ * The two pi-ai chat APIs this app streams through. Kept as a union instead of
+ * `Model<string>` so a runtime can only be built for an API the app supports.
+ */
+export type PiChatModel = Model<'google-generative-ai'> | Model<'openai-completions'>
 
 export interface PiModelRuntime {
   /** Provider collection holding exactly the one runtime model. */

@@ -13,6 +13,7 @@ import type { EmbeddingOptions } from './embedding-options'
 import type { ModelCapabilities } from './provider-presets'
 import type { ModelProviderResourceId } from './model-provider-resources'
 import type { WritingLanguage } from './writing-language'
+import type { AgentSkillCatalogEntry } from './agent-skills'
 import type { AgentEditorSnapshot, PiAgentEvent, RendererAction, RendererActionResult } from './agent-events'
 import type { AgentPromptHistoryTurn } from './agent-conversation-archive'
 import type { DraftStatus } from './draft-status'
@@ -1168,6 +1169,7 @@ export interface AgentChannels {
       modelId?: string,
       editorSnapshot?: AgentEditorSnapshot,
       history?: AgentPromptHistoryTurn[],
+      skills?: AgentSkillCatalogEntry[],
     ]
     return: { success: boolean; error?: string }
   }
@@ -1180,7 +1182,7 @@ export interface AgentChannels {
     return: { success: boolean }
   }
   'agent:system-prompt': {
-    args: []
+    args: [skills?: AgentSkillCatalogEntry[]]
     return: { success: boolean; prompt?: string; error?: string }
   }
   'agent:renderer-action-result': {
