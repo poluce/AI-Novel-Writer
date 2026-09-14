@@ -15,13 +15,13 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/EthanYoQ/AI-Novel-Writer/releases"><img src="https://badgen.net/github/tag/EthanYoQ/AI-Novel-Writer?label=release" alt="Release" /></a>
-  <a href="https://github.com/EthanYoQ/AI-Novel-Writer/blob/master/LICENSE"><img src="https://badgen.net/badge/license/GPL-3.0/blue" alt="GPL-3.0 License" /></a>
-  <a href="https://github.com/EthanYoQ/AI-Novel-Writer/stargazers"><img src="https://badgen.net/github/stars/EthanYoQ/AI-Novel-Writer" alt="GitHub stars" /></a>
+  <a href="https://github.com/poluce/AI-Novel-Writer/releases"><img src="https://badgen.net/github/tag/poluce/AI-Novel-Writer?label=release" alt="Release" /></a>
+  <a href="https://github.com/poluce/AI-Novel-Writer/blob/master/LICENSE"><img src="https://badgen.net/badge/license/GPL-3.0/blue" alt="GPL-3.0 License" /></a>
+  <a href="https://github.com/poluce/AI-Novel-Writer/stargazers"><img src="https://badgen.net/github/stars/poluce/AI-Novel-Writer" alt="GitHub stars" /></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/EthanYoQ/AI-Novel-Writer/releases/latest">Download desktop (Windows / macOS)</a>
+  <a href="https://github.com/poluce/AI-Novel-Writer/releases/latest">Download desktop (Windows / macOS)</a>
 </p>
 
 <p align="center">
@@ -48,11 +48,11 @@
 - The Chinese long-form workflow connects blueprints, drafts, reviews, revisions, and final chapters.
 - Windows and macOS users can view and start the update intended for their computer.
 
-The 1.0.0 fixes for multi-draft saves, stale requests, source recovery, exports, and installation checks remain included; see the [bilingual 1.1.0 notes](.release/notes/v1.1.0.md) for each change. Official installers are published through [GitHub Releases](https://github.com/EthanYoQ/AI-Novel-Writer/releases/latest).
+The 1.0.0 fixes for multi-draft saves, stale requests, source recovery, exports, and installation checks remain included; see the [bilingual 1.1.0 notes](.release/notes/v1.1.0.md) for each change. Official installers are published through [GitHub Releases](https://github.com/poluce/AI-Novel-Writer/releases/latest).
 
 > ## v0.9.0 feature baseline (historical release)
 >
-> [v0.9.0](https://github.com/EthanYoQ/AI-Novel-Writer/releases/tag/v0.9.0) makes continuity, chapter control, and review-driven revision more complete for long-form fiction while continuing to ship Windows, macOS Apple Silicon, and macOS Intel installers:
+> [v0.9.0](https://github.com/poluce/AI-Novel-Writer/releases/tag/v0.9.0) makes continuity, chapter control, and review-driven revision more complete for long-form fiction while continuing to ship Windows, macOS Apple Silicon, and macOS Intel installers:
 >
 > - **Long-form continuity context** — Explicit author settings, the premise, characters, worldbuilding, outline, blueprints, and finalized facts carry into later writing to reduce forgotten setup and contradictions.
 > - **Foreshadowing and narrative threads** — See suggested hooks, planting and payoff chapters, active threads, and overdue reminders in one place, making long-running suspense easier to plan and resolve.
@@ -153,7 +153,7 @@ Formal releases use a Windows NSIS installer:
 ai-novel-writer-setup-<version>.exe
 ```
 
-1. Download formal installers only from [GitHub Releases](https://github.com/EthanYoQ/AI-Novel-Writer/releases/latest).
+1. Download formal installers only from [GitHub Releases](https://github.com/poluce/AI-Novel-Writer/releases/latest).
 2. The installer updates the application and should not delete novel projects, character cards, or existing settings. Back up important work before any upgrade.
 3. After installation, use **Check for updates** on the welcome page. The app also performs at most one successful silent check per local day after startup. A discovered update is announced first and downloads only after the user chooses **Download update**; when the download finishes, the app offers **Restart and update / Later**.
 4. Older portable ZIP builds cannot obtain their first updater automatically. Install a formal installer manually once; new portable ZIP releases are no longer maintained.
@@ -162,7 +162,7 @@ The installer is not code-signed at present. Windows may show publisher or reput
 
 ### macOS (Apple Silicon and Intel)
 
-Download the installer matching your Mac architecture from [GitHub Releases](https://github.com/EthanYoQ/AI-Novel-Writer/releases/latest):
+Download the installer matching your Mac architecture from [GitHub Releases](https://github.com/poluce/AI-Novel-Writer/releases/latest):
 
 ```text
 ai-novel-writer-mac-arm64-<version>-installer.dmg

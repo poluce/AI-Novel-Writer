@@ -291,10 +291,40 @@ export function prepareVisualEvidenceDirectory(configuredOverride) {
   return outputDirectory
 }
 
+/**
+ * Windows 上对刚写入的文件做同目录 rename 偶发 EPERM/EBUSY（杀毒、索引器或
+ * 跨文件系统挂载会短暂占用句柄）。只对这几个可重试错误做有上限的退避重试；
+ * 其它错误照旧抛出，重试用尽后行为与原来一致。
+ */
+function sleepSync(milliseconds) {
+  try {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds)
+  } catch {
+    const deadline = Date.now() + milliseconds
+    while (Date.now() < deadline) {
+      // 后备忙等：仅在 Atomics.wait 不可用时走到这里。
+    }
+  }
+}
+
+function renameWithRetry(source, target, attempts = 5) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      renameSync(source, target)
+      return
+    } catch (error) {
+      const code = error && error.code
+      const retryable = code === 'EPERM' || code === 'EBUSY' || code === 'EACCES'
+      if (!retryable || attempt >= attempts) throw error
+      sleepSync(20 * attempt)
+    }
+  }
+}
+
 function writeJsonAtomically(filePath, value, nonce = randomUUID()) {
   const temporaryPath = join(dirname(filePath), `.${filePath.split(/[\\/]/).at(-1)}-${nonce}.tmp`)
   writeFileSync(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
-  renameSync(temporaryPath, filePath)
+  renameWithRetry(temporaryPath, filePath)
 }
 
 function markVisualEvidenceRunFailed(outputDirectory, failureStage) {
