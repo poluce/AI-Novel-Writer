@@ -3,14 +3,7 @@ import { Type } from '@earendil-works/pi-ai'
 
 import { knowledgeBaseLoader } from '../../services/knowledge-base-loader'
 import { getCurrentProjectPath } from '../../database'
-import {
-  readJsonFile,
-  GLOBAL_CONFIG_PATH,
-  DEFAULT_GLOBAL_CONFIG,
-  MODELS_CONFIG_PATH,
-} from '../../utils/config-utils'
-import type { GlobalConfig, ModelProfile } from '../../../src/shared/ipc-channels'
-import type { EmbeddingOptions } from '../../../src/shared/embedding-options'
+import { getEmbeddingConfig } from '../../services/embedding-config'
 import {
   writingLanguageText,
   type WritingLanguage,
@@ -20,25 +13,6 @@ const Schema = Type.Object({
   query: Type.String(),
   top_k: Type.Optional(Type.Number()),
 })
-
-interface EmbeddingConfig {
-  protocol: 'openai' | 'gemini'
-  model: { baseUrl: string; apiKey: string; modelName: string; embeddingOptions?: EmbeddingOptions }
-}
-
-/** Mirrors kb-controller's private getEmbeddingConfig (reads global + models config). */
-function getEmbeddingConfig(): EmbeddingConfig | null {
-  const config = readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)
-  const targetModelId = config.defaultEmbeddingModelId || config.defaultModelId
-  if (!targetModelId) return null
-  const models = readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
-  const model = models.find((m) => m.id === targetModelId)
-  if (!model) return null
-  return {
-    protocol: model.protocol as 'openai' | 'gemini',
-    model: { baseUrl: model.baseUrl, apiKey: model.apiKey, modelName: model.modelName, embeddingOptions: model.embeddingOptions },
-  }
-}
 
 export function createSearchKnowledgeTool(
   language: WritingLanguage,

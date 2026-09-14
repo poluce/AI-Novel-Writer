@@ -204,18 +204,9 @@ class ToolRegistryImpl {
 /** 全局单例 Tool 注册表 */
 export const toolRegistry = new ToolRegistryImpl()
 
-// ===== 工具函数：创建 Tool 的便捷方法 =====
-
 /**
- * buildAgentTool — 创建 Agent Tool 的便捷方法（参考 Claude Code 的 buildTool）
+ * 渲染层工具注册表只用于界面记账（MCP 连接状态、Skill 列表）与类型共享。
  *
- * 提供合理的默认值，减少样板代码。
+ * 模型可见的工具表由主进程构建：electron/pi/tool-builder.ts:buildAgentTools()。
+ * 不要在这里注册"给模型用"的工具——它不会被发送给任何模型。
  */
-export function buildAgentTool(
-  def: Omit<AgentTool, 'isReadOnly'> & { isReadOnly?: boolean }
-): AgentTool {
-  return {
-    isReadOnly: !def.requiresConfirmation,
-    ...def,
-  }
-}

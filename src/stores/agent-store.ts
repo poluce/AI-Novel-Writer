@@ -601,7 +601,8 @@ function updateActiveAssistantMsg(updater: (msg: AgentMessage) => AgentMessage):
   }))
 }
 
-async function handleRendererAction(action: RendererAction): Promise<RendererActionResult | void> {
+/** 处理主进程工具发来的渲染层动作；导出以便直接测试分派结果。 */
+export async function handleRendererAction(action: RendererAction): Promise<RendererActionResult | void> {
   switch (action.type) {
     case 'open_editor': {
       // 数据库驱动的页面直接打开内置编辑器；只有 file 目标才带文件内容开标签页。

@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto'
 import { getProjectDb } from '../database'
 import { CharacterRosterRepository } from './character-roster-repository'
 import { blueprintCharacterSyncFactError } from '../../src/shared/blueprint-character-sync-evidence'
-import type { BlueprintNewCharacterCandidate } from '../../src/shared/blueprint-semantic-contract'
+import type { BlueprintData } from '../../src/shared/blueprint'
 
 /** 蓝图行类型（DB 蛇形命名） */
 export interface BlueprintRow {
@@ -26,27 +26,8 @@ export interface BlueprintRow {
     updated_at: string
 }
 
-/** 前端使用的驼峰接口 */
-export interface BlueprintData {
-    chapterNumber: number
-    title: string
-    role: string
-    purpose: string
-    keyEvents: string
-    characters: string[]
-    /** Important recurring characters first introduced by this blueprint. */
-    newCharacterCandidates?: BlueprintNewCharacterCandidate[]
-    /**
-     * Relationship payload from the just-generated blueprint. It is not part
-     * of the editable blueprints table; an atomic range commit retains it in
-     * the immutable operation receipt so character sync can be replayed.
-     */
-    relationshipHints?: unknown
-    suspenseHook: string
-    userGuidance: string
-    notes: string
-    notesUpdatedAt: string
-}
+/** 前端使用的驼峰接口；定义在 shared，供渲染层与提案校验共用。 */
+export type { BlueprintData } from '../../src/shared/blueprint'
 
 export type BlueprintRangeCommitMode = 'full' | 'replace-range'
 

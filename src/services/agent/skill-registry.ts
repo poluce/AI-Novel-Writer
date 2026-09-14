@@ -18,7 +18,6 @@ import {
   projectSessionContextFromProject,
   sameProjectSessionContext,
 } from '../../shared/project-session-context'
-import { toolRegistry, type AgentExecutionContext, type AgentTool } from './tool-registry'
 import type { WritingLanguage } from '../../shared/writing-language'
 import {
   inspectWritingSkillMarkdown,
@@ -273,70 +272,11 @@ class SkillRegistryImpl {
     }
 
     this.skills = staged
-    // 将所有 Skill 注册为 Agent Tool
-    this.registerToToolRegistry()
 
+    // Skill 不作为 Tool 暴露给模型：模型工具表由主进程 Pi Agent 构建
+    // （electron/pi/tool-builder.ts），这里的注册表只服务渲染层。
+    // 用户通过 /技能名 触发，内容由 agent-store 注入到该轮用户消息里。
     console.log(`[Skills] 共加载 ${this.size} 个 Skill`)
-  }
-
-  /**
-   * 将 Skill 注册为 Agent Tool
-   */
-  private registerToToolRegistry(): void {
-    // 先清理旧的 Skill Tool
-    toolRegistry.unregisterBySource('skill')
-
-    for (const skill of this.listAll()) {
-      if (skill.source !== 'builtin') continue
-      const agentTool: AgentTool = {
-        name: `skill__${skill.metadata.name}`,
-        description: skill.metadata.description + (skill.metadata.whenToUse ? ` — ${skill.metadata.whenToUse}` : ''),
-        descriptionEn: skill.writingSkill.metadata.description,
-        source: 'skill',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            args: {
-              type: 'string',
-              description: skill.metadata.argumentHint ?? '可选的参数',
-              descriptionEn: 'Optional arguments',
-            },
-          },
-        },
-        requiresConfirmation: false,
-        isReadOnly: true,
-        userFacingName: skill.metadata.displayName ?? skill.metadata.name,
-        execute: async (toolArgs, context?: AgentExecutionContext) => {
-          if (
-            skill.projectSession
-            && !sameProjectSessionContext(skill.projectSession, context?.projectSession)
-          ) {
-            return {
-              success: false,
-              content: '',
-              error: '项目 Skill 的加载会话已失效，请重新加载当前项目 Skill',
-            }
-          }
-          const userArgs = (toolArgs.args as string) ?? ''
-          // 变量替换
-          const writingLanguage = context?.writingLanguage ?? 'zh-CN'
-          let content = skill.localizedContent?.[writingLanguage] ?? skill.content
-          if (userArgs) {
-            content = content.replace(/\$\{args\}/g, userArgs)
-            content = content.replace(/\$1/g, userArgs)
-          }
-          content = content.replace(/\$\{SKILL_DIR\}/g, skill.baseDir)
-
-          return {
-            success: true,
-            content: `[Skill: ${writingLanguage === 'en-US'
-              ? (skill.writingSkill.metadata.displayName ?? skill.metadata.name)
-              : (skill.metadata.displayName ?? skill.metadata.name)}]\n\n${content}`,
-          }
-        },
-      }
-      toolRegistry.register(agentTool)
-    }
   }
 }
 

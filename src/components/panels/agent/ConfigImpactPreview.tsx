@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useEffect, useMemo, useState } from 'react'
 
-import type { BlueprintData } from '../../../../electron/repositories/blueprint-repository'
+import type { BlueprintData } from '../../../shared/blueprint'
 import type { DraftMeta } from '../../../../electron/repositories/draft-repository'
 import type { NarrativeThreadView } from '../../../shared/narrative-thread'
 import { sameProjectSessionContext, projectSessionContextFromProject } from '../../../shared/project-session-context'

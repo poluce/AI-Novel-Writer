@@ -4,7 +4,7 @@ import {
   buildChapterBlueprintProposal,
   buildNovelConfigProposal,
 } from '../domain-proposals'
-import type { BlueprintData } from '../../../electron/repositories/blueprint-repository'
+import type { BlueprintData } from '../blueprint'
 import type { NovelConfig } from '../ipc-channels'
 
 const text = (_zhCN: string, enUS: string) => enUS

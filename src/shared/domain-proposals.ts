@@ -5,7 +5,7 @@
  * 计算「当前值 → 建议值」差异；两边共用一套字段白名单，避免枚举漂移。
  */
 
-import type { BlueprintData } from '../../electron/repositories/blueprint-repository'
+import type { BlueprintData } from './blueprint'
 import type { NovelConfig } from './ipc-channels'
 
 /** 由调用方注入的本地化文案函数（写作语言决定中/英）。 */

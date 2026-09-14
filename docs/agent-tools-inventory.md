@@ -40,6 +40,13 @@
 6. **确认语义按工具划分**：只读工具自动执行；写入与外部副作用工具必须列入
    `confirmationToolNames()`（`electron/pi/__tests__/tool-builder.test.ts` 会锁住这份名单）。
 
+## 技能（Skill）与工具的关系
+
+Skill 不作为工具暴露给模型：`/技能名` 由 `src/stores/agent-store.ts` 把 Skill 正文注入该轮用户消息，
+阶段绑定（`bind_writing_skill`）则把 Skill 正文写进对应工作流提示词。
+渲染层的 `toolRegistry` 只服务界面与 MCP 记账，模型工具表始终来自主进程
+`electron/pi/tool-builder.ts:buildAgentTools()`，两边不要互相假设。
+
 ## 相关测试
 
 - `electron/pi/__tests__/tool-builder.test.ts` — 工具清单、英文描述、确认名单。

@@ -7,7 +7,7 @@ vi.mock('../../../stores/project-store', () => ({
   useProjectStore: { getState: () => ({ currentProject: null }) },
 }))
 
-describe('writing skill registry identity and tool exposure', () => {
+describe('writing skill registry identity and command exposure', () => {
   beforeEach(() => invoke.mockReset())
 
   it('uses the shared frontmatter parser so quoted names produce bindable ids without quotes', async () => {
@@ -89,28 +89,31 @@ describe('writing skill registry identity and tool exposure', () => {
     expect(toolRegistry.get('skill__scene-craft')).toBeUndefined()
   })
 
-  it('keeps every real built-in Skill in the English tool catalog and execution without Chinese copy', async () => {
+  it('never exposes skills as model tools: the tool list belongs to the main process', async () => {
     invoke.mockResolvedValue([])
     const { skillRegistry } = await import('../skill-registry')
     const { toolRegistry } = await import('../tool-registry')
     await skillRegistry.loadAll()
 
-    const builtins = skillRegistry.listBySource('builtin')
+    expect(skillRegistry.listBySource('builtin').length).toBeGreaterThan(2)
+    expect(toolRegistry.listAll().filter(tool => tool.source === 'skill')).toEqual([])
+  })
 
+  it('keeps every real built-in Skill letter-perfect in English and Chinese copy', async () => {
+    invoke.mockResolvedValue([])
+    const { skillRegistry } = await import('../skill-registry')
+    await skillRegistry.loadAll()
+
+    const builtins = skillRegistry.listBySource('builtin')
     expect(builtins.length).toBeGreaterThan(2)
     for (const skill of builtins) {
-      const tool = toolRegistry.get(`skill__${skill.metadata.name}`)
-      expect(tool, skill.metadata.name).toBeDefined()
-      expect(tool!.descriptionEn ?? tool!.description).toBeTruthy()
-      expect(`${tool!.descriptionEn ?? ''}\n${tool!.name}`).not.toMatch(/[\u3400-\u9fff]/u)
-      const result = await tool!.execute({ args: 'Chapter 1' }, {
-        projectSession: null,
-        selectedModelId: 'model-a',
-        uiLocale: 'zh-CN',
-        writingLanguage: 'en-US',
-      })
-      expect(`${result.content}\n${result.error ?? ''}`, skill.metadata.name)
+      const english = skill.localizedContent?.['en-US']
+      expect(english, skill.metadata.name).toBeTruthy()
+      expect(`${english}\n${skill.writingSkill.metadata.name}`, skill.metadata.name)
         .not.toMatch(/[\u3400-\u9fff]/u)
+      // /命令 注入时用的是 localizedContent[语言] ?? content，两者都不能为空。
+      expect(skill.content, skill.metadata.name).toBeTruthy()
+      expect(skill.localizedContent?.['zh-CN'] ?? skill.content, skill.metadata.name).toBeTruthy()
     }
   })
 

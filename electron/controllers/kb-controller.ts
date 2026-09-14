@@ -1,10 +1,8 @@
 import { app, ipcMain, dialog } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
 import path from 'node:path'
-import { readJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG, MODELS_CONFIG_PATH } from '../utils/config-utils'
-import { GlobalConfig, ModelProfile } from '../../src/shared/ipc-channels'
 import { isProjectSessionContext } from '../../src/shared/project-session-context'
-import type { EmbeddingOptions } from '../../src/shared/embedding-options'
+import { getEmbeddingConfig, hasUsableEmbeddingConfig } from '../services/embedding-config'
 import type { ImportRunExecutionAuthority } from '../../src/shared/import-run'
 import { knowledgeBaseLoader } from '../services/knowledge-base-loader'
 import { mainText } from '../i18n'
@@ -118,26 +116,6 @@ function isLegacyMigrationBlockedResult(value: unknown): boolean {
     && (value as { success?: unknown }).success === false
     && 'errorCode' in value
     && (value as { errorCode?: unknown }).errorCode === LEGACY_VECTOR_MIGRATION_BLOCKED
-}
-
-function getEmbeddingConfig(): { protocol: 'openai' | 'gemini'; model: { baseUrl: string; apiKey: string; modelName: string; embeddingOptions?: EmbeddingOptions } } | null {
-  const config = readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)
-  const targetModelId = config.defaultEmbeddingModelId || config.defaultModelId
-  if (!targetModelId) return null
-
-  const models = readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
-  const model = models.find((m) => m.id === targetModelId)
-  if (!model) return null
-  return {
-    protocol: model.protocol as 'openai' | 'gemini',
-    model: { baseUrl: model.baseUrl, apiKey: model.apiKey, modelName: model.modelName, embeddingOptions: model.embeddingOptions },
-  }
-}
-
-function hasUsableEmbeddingConfig(
-  config: ReturnType<typeof getEmbeddingConfig>,
-): config is NonNullable<ReturnType<typeof getEmbeddingConfig>> {
-  return !!config && !!config.model.baseUrl.trim() && !!config.model.apiKey.trim()
 }
 
 function requireProjectPath(expectedProjectPath: string): string {
