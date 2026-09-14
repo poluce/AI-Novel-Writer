@@ -27,6 +27,29 @@ const SCREEN_BODY = '屏幕上的未保存正文'
 
 let root: Root
 let container: HTMLDivElement
+async function defaultInvoke(channel: string): Promise<unknown> {
+  if (channel === 'db:draft-get-meta') {
+    return {
+      id: 7,
+      chapterNumber: 1,
+      version: 1,
+      status: 'draft',
+      source: 'write',
+      contentId: 70,
+      wordCount: SAVED_BODY.length,
+      createdAt: '2026-09-06T00:00:00.000Z',
+      updatedAt: '2026-09-06T00:00:00.000Z',
+    }
+  }
+  if (channel === 'db:blueprint-get-all') return []
+  if (channel === 'db:draft-list') return [{ id: 7, version: 1 }]
+  if (channel === 'db:revision-get-pending' || channel === 'db:review-list') return []
+  if (channel === 'db:draft-update-content') return { success: true }
+  if (channel === 'db:draft-list-annotations') return []
+  if (channel === 'db:draft-replace-annotations') return { success: true }
+  throw new Error(`Unexpected IPC channel: ${channel}`)
+}
+
 let invoke: ReturnType<typeof vi.fn>
 let startWorkflow: ReturnType<typeof vi.fn>
 let refineExecute: ReturnType<typeof vi.spyOn>
@@ -42,28 +65,7 @@ beforeEach(async () => {
   document.body.append(container)
   root = createRoot(container)
 
-  invoke = vi.fn(async (channel: string) => {
-    if (channel === 'db:draft-get-meta') {
-      return {
-        id: 7,
-        chapterNumber: 1,
-        version: 1,
-        status: 'draft',
-        source: 'write',
-        contentId: 70,
-        wordCount: SAVED_BODY.length,
-        createdAt: '2026-09-06T00:00:00.000Z',
-        updatedAt: '2026-09-06T00:00:00.000Z',
-      }
-    }
-    if (channel === 'db:blueprint-get-all') return []
-    if (channel === 'db:draft-list') return [{ id: 7, version: 1 }]
-    if (channel === 'db:revision-get-pending' || channel === 'db:review-list') return []
-    if (channel === 'db:draft-update-content') return { success: true }
-    if (channel === 'db:draft-list-annotations') return []
-    if (channel === 'db:draft-replace-annotations') return { success: true }
-    throw new Error(`Unexpected IPC channel: ${channel}`)
-  })
+  invoke = vi.fn((channel: string, ...args: unknown[]) => defaultInvoke(channel, ...args))
   Object.defineProperty(window, 'velaAPI', {
     configurable: true,
     value: {
@@ -238,4 +240,63 @@ describe('DraftEditor AI source snapshot', () => {
       expect(startWorkflow).not.toHaveBeenCalled()
     },
   )
+
+  it('keeps annotations with their own draft when the editor switches chapters', async () => {
+    const annotation = {
+      id: 'a1',
+      from: 0,
+      to: 5,
+      quote: '数据库中的',
+      note: '这段要重写',
+      createdAt: 1,
+    }
+    let releaseDraftEight: (() => void) | null = null
+    invoke.mockImplementation(async (channel: string, ...args: unknown[]) => {
+      if (channel === 'db:draft-get-meta') {
+        const base = await defaultInvoke(channel) as Record<string, unknown>
+        return { ...base, id: args[0], chapterNumber: args[0] === 7 ? 1 : 2 }
+      }
+      if (channel === 'db:draft-list-annotations') {
+        if (args[0] === 8) {
+          // 第 8 章的批注读取挂住：这一段正是"上一章批注还在内存里"的窗口。
+          await new Promise<void>((resolve) => { releaseDraftEight = resolve })
+          return []
+        }
+        return args[0] === 7 ? [annotation] : []
+      }
+      return defaultInvoke(channel)
+    })
+    const loadsFor = (draftId: number) => invoke.mock.calls.some(
+      ([channel, id]) => channel === 'db:draft-list-annotations' && id === draftId,
+    )
+
+    const switchToDraft = async (draftId: number) => {
+      const tabId = `draft-ai-snapshot-tab-${draftId}`
+      const filePath = `vela://draft/${draftId}`
+      await act(async () => useEditorStore.setState(state => ({
+        tabs: [{ ...state.tabs[0], id: tabId, filePath, draftId, chapterNumber: draftId === 7 ? 1 : 2 }],
+        activeTabId: tabId,
+      })))
+      await act(async () => root.render(
+        <DraftEditor tabId={tabId} filePath={filePath} content={SAVED_BODY} projectKey={PROJECT_PATH} />,
+      ))
+      await vi.waitFor(() => expect(loadsFor(draftId)).toBe(true))
+    }
+
+    // 先离开第 7 章再回来，逼出一次真正的重新加载（mount 那次走的是默认桩）。
+    await switchToDraft(9)
+    expect(container.querySelectorAll('.cm-draft-annotation')).toHaveLength(0)
+    await switchToDraft(7)
+    await vi.waitFor(() => {
+      expect(container.querySelectorAll('.cm-draft-annotation')).toHaveLength(1)
+    })
+
+    // 切到第 8 章：它的批注还没读回来，但第 7 章的批注已经不属于这个编辑目标。
+    await switchToDraft(8)
+    expect(container.querySelectorAll('.cm-draft-annotation')).toHaveLength(0)
+
+    releaseDraftEight?.()
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)) })
+    expect(container.querySelectorAll('.cm-draft-annotation')).toHaveLength(0)
+  })
 })

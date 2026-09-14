@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+
 import { Sparkles, Search, BadgeCheck, Save, FileStack, FileText, Wrench, Check, Pencil, X } from 'lucide-react'
 
 import { useProjectStore } from '../../stores/project-store'
@@ -39,6 +40,9 @@ import {
   isProjectSessionCurrent,
   isProjectSessionPath,
 } from '../project-session-gate'
+
+/** 无批注时共用的空数组：派生值保持同一引用，下游 effect 不会每轮重跑。 */
+const EMPTY_ANNOTATIONS: DraftAnnotation[] = []
 
 const DRAFT_STATUS_EN: Record<string, string> = {
   draft: 'Draft',
@@ -147,29 +151,47 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
   const [saving, setSaving] = useState(false)
   const [confirmAction, setConfirmAction] = useState<'refine' | 'review' | null>(null)
   const [userRefinePrompt, setUserRefinePrompt] = useState('')
-  const [annotations, setAnnotations] = useState<DraftAnnotation[]>([])
-  const [annotationsReady, setAnnotationsReady] = useState(false)
+  // 批注属于某一章的草稿：把「当前章 + 当前项目」当键，换目标就自然换掉旧批注，
+  // 不再需要先清空再异步加载（那样会先渲染一帧上一章的批注，也会在渲染后多跑一轮）。
+  const annotationKey = meta?.id ? `${projectKey}\u0000${meta.id}` : null
+  const [annotationState, setAnnotationState] = useState<{
+    key: string | null
+    rows: DraftAnnotation[]
+    ready: boolean
+  }>({ key: null, rows: [], ready: false })
+  const annotations = annotationState.key === annotationKey ? annotationState.rows : EMPTY_ANNOTATIONS
+  const annotationsReady = annotationState.key === annotationKey && annotationState.ready
+  const setAnnotations = useCallback((
+    next: DraftAnnotation[] | ((current: DraftAnnotation[]) => DraftAnnotation[]),
+  ) => {
+    if (!annotationKey) return
+    setAnnotationState((current) => {
+      const currentRows = current.key === annotationKey ? current.rows : EMPTY_ANNOTATIONS
+      return {
+        key: annotationKey,
+        rows: typeof next === 'function' ? next(currentRows) : next,
+        ready: true,
+      }
+    })
+  }, [annotationKey])
   const [annotationListOpen, setAnnotationListOpen] = useState(false)
 
   useEffect(() => {
-    setAnnotations([])
-    setAnnotationsReady(false)
-    if (!meta?.id || isReadonly) return
+    if (!annotationKey || !meta?.id || isReadonly) return
     const session = captureProjectSession(currentProject)
     if (!session || !isProjectSessionPath(session, projectKey)) return
     let cancelled = false
     void ipc.invokeWithProjectSession(session, 'db:draft-list-annotations', meta.id, projectKey)
       .then((rows) => {
         if (!cancelled && isProjectSessionCurrent(session) && Array.isArray(rows)) {
-          setAnnotations(rows)
-          setAnnotationsReady(true)
+          setAnnotationState({ key: annotationKey, rows, ready: true })
         }
       })
       .catch(() => {
-        if (!cancelled) setAnnotationsReady(true)
+        if (!cancelled) setAnnotationState({ key: annotationKey, rows: EMPTY_ANNOTATIONS, ready: true })
       })
     return () => { cancelled = true }
-  }, [currentProject, isReadonly, meta?.id, projectKey])
+  }, [annotationKey, currentProject, isReadonly, meta?.id, projectKey])
 
   useEffect(() => {
     if (!annotationsReady || !meta?.id || isReadonly) return

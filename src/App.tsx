@@ -292,7 +292,7 @@ export default function App() {
               {/* 编辑区 */}
               <Panel id="editor" defaultSize={60} minSize={10}>
                 <ErrorBoundary fallbackLabel={text('编辑区渲染失败', 'Editor failed to render')}>
-                  <EditorArea onNewProject={() => useLayoutStore.getState().openNewProject()} />
+                  <EditorArea />
                 </ErrorBoundary>
               </Panel>
 

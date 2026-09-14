@@ -154,7 +154,7 @@ describe('AI output recovery candidates', () => {
     expect(container?.textContent).not.toContain('林岚推开驾驶室的门。')
 
     await act(async () => {
-      root?.render(<EditorArea onNewProject={vi.fn()} />)
+      root?.render(<EditorArea />)
       await Promise.resolve()
     })
     const recoveryTab = useEditorStore.getState().tabs.find(tab => (

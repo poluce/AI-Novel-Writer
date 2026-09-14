@@ -114,7 +114,7 @@ export default function CodeMirrorEditor({
   const uiText = useLocaleStore(s => s.text)
   const uiLocale = useLocaleStore(s => s.locale)
   const editorRef = useRef<ReactCodeMirrorRef>(null)
-  const annotationCompartment = useRef(new Compartment())
+  const [annotationCompartment] = useState(() => new Compartment())
   const annotationInputFocusedRef = useRef(false)
   const [annotationNote, setAnnotationNote] = useState('')
   const [contextMenu, setContextMenu] = useState<{ top: number; left: number; from: number; to: number } | null>(null)
@@ -148,6 +148,7 @@ export default function CodeMirrorEditor({
   const [activeAIAction, setActiveAIAction] = useState<string | null>(null)
   const [loadingDots, setLoadingDots] = useState('.')
   const [selectionRange, setSelectionRange] = useState<{ from: number, to: number } | null>(null)
+  const selectionRangeRef = useRef<{ from: number, to: number } | null>(null)
   const aiRequestSequenceRef = useRef(0)
   const aiTargetRef = useRef<{
     requestSequence: number
@@ -163,10 +164,6 @@ export default function CodeMirrorEditor({
   }, [])
 
   useEffect(() => {
-    setAnnotationNote('')
-  }, [selectionRange?.from, selectionRange?.to])
-
-  useEffect(() => {
     if (!contextMenu) return
     const close = () => setContextMenu(null)
     const onKey = (event: KeyboardEvent) => {
@@ -180,15 +177,17 @@ export default function CodeMirrorEditor({
     }
   }, [contextMenu])
 
+  // 用被动 effect：CodeMirror 的 view 是在子组件的 effect 里建的，父组件要等它建好
+  // 之后才能 reconfigure（批注在真实流程里本来就是异步加载完才到）。
   useEffect(() => {
     const view = editorRef.current?.view
     if (!view) return
     view.dispatch({
-      effects: annotationCompartment.current.reconfigure(
+      effects: annotationCompartment.reconfigure(
         EditorView.decorations.of(annotationDecorations(annotations, view.state.doc.length)),
       ),
     })
-  }, [annotations])
+  }, [annotationCompartment, annotations])
 
   useEffect(() => {
     if (aiResult === '') {
@@ -196,6 +195,18 @@ export default function CodeMirrorEditor({
       return () => clearInterval(timer)
     }
   }, [aiResult])
+
+  /**
+   * 选区变化的唯一入口：换了选区就丢掉半路输入的批注草稿（草稿属于上一个选区），
+   * 选区没变时不动它。之前靠 effect 兜这件事，会在渲染后多跑一轮。
+   */
+  const applySelectionRange = useCallback((next: { from: number, to: number } | null) => {
+    const previous = selectionRangeRef.current
+    if (previous?.from === next?.from && previous?.to === next?.to) return
+    selectionRangeRef.current = next
+    setAnnotationNote('')
+    setSelectionRange(next)
+  }, [])
 
   const handleUpdate = useCallback((v: ViewUpdate) => {
     if (v.docChanged) {
@@ -218,16 +229,16 @@ export default function CodeMirrorEditor({
       if (sel.empty || sel.to - sel.from < 1) {
         if (annotationInputFocusedRef.current) return
         setBubbleOpen(false)
-        setSelectionRange(null)
+        applySelectionRange(null)
       } else {
-        setSelectionRange({ from: sel.from, to: sel.to })
+        applySelectionRange({ from: sel.from, to: sel.to })
         // 交由下方的 useEffect 进行精准防越界座标计算与位置同步
         if (!aiResult) {
           setBubbleOpen(true)
         }
       }
     }
-  }, [onChange, onCharCountChange, aiResult, annotations, enableAnnotations, onAnnotationsChange])
+  }, [onChange, onCharCountChange, aiResult, annotations, enableAnnotations, onAnnotationsChange, applySelectionRange])
 
   // 监听滚动与缩放，实时更新 Bubble Menu 坐标
   useEffect(() => {
@@ -384,9 +395,13 @@ export default function CodeMirrorEditor({
     if (mode === 'document') {
       exts.push(markdown({ base: markdownLanguage, codeLanguages: languages }))
     }
-    exts.push(annotationCompartment.current.of(EditorView.decorations.of(annotationDecorations(annotations))))
+    // 批注装饰的初值必须随 extensions 一起给：CodeMirror 的 view 由子组件稍后创建，
+    // 父组件 effect 第一次跑的时候还不一定有 view。之后的变化由下面的 reconfigure
+    // 单独写入，不重建整个 extensions 数组。
+    exts.push(annotationCompartment.of(EditorView.decorations.of(annotationDecorations(annotations))))
     return exts
-  }, [mode, uiLocale])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 批注刻意不进依赖：进了就会因批注变化重建 extensions（等于重置编辑器）；批注变化走 reconfigure。
+  }, [annotationCompartment, mode, uiLocale])
 
   const handleAddAnnotation = () => {
     if (!enableAnnotations || !onAnnotationsChange || !selectionRange || !editorRef.current?.view) return
@@ -410,7 +425,7 @@ export default function CodeMirrorEditor({
     setAnnotationNote('')
     view.dispatch({ selection: { anchor: selectionRange.to } })
     setBubbleOpen(false)
-    setSelectionRange(null)
+    applySelectionRange(null)
   }
 
   // AI 菜单：一次性 submit_text，完成后才展示结果

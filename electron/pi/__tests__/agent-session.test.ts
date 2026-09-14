@@ -111,10 +111,11 @@ describe('AgentSession', () => {
     })
 
     expect(session.restoreSnapshot({
+      // 只需最小字段：这是"从存档恢复出来的消息"，不是刚生成的助手回合。
       messages: [
         { role: 'user', content: '上一轮的问题', timestamp: 1 },
         { role: 'assistant', content: [{ type: 'text', text: '上一轮的回答' }], timestamp: 2 },
-      ],
+      ] as unknown as AgentMessage[],
     })).toBe(true)
     expect(session.messages).toHaveLength(2)
 
@@ -160,7 +161,7 @@ describe('AgentSession', () => {
           ? `第 ${index} 轮的问题，内容足够长以便触发压缩判断。`
           : [{ type: 'text' as const, text: `第 ${index} 轮的回答，同样写得长一些。` }],
         timestamp: index,
-      })),
+      })) as unknown as AgentMessage[],
     })
 
     await session.prompt('继续')

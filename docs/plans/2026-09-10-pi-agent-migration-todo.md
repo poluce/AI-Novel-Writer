@@ -251,6 +251,7 @@
 - [x] `AgentTool<any>` / `Model<any>` → 单一定义的容器类型：`AnyAgentTool = AgentTool<TSchema, unknown>`（`electron/pi/tool-types.ts`）与 `PiChatModel`（`electron/pi/pi-models.ts`）。库的泛型既不协变也不逆变，这是唯一既过类型检查又不写 `any` 的形态
 - [x] `src/services/agent/tools/project-context.ts` → `src/services/agent/project-context.ts`（它服务整个 agent 目录，不专属工具层）
 - [x] 迁移计划校订：P2「工具仍在渲染层」、P4「工作流入口尚未改走此层」等过时表述已改；手工回归清单改回未勾选，明确仍待点验
+- [x] `pnpm run lint` 归零：迁移引入的 `any` 与未用变量已收口，编辑器与 `update-runtime` 的历史规则报错一并修掉（CodeMirror 批注隔间改用 state 持有、选区变化在事件里清草稿、`EditorArea` 去掉死 prop）
 
 ### 技能清单进系统提示词（第二批）
 

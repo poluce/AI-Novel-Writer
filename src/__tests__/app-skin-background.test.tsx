@@ -74,7 +74,7 @@ describe('App image-skin background seam', () => {
 
   it('exposes image-skin workspace roots through transparent panel and page semantics while preserving solid controls', () => {
     const sidebarMarkup = renderToStaticMarkup(<Sidebar />)
-    const editorMarkup = renderToStaticMarkup(<EditorArea onNewProject={() => {}} />)
+    const editorMarkup = renderToStaticMarkup(<EditorArea />)
     const knowledgeMarkup = renderToStaticMarkup(<KnowledgeOverview />)
     const skinCss = imageSkinCss()
 

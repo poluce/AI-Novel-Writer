@@ -10,9 +10,11 @@ export function isWindowsUpdateRuntimeEnabled(
   return platform === 'win32' && isPackaged && !devServerUrl
 }
 
+/** macOS 更新提醒已下线；参数保留以与 Windows 探针保持同一调用形状。 */
 export function isMacUpdateReminderEnabled(
   _isPackaged: boolean,
   _devServerUrl: string | undefined,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- 见上：三参签名由调用方与测试固定，这里刻意不用。
   _platform = process.platform,
 ): boolean {
   return false

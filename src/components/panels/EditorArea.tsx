@@ -150,12 +150,8 @@ function ProseEditorWrapper({
   )
 }
 
-interface EditorAreaProps {
-  onNewProject: () => void
-}
-
 /** 中间主编辑区 */
-export default function EditorArea({ onNewProject: _onNewProject }: EditorAreaProps) {
+export default function EditorArea() {
   const text = useLocaleStore(s => s.text)
   const currentProject = useProjectStore((s) => s.currentProject)
   const tabs = useEditorStore(s => s.tabs)

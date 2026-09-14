@@ -110,7 +110,7 @@ beforeEach(async () => {
   await act(async () => root?.render(
     <div>
       <LeftToolWindowBar />
-      <EditorArea onNewProject={vi.fn()} />
+      <EditorArea />
     </div>,
   ))
 })
