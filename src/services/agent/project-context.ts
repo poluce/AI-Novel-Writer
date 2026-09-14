@@ -1,14 +1,10 @@
 import { useProjectStore } from '../../stores/project-store'
 import type { ProjectSessionContext } from '../../shared/ipc-channels'
 import type { Locale } from '../../i18n/types'
-import {
-  projectSessionContextFromProject,
-  sameProjectSessionContext,
-} from '../../shared/project-session-context'
+import { projectSessionContextFromProject } from '../../shared/project-session-context'
 import {
   DEFAULT_WRITING_LANGUAGE,
   resolveWritingLanguage,
-  writingLanguageText,
   type WritingLanguage,
 } from '../../shared/writing-language'
 
@@ -34,21 +30,6 @@ export interface AgentExecutionContext {
   readonly markSideEffectStarted?: () => void
 }
 
-export const PROJECT_CHANGED_ERROR = '当前项目已切换，本次工具结果已丢弃'
-export const PROJECT_CHANGED_ERROR_EN = 'The current project changed, so this tool result was discarded'
-
-export function agentToolText(
-  context: AgentExecutionContext | undefined,
-  zhCN: string,
-  enUS: string,
-): string {
-  return writingLanguageText(
-    context?.writingLanguage ?? DEFAULT_WRITING_LANGUAGE,
-    zhCN,
-    enUS,
-  )
-}
-
 export function createAgentExecutionContext(
   selectedModelId?: string | null,
   uiLocale: Locale = DEFAULT_WRITING_LANGUAGE,
@@ -63,12 +44,4 @@ export function createAgentExecutionContext(
       ? resolveWritingLanguage(project.novelConfig.writingLanguage)
       : uiLocale,
   })
-}
-
-export function isAgentProjectCurrent(context?: AgentExecutionContext): boolean {
-  const session = context?.projectSession
-  return !!session && sameProjectSessionContext(
-    session,
-    projectSessionContextFromProject(useProjectStore.getState().currentProject),
-  )
 }
