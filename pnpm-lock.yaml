@@ -24,9 +24,6 @@ importers:
       '@codemirror/lang-markdown':
         specifier: ^6.5.0
         version: 6.5.1
-      '@codemirror/language':
-        specifier: ^6.12.3
-        version: 6.12.3
       '@codemirror/language-data':
         specifier: ^6.5.2
         version: 6.5.2
@@ -8827,8 +8824,8 @@ snapshots:
 
   magicast@0.5.2:
     dependencies:
-      '@babel/parser': 7.29.2
-      '@babel/types': 7.29.0
+      '@babel/parser': 7.29.8
+      '@babel/types': 7.29.8
       source-map-js: 1.2.1
     optional: true
 
