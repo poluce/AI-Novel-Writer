@@ -7,9 +7,8 @@ function source(file: string): string {
 }
 
 describe('model settings contract', () => {
-  it('keeps the user-facing field vocabulary and provider options aligned in both settings surfaces', () => {
+  it('keeps the user-facing model field vocabulary and provider options in the settings surface', () => {
     const settingsModal = source('src/components/settings/SettingsModal.tsx')
-    const modelSettings = source('src/components/settings/ModelSettings.tsx')
 
     for (const field of [
       ['model（模型名称）', 'model'],
@@ -18,7 +17,6 @@ describe('model settings contract', () => {
       ["上下文窗口", 'Context Window'],
     ]) {
       expect(settingsModal).toContain(`text('${field[0]}', '${field[1]}')`)
-      expect(modelSettings).toContain(`text('${field[0]}', '${field[1]}')`)
     }
 
     expect(settingsModal).toContain("text('高级设置', 'Advanced settings')")
@@ -28,7 +26,6 @@ describe('model settings contract', () => {
 
     for (const provider of ['xai', 'siliconflow']) {
       expect(settingsModal).toContain(`value="${provider}"`)
-      expect(modelSettings).toContain(`value="${provider}"`)
     }
   })
 

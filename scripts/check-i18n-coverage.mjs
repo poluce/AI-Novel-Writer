@@ -21,7 +21,6 @@ export const I18N_COVERAGE_BOUNDARIES = Object.freeze({
     'src/components/dialogs',
     'src/components/settings/SettingsModal.tsx',
     'src/components/settings/PromptSettings.tsx',
-    'src/components/settings/ModelSettings.tsx',
     'src/components/panels/Sidebar.tsx',
     'src/components/panels/KnowledgePanel.tsx',
     'src/components/panels/EditorArea.tsx',
