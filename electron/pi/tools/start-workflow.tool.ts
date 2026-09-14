@@ -83,7 +83,7 @@ export function createStartWorkflowTool(
 
       return {
         content: [{ type: 'text', text: outcome.summary }],
-        details: {},
+        details: outcome.workflow ? { ...outcome.workflow } : {},
       }
     },
   }

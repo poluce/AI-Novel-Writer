@@ -8,7 +8,6 @@
 import { create } from 'zustand'
 import { ipc } from '../services/ipc-client'
 import { logFailure } from '../shared/fail-log'
-import { toolRegistry } from '../services/agent/tool-registry'
 import type {
   MCPResourceDescription,
   MCPServerStatus,
@@ -121,8 +120,6 @@ export const useMCPStore = create<MCPState>()((set, get) => ({
 
   disconnectServer: async (serverId) => {
     await ipc.invoke('mcp:disconnect', serverId)
-    // 从 ToolRegistry 注销该服务器的 Tool
-    toolRegistry.unregisterBySource('mcp')
     await get().refreshStatus()
     await get().refreshTools()
     get().registerMCPToolsToRegistry()
@@ -130,7 +127,6 @@ export const useMCPStore = create<MCPState>()((set, get) => ({
 
   disconnectAll: async () => {
     await ipc.invoke('mcp:disconnect-all')
-    toolRegistry.unregisterBySource('mcp')
     set({ servers: [], tools: [], resources: [] })
   },
 
@@ -145,8 +141,7 @@ export const useMCPStore = create<MCPState>()((set, get) => ({
   },
 
   registerMCPToolsToRegistry: () => {
-    // MCP tools execute in the main-process Pi Agent (`mcp__server__name`)
-    // with confirmation + sequential mode. Do not register a renderer execute path.
-    toolRegistry.unregisterBySource('mcp')
+    // MCP 工具由主进程 Pi Agent 以 `mcp__server__name` 提供并执行；
+    // 渲染层只展示清单，不再维护任何工具注册表。
   },
 }))

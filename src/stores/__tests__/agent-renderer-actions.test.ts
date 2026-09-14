@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { handleRendererAction } from '../agent-store'
+import { applyToolCallResult, handleRendererAction } from '../agent-store'
 import { useEditorStore } from '../editor-store'
 import { useLayoutStore } from '../layout-store'
 import { useProjectStore } from '../project-store'
@@ -87,5 +87,91 @@ describe('agent renderer actions', () => {
     await handleRendererAction({ type: 'refresh_project_config' })
 
     expect(useEditorStore.getState().tabs).toEqual([])
+  })
+})
+
+describe('tool completion → artifact cards', () => {
+  const session = { projectId: 'renderer-actions', leaseId: 'renderer-actions-lease', projectPath: PROJECT_PATH }
+  const context = { projectPath: PROJECT_PATH, projectSession: session }
+
+  it('appends a workflow card and updates the tool call card in place', () => {
+    const message = {
+      id: 'm1',
+      role: 'assistant' as const,
+      content: '',
+      createdAt: 0,
+      toolCalls: [{
+        id: 'call-1',
+        toolName: 'start_workflow',
+        arguments: { workflow: 'generate_draft', chapter_number: 3 },
+        status: 'running' as const,
+      }],
+      artifacts: [],
+    }
+
+    const next = applyToolCallResult(message, {
+      id: 'call-1',
+      toolName: 'start_workflow',
+      arguments: { workflow: 'generate_draft' },
+      status: 'completed',
+      result: { runId: 'run-7', status: 'running', name: 'generate_draft（第 3 章）' },
+    }, context)
+
+    expect(next.toolCalls?.[0]).toMatchObject({ id: 'call-1', status: 'completed', source: 'builtin' })
+    expect(next.artifacts).toEqual([
+      expect.objectContaining({ type: 'workflow_started', runId: 'run-7', name: 'generate_draft（第 3 章）' }),
+    ])
+  })
+
+  it('carries Pi tool details into the renderer card model', () => {
+    const message = {
+      id: 'm2', role: 'assistant' as const, content: '', createdAt: 0,
+      toolCalls: [{ id: 'call-2', toolName: 'write_file', arguments: {}, status: 'running' as const }],
+      artifacts: [],
+    }
+
+    const next = applyToolCallResult(message, {
+      id: 'call-2',
+      toolName: 'write_file',
+      arguments: {},
+      status: 'completed',
+      result: { path: `${PROJECT_PATH}\\notes.md`, name: 'notes.md', commitState: 'committed' },
+    }, context)
+
+    expect(next.toolCalls?.[0].details).toMatchObject({ name: 'notes.md', commitState: 'committed' })
+    expect(next.artifacts?.[0]).toMatchObject({ type: 'file_modified', name: 'notes.md' })
+  })
+
+  it('adds no card for read-only tools or when no project session is frozen', () => {
+    const base = {
+      id: 'm3', role: 'assistant' as const, content: '', createdAt: 0,
+      toolCalls: [{ id: 'call-3', toolName: 'read_project_state', arguments: {}, status: 'running' as const }],
+      artifacts: [],
+    }
+
+    const readOnly = applyToolCallResult(base, {
+      id: 'call-3', toolName: 'read_project_state', arguments: {}, status: 'completed', result: { sections: ['config'] },
+    }, context)
+    expect(readOnly.artifacts).toEqual([])
+
+    const noSession = applyToolCallResult(base, {
+      id: 'call-3', toolName: 'write_file', arguments: {}, status: 'completed',
+      result: { name: 'notes.md', path: 'x', commitState: 'committed' },
+    }, null)
+    expect(noSession.artifacts).toEqual([])
+  })
+
+  it('marks MCP tools with their own source badge', () => {
+    const message = {
+      id: 'm4', role: 'assistant' as const, content: '', createdAt: 0,
+      toolCalls: [{ id: 'call-4', toolName: 'mcp__docs__search', arguments: {}, status: 'running' as const }],
+      artifacts: [],
+    }
+
+    const next = applyToolCallResult(message, {
+      id: 'call-4', toolName: 'mcp__docs__search', arguments: {}, status: 'completed', result: 'hit',
+    }, context)
+
+    expect(next.toolCalls?.[0].source).toBe('mcp')
   })
 })

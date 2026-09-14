@@ -89,7 +89,7 @@ export function createWriteFileTool(
               '写入结果未知：文件可能已写入，请勿自动重试。',
               'Write result is unknown: the file may already have been written. Do not retry automatically.',
             ) }],
-            details: { path: fullPath, characters: content.length, commitState },
+            details: { path: fullPath, name: filePath, characters: content.length, commitState },
           }
         }
         throw new Error(text('写入失败', 'Could not write the file'))
@@ -100,7 +100,7 @@ export function createWriteFileTool(
           `✅ 文件已写入：${filePath}（${content.length} 字符）`,
           `✅ File written: ${filePath} (${content.length} characters)`,
         ) }],
-        details: { path: fullPath, characters: content.length, commitState: 'committed' as const },
+        details: { path: fullPath, name: filePath, characters: content.length, commitState: 'committed' as const },
       }
     },
   }

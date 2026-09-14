@@ -67,7 +67,7 @@ export function createOpenEditorTool(
             `已打开「${label[0]}」页面`,
             `Opened the ${label[1]} page`,
           ) }],
-          details: {},
+          details: { name: text(label[0], label[1]), editor: target },
         }
       }
 
@@ -107,7 +107,7 @@ export function createOpenEditorTool(
           `已在编辑器中打开：${fileName}`,
           `Opened in the editor: ${fileName}`,
         ) }],
-        details: {},
+        details: { name: fileName, path: fullPath },
       }
     },
   }

@@ -6,7 +6,11 @@ import {
   getAllSlashCommands,
   parseSlashCommand,
 } from '../services/agent/intent-router'
-import type { ToolArtifact } from '../services/agent/tool-registry'
+import {
+  artifactFromToolResult,
+  type ArtifactContext,
+  type ToolArtifact,
+} from '../shared/agent-artifacts'
 import { captureAgentEditorSnapshot } from '../services/agent/editor-snapshot'
 import { createAgentExecutionContext } from '../services/agent/tools/project-context'
 import { writingLanguageText } from '../shared/writing-language'
@@ -211,6 +215,40 @@ function toToolCallInfo(call: PiToolCallInfo): ToolCallInfo {
     arguments: call.arguments as Record<string, unknown>,
     status: call.status,
     error: call.error,
+    details: call.result,
+    // MCP 工具的命名由主进程决定（mcp__server__tool），这里是唯一可推断来源的地方。
+    source: call.toolName.startsWith('mcp__') ? 'mcp' : 'builtin',
+  }
+}
+
+/** 当前项目的产物上下文；没有打开项目时不生成卡片。 */
+export function currentArtifactContext(): ArtifactContext | null {
+  const project = useProjectStore.getState().currentProject
+  if (!project) return null
+  return {
+    projectPath: project.path,
+    projectSession: projectSessionContextFromProject(project),
+  }
+}
+
+/**
+ * 工具完成时更新调用卡片，并在必要时追加产物卡片。
+ * 导出以便直接测试这条渲染映射（主进程 details → 用户可见产物）。
+ */
+export function applyToolCallResult(
+  message: AgentMessage,
+  call: PiToolCallInfo,
+  context: ArtifactContext | null,
+): AgentMessage {
+  const artifact = context
+    ? artifactFromToolResult(call.toolName, call.result, context)
+    : null
+  return {
+    ...message,
+    toolCalls: (message.toolCalls ?? []).map(tc =>
+      tc.id === call.id ? toToolCallInfo(call) : tc
+    ),
+    artifacts: artifact ? [...(message.artifacts ?? []), artifact] : message.artifacts,
   }
 }
 
@@ -661,12 +699,14 @@ export async function handleRendererAction(action: RendererAction): Promise<Rend
           intent as import('../services/workflows/creative-workflow-launcher').CreativeIntent,
           session,
         )
+        const workflowLabel = `${action.workflow}${action.chapterNumber != null ? uiText(`（第 ${action.chapterNumber} 章）`, ` (Chapter ${action.chapterNumber})`) : ''}`
         return {
           ok: true,
           summary: uiText(
             `已启动「${action.workflow}${action.chapterNumber != null ? `（第 ${action.chapterNumber} 章）` : ''}」工作流（运行 ID：${receipt.runId}，状态：${receipt.status}）。`,
             `Started the ${action.workflow}${action.chapterNumber != null ? ` (Chapter ${action.chapterNumber})` : ''} workflow (run ID: ${receipt.runId}; status: ${receipt.status}).`,
           ),
+          workflow: { runId: receipt.runId, status: receipt.status, name: workflowLabel },
         }
       } catch (error) {
         logFailure('Agent', 'start_workflow launch failed', error, {
@@ -732,12 +772,7 @@ if (typeof window !== 'undefined') {
         }))
         break
       case 'tool_call_complete':
-        updateActiveAssistantMsg(m => ({
-          ...m,
-          toolCalls: (m.toolCalls ?? []).map(tc =>
-            tc.id === event.call.id ? toToolCallInfo(event.call) : tc
-          ),
-        }))
+        updateActiveAssistantMsg(m => applyToolCallResult(m, event.call, currentArtifactContext()))
         break
       case 'done':
         logInfo('Agent', 'renderer received done', {

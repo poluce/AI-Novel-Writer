@@ -11,7 +11,7 @@ vi.mock('../../../mcp/mcp-manager', () => ({
 }))
 
 import { buildMcpAgentTools, mcpAgentToolName } from '../mcp.tool'
-import { TOOL_RESULT_MAX_CHARS } from '../../tool-result'
+import { TOOL_RESULT_MAX_CHARS, truncateToolResultContent } from '../../tool-result'
 
 beforeEach(() => {
   getAllTools.mockReset()
@@ -34,7 +34,7 @@ describe('MCP Agent tools', () => {
     if (first.type === 'text') expect(first.text).toBe('hit')
   })
 
-  it('truncates long MCP observations', async () => {
+  it('returns the raw MCP observation: the agent caps it on afterToolCall', async () => {
     getAllTools.mockReturnValue([
       { name: 'dump', description: 'Dump', inputSchema: {}, serverId: 'docs' },
     ])
@@ -44,8 +44,15 @@ describe('MCP Agent tools', () => {
     const result = await tool!.execute('c1', {})
     const first = result.content[0]
     if (first.type === 'text') {
-      expect(first.text.length).toBe(TOOL_RESULT_MAX_CHARS + 2)
-      expect(first.text.endsWith('\n…')).toBe(true)
+      expect(first.text.length).toBe(TOOL_RESULT_MAX_CHARS + 10)
+      expect(first.text.endsWith('…')).toBe(false)
+    }
+    // 上限由 afterToolCall 统一施加（见 pi-agent 与 tool-result 测试）。
+    const capped = truncateToolResultContent(result.content)
+    const cappedFirst = capped[0]
+    if (cappedFirst.type === 'text') {
+      expect(cappedFirst.text.length).toBe(TOOL_RESULT_MAX_CHARS + 2)
+      expect(cappedFirst.text.endsWith('\n…')).toBe(true)
     }
   })
 })

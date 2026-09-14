@@ -10,6 +10,7 @@ import { logFailure, logInfo } from '../../src/shared/fail-log'
 import type { ModelProfile } from '../../src/shared/ipc-channels'
 import type { PiToolCallInfo } from '../../src/shared/agent-events'
 import { afterUnknownCommit } from './commit-state'
+import { truncateToolResultContent } from './tool-result'
 import { withLlmCallAccounting } from './llm-call-accounting'
 import { createPiModels } from './pi-models'
 
@@ -115,7 +116,13 @@ export function createPiAgent(options: CreatePiAgentOptions): PiAgentHandle {
       call.status = 'running'
       return undefined
     },
-    afterToolCall: async (ctx) => afterUnknownCommit(ctx.result),
+    afterToolCall: async (ctx) => {
+      const commitOverride = afterUnknownCommit(ctx.result)
+      return {
+        ...commitOverride,
+        content: truncateToolResultContent(ctx.result.content),
+      }
+    },
   })
 
   agent.subscribe((event) => {

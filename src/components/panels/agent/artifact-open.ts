@@ -1,4 +1,4 @@
-import type { ToolArtifact } from '../../../services/agent/tool-registry'
+import type { ToolArtifact } from '../../../shared/agent-artifacts'
 import { appErrorMessage } from '../../../i18n/app-errors'
 import { ipc } from '../../../services/ipc-client'
 import { useEditorStore } from '../../../stores/editor-store'

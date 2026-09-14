@@ -1,20 +1,13 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
-  register: vi.fn(),
-  unregisterBySource: vi.fn(),
 }))
 
 vi.mock('../../services/ipc-client', () => ({
   ipc: { invoke: mocks.invoke },
-}))
-
-vi.mock('../../services/agent/tool-registry', () => ({
-  toolRegistry: {
-    register: mocks.register,
-    unregisterBySource: mocks.unregisterBySource,
-  },
 }))
 
 import { useMCPStore } from '../mcp-store'
@@ -80,7 +73,7 @@ describe('renderer MCP trust boundary', () => {
     expect(useMCPStore.getState()).toMatchObject({ loading: false, error: null })
   })
 
-  it('does not register MCP tools on the renderer registry', () => {
+  it('keeps the renderer free of any tool registry: MCP tools execute in the main-process Pi Agent', () => {
     useMCPStore.setState({
       tools: [{
         name: 'write_remote',
@@ -90,9 +83,14 @@ describe('renderer MCP trust boundary', () => {
       }],
     })
 
-    useMCPStore.getState().registerMCPToolsToRegistry()
+    // 渲染层不再维护工具注册表；这里只要求调用不抛错，且不产生任何 IPC 副作用。
+    expect(() => useMCPStore.getState().registerMCPToolsToRegistry()).not.toThrow()
+    expect(mocks.invoke).not.toHaveBeenCalled()
+    expect(useMCPStore.getState().tools).toHaveLength(1)
 
-    expect(mocks.register).not.toHaveBeenCalled()
-    expect(mocks.unregisterBySource).toHaveBeenCalledWith('mcp')
+    // 静态契约：商店源码里不得再出现工具注册表。
+    const source = readFileSync(resolve('src/stores/mcp-store.ts'), 'utf8')
+    expect(source).not.toContain('toolRegistry')
+    expect(source).toContain('主进程 Pi Agent')
   })
 })

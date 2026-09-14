@@ -63,7 +63,7 @@ describe('writing skill registry identity and command exposure', () => {
     expect(skillRegistry.getById('builtin:long-form-continuity')).toBeDefined()
   })
 
-  it('keeps same-named skills by stable id and does not expose external skills as legacy tools', async () => {
+  it('keeps same-named skills by stable id', async () => {
     invoke.mockResolvedValue([
       {
         name: 'writing-coach',
@@ -80,23 +80,11 @@ describe('writing skill registry identity and command exposure', () => {
     ])
 
     const { skillRegistry } = await import('../skill-registry')
-    const { toolRegistry } = await import('../tool-registry')
     await skillRegistry.loadAll()
 
     expect(skillRegistry.getById('builtin:writing-coach')?.source).toBe('builtin')
     expect(skillRegistry.getById('user:writing-coach')?.source).toBe('user')
     expect(skillRegistry.get('writing-coach')?.source).toBe('builtin')
-    expect(toolRegistry.get('skill__scene-craft')).toBeUndefined()
-  })
-
-  it('never exposes skills as model tools: the tool list belongs to the main process', async () => {
-    invoke.mockResolvedValue([])
-    const { skillRegistry } = await import('../skill-registry')
-    const { toolRegistry } = await import('../tool-registry')
-    await skillRegistry.loadAll()
-
-    expect(skillRegistry.listBySource('builtin').length).toBeGreaterThan(2)
-    expect(toolRegistry.listAll().filter(tool => tool.source === 'skill')).toEqual([])
   })
 
   it('keeps every real built-in Skill letter-perfect in English and Chinese copy', async () => {

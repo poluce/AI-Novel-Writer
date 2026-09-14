@@ -20,26 +20,15 @@ import { createReplaceDraftExcerptTool } from './tools/replace-draft-excerpt.too
 import { createProposeNovelConfigTool } from './tools/propose-novel-config.tool'
 import { createProposeChapterBlueprintTool } from './tools/propose-chapter-blueprint.tool'
 import { buildMcpAgentTools } from './tools/mcp.tool'
-import { truncateToolText } from './tool-result'
 
-function withTruncatedResult(tool: AgentTool<any>): AgentTool<any> {
+/**
+ * Agent 级执行是并行的，这里只把写入类与 MCP 工具钉成 sequential，
+ * 让它们不会互相重叠。结果截断由 Pi 的 afterToolCall 钩子统一处理
+ * （见 pi-agent.ts），不再逐个包装 execute。
+ */
+function withExecutionMode(tool: AgentTool<any>): AgentTool<any> {
   const sequential = confirmationToolNames().has(tool.name) || tool.name.startsWith('mcp__')
-  return {
-    ...tool,
-    // Agent-level execution is parallel; pin writes/MCP so they never overlap.
-    ...(sequential ? { executionMode: 'sequential' as const } : {}),
-    execute: async (id, params, signal) => {
-      const result = await tool.execute(id, params, signal)
-      return {
-        ...result,
-        content: result.content.map(block => (
-          block.type === 'text'
-            ? { ...block, text: truncateToolText(block.text) }
-            : block
-        )),
-      }
-    },
-  }
+  return sequential ? { ...tool, executionMode: 'sequential' as const } : tool
 }
 
 /** Build built-in + currently connected MCP tools for one agent session. */
@@ -65,7 +54,7 @@ export function buildAgentTools(
     createProposeNovelConfigTool(language, rendererAction),
     createProposeChapterBlueprintTool(language),
     ...buildMcpAgentTools(language),
-  ].map(withTruncatedResult)
+  ].map(withExecutionMode)
 }
 
 /** Write tools that must be confirmed by the user before execution. */

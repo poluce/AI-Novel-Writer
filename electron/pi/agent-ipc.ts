@@ -48,10 +48,21 @@ function mainWindow(): BrowserWindow | null {
   return BrowserWindow.getAllWindows()[0] ?? null
 }
 
+function isWorkflowLaunchReceipt(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false
+  const record = value as { runId?: unknown; status?: unknown; name?: unknown }
+  return typeof record.runId === 'string'
+    && typeof record.status === 'string'
+    && typeof record.name === 'string'
+}
+
 function isRendererActionResult(value: unknown): value is RendererActionResult {
   if (!value || typeof value !== 'object') return false
   const result = value as RendererActionResult
-  if (result.ok === true) return typeof result.summary === 'string'
+  if (result.ok === true) {
+    return typeof result.summary === 'string'
+      && (result.workflow === undefined || isWorkflowLaunchReceipt(result.workflow))
+  }
   if (result.ok === false) return typeof result.error === 'string'
   return false
 }

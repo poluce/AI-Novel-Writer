@@ -38,9 +38,16 @@ export type RendererAction =
   | { type: 'refresh_project_config' }
   | { type: 'refresh_blueprint' }
 
+/** 工作流启动收据：产物卡片与工具 details 都用它，避免再解析摘要文本。 */
+export interface WorkflowLaunchReceipt {
+  runId: string
+  status: string
+  name: string
+}
+
 /** Receipt from the renderer after a blocking action actually finished (or failed). */
 export type RendererActionResult =
-  | { ok: true; summary: string }
+  | { ok: true; summary: string; workflow?: WorkflowLaunchReceipt }
   | { ok: false; error: string }
 
 export type RendererActionSink = (

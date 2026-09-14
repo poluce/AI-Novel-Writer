@@ -5,7 +5,7 @@
  * 显示可点击的产物卡片，用户可直接跳转到对应资源。
  */
 import { FileText, FolderOpen, Play, ExternalLink } from 'lucide-react'
-import type { ToolArtifact } from '../../../services/agent/tool-registry'
+import type { ToolArtifact } from '../../../shared/agent-artifacts'
 import { useLocaleStore } from '../../../stores/locale-store'
 import { openArtifactInEditor } from './artifact-open'
 

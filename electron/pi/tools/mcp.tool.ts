@@ -2,7 +2,6 @@ import type { AgentTool } from '@earendil-works/pi-agent-core'
 import { Type } from '@earendil-works/pi-ai'
 
 import { mcpManager, type MCPToolDesc } from '../../mcp/mcp-manager'
-import { truncateToolText } from '../tool-result'
 import { writingLanguageText, type WritingLanguage } from '../../../src/shared/writing-language'
 
 const Schema = Type.Record(Type.String(), Type.Unknown())
@@ -30,7 +29,7 @@ export function createMcpAgentTool(
         throw new Error(result.error || text('MCP 工具调用失败', 'The MCP tool call failed'))
       }
       return {
-        content: [{ type: 'text' as const, text: truncateToolText(result.content) }],
+        content: [{ type: 'text' as const, text: result.content }],
         details: { serverId: desc.serverId, toolName: desc.name },
       }
     },
