@@ -3,8 +3,11 @@ import { useEffect, useMemo, useState } from 'react'
 
 import type { ToolCallInfo } from '../../../shared/agent-ui-types'
 import { ipc } from '../../../services/ipc-client'
-import { buildChapterBlueprintProposal } from '../../../services/agent/tools/propose-chapter-blueprint.tool'
-import { buildNovelConfigProposal, type ProposalFieldDiff } from '../../../services/agent/tools/propose-novel-config.tool'
+import {
+  buildChapterBlueprintProposal,
+  buildNovelConfigProposal,
+  type ProposalFieldDiff,
+} from '../../../shared/domain-proposals'
 import { useLocaleStore } from '../../../stores/locale-store'
 import { useProjectStore } from '../../../stores/project-store'
 import { projectSessionContextFromProject, sameProjectSessionContext } from '../../../shared/project-session-context'
@@ -38,6 +41,7 @@ function displayValue(value: unknown, locale: string): string {
 
 export function useDomainProposalPreview(toolCall: ToolCallInfo): DomainProposalPreview {
   const currentProject = useProjectStore(s => s.currentProject)
+  const text = useLocaleStore(s => s.text)
   const [blueprintPreview, setBlueprintPreview] = useState<DomainProposalPreview>({ kind: 'loading', diffs: [] })
   const isConfig = toolCall.toolName === 'propose_novel_config'
   const isBlueprint = toolCall.toolName === 'propose_chapter_blueprint'
@@ -49,11 +53,11 @@ export function useDomainProposalPreview(toolCall: ToolCallInfo): DomainProposal
   const configPreview = useMemo<DomainProposalPreview>(() => {
     if (!isConfig) return { kind: 'none', diffs: [] }
     if (!currentProject || !sessionCurrent) return { kind: 'stale', diffs: [] }
-    const proposal = buildNovelConfigProposal(toolCall.arguments, currentProject.novelConfig)
+    const proposal = buildNovelConfigProposal(toolCall.arguments, currentProject.novelConfig, text)
     return proposal.valid
       ? { kind: 'valid', diffs: proposal.diffs }
       : { kind: 'invalid', diffs: [], error: proposal.error }
-  }, [currentProject, isConfig, sessionCurrent, toolCall.arguments])
+  }, [currentProject, isConfig, sessionCurrent, text, toolCall.arguments])
 
   const blueprintImmediate = useMemo<DomainProposalPreview | null>(() => {
     if (!isBlueprint) return { kind: 'none', diffs: [] }
@@ -82,7 +86,7 @@ export function useDomainProposalPreview(toolCall: ToolCallInfo): DomainProposal
         setBlueprintPreview({ kind: 'invalid', diffs: [], error: `第 ${chapterNumber} 章蓝图不存在` })
         return
       }
-      const proposal = buildChapterBlueprintProposal(toolCall.arguments, blueprint)
+      const proposal = buildChapterBlueprintProposal(toolCall.arguments, blueprint, text)
       setBlueprintPreview(proposal.valid
         ? { kind: 'valid', diffs: proposal.diffs }
         : { kind: 'invalid', diffs: [], error: proposal.error })
@@ -90,7 +94,7 @@ export function useDomainProposalPreview(toolCall: ToolCallInfo): DomainProposal
       if (!disposed) setBlueprintPreview({ kind: 'invalid', diffs: [], error: '无法读取章节蓝图' })
     })
     return () => { disposed = true }
-  }, [blueprintImmediate, currentProject, toolCall.arguments, toolCall.projectSession])
+  }, [blueprintImmediate, currentProject, text, toolCall.arguments, toolCall.projectSession])
 
   return isConfig ? configPreview : blueprintImmediate ?? blueprintPreview
 }

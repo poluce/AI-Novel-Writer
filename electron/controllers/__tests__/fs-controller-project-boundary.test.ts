@@ -33,10 +33,6 @@ vi.mock('../../services/project-access', () => ({
 }))
 
 import { registerFSController } from '../fs-controller'
-import { toolRegistry } from '../../../src/services/agent/tool-registry'
-import { createAgentExecutionContext } from '../../../src/services/agent/tools/project-context'
-import { writeFileTool } from '../../../src/services/agent/tools/write-file.tool'
-import { useProjectStore } from '../../../src/stores/project-store'
 
 const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-novel-fs-controller-'))
 const projectAPath = path.join(temporaryRoot, 'A')
@@ -155,9 +151,7 @@ afterAll(() => {
 })
 
 afterEach(() => {
-  toolRegistry.unregister('write_file')
   vi.unstubAllGlobals()
-  useProjectStore.setState({ currentProject: null })
 })
 
 describe('project-scoped filesystem boundary', () => {
@@ -343,60 +337,6 @@ describe('project-scoped filesystem boundary', () => {
       projectAPath,
     )
 
-    expect(result).toMatchObject({ success: false, commitState: 'unknown' })
-  })
-})
-
-describe('Agent write_file commit result integration', () => {
-  function prepareAgentBoundary() {
-    useProjectStore.setState({
-      currentProject: {
-        id: 'project-A',
-        sessionLease: 'lease-A',
-        name: 'A',
-        path: projectAPath,
-        novelConfig: { writingLanguage: 'en-US' },
-      } as never,
-    })
-    vi.stubGlobal('window', {
-      velaAPI: {
-        invoke: (channel: string, ...args: unknown[]) => rawHandler(channel)({}, ...args),
-        on: vi.fn(),
-        once: vi.fn(),
-        send: vi.fn(),
-      },
-    })
-    toolRegistry.register(writeFileTool)
-  }
-
-  it('writes once through controller and reports the committed receipt', async () => {
-    prepareAgentBoundary()
-    const target = path.join(projectAPath, 'agent-output.md')
-    const writeSpy = vi.spyOn(testFileSystem, 'writeTextAtomically')
-
-    const result = await writeFileTool.execute(
-      { file_path: 'agent-output.md', content: 'committed once' },
-      createAgentExecutionContext(),
-    )
-
-    expect(writeSpy).toHaveBeenCalledOnce()
-    expect(fs.readFileSync(target, 'utf8')).toBe('committed once')
-    expect(result).toMatchObject({ success: true, commitState: 'committed' })
-  })
-
-  it('does not replay when controller returns an unknown helper receipt', async () => {
-    prepareAgentBoundary()
-    const writeSpy = vi.spyOn(testFileSystem, 'writeTextAtomically').mockRejectedValueOnce(Object.assign(
-      new Error('SECURE_FS_HELPER_TIMEOUT'),
-      { commitState: 'unknown' as const },
-    ))
-
-    const result = await writeFileTool.execute(
-      { file_path: 'agent-unknown.md', content: 'maybe' },
-      createAgentExecutionContext(),
-    )
-
-    expect(writeSpy).toHaveBeenCalledOnce()
     expect(result).toMatchObject({ success: false, commitState: 'unknown' })
   })
 })

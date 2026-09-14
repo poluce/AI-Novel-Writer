@@ -5,7 +5,7 @@ import { createProposeChapterBlueprintTool } from '../propose-chapter-blueprint.
 import type { RendererAction } from '../../renderer-action'
 
 vi.mock('../../../repositories/project-core-repository', () => ({
-  ProjectCoreRepository: { update: vi.fn() },
+  ProjectCoreRepository: { get: vi.fn(), update: vi.fn() },
 }))
 vi.mock('../../../repositories/blueprint-repository', () => ({
   BlueprintRepository: { getByChapter: vi.fn(), upsert: vi.fn() },
@@ -14,11 +14,14 @@ vi.mock('../../../repositories/blueprint-repository', () => ({
 import { ProjectCoreRepository } from '../../../repositories/project-core-repository'
 import { BlueprintRepository } from '../../../repositories/blueprint-repository'
 
+const coreGetMock = ProjectCoreRepository.get as ReturnType<typeof vi.fn>
 const coreUpdateMock = ProjectCoreRepository.update as ReturnType<typeof vi.fn>
 const bpGetMock = BlueprintRepository.getByChapter as ReturnType<typeof vi.fn>
 const bpUpsertMock = BlueprintRepository.upsert as ReturnType<typeof vi.fn>
 
 beforeEach(() => {
+  coreGetMock.mockReset()
+  coreGetMock.mockReturnValue({ genre: '奇幻', totalChapters: 10, narrativePov: 'third_limited' })
   coreUpdateMock.mockReset()
   bpGetMock.mockReset()
   bpUpsertMock.mockReset()
@@ -31,7 +34,7 @@ describe('propose_novel_config', () => {
     const tool = createProposeNovelConfigTool('zh-CN', (a) => { actions.push(a) })
     const result = await tool.execute('c1', { changes: { genre: 'fantasy', totalChapters: 10 } })
 
-    expect(coreUpdateMock).toHaveBeenCalled()
+    expect(coreUpdateMock).toHaveBeenCalledWith(expect.objectContaining({ genre: 'fantasy', totalChapters: 10 }))
     expect(actions).toHaveLength(1)
     expect(actions[0]).toEqual({ type: 'refresh_project_config' })
     expect(result.details.fields).toBe(2)

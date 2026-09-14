@@ -21,9 +21,18 @@ export type PiAgentEvent =
   | { type: 'done'; fullText: string }
   | { type: 'error'; message: string }
 
+/** 内置（数据库驱动）编辑器页面：不需要文件路径，直接打开对应页面。 */
+export type BuiltinEditorTarget =
+  | 'config'
+  | 'blueprints'
+  | 'characters'
+  | 'architecture'
+  | 'synopsis'
+
 /** Serializable renderer-side action a main-process tool asks the renderer to perform. */
 export type RendererAction =
-  | { type: 'open_editor'; filePath: string; content: string; tabType: string; fileName: string }
+  | { type: 'open_editor'; target: 'builtin'; editor: BuiltinEditorTarget }
+  | { type: 'open_editor'; target: 'file'; filePath: string; content: string; fileName: string }
   | { type: 'start_workflow'; workflow: string; chapterNumber?: number }
   | { type: 'replace_draft_excerpt'; chapterNumber: number; oldText: string; newText: string; draftId?: number }
   | { type: 'refresh_project_config' }

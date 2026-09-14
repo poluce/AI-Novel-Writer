@@ -42,6 +42,12 @@ describe('read_blueprint', () => {
     const tool = createReadBlueprintTool('zh-CN')
     await expect(tool.execute('c1', { chapter_number: 9 })).rejects.toThrow('蓝图不存在')
   })
+
+  it('requires a chapter number instead of listing every blueprint', async () => {
+    const tool = createReadBlueprintTool('zh-CN')
+    await expect(tool.execute('c1', {} as never)).rejects.toThrow('章节号无效')
+    expect(bpGetAllMock).not.toHaveBeenCalled()
+  })
 })
 
 describe('read_drafts', () => {

@@ -3,7 +3,6 @@ import type { AgentTool } from '@earendil-works/pi-agent-core'
 import type { WritingLanguage } from '../../src/shared/writing-language'
 import type { RendererActionSink } from '../../src/shared/agent-events'
 
-import { createListChaptersTool } from './tools/list-chapters.tool'
 import { createReadArchitectureTool } from './tools/read-architecture.tool'
 import { createReadCharactersTool } from './tools/read-characters.tool'
 import { createReadBlueprintTool } from './tools/read-blueprint.tool'
@@ -49,7 +48,6 @@ export function buildAgentTools(
   rendererAction: RendererActionSink,
 ): AgentTool<any>[] {
   return [
-    createListChaptersTool(language),
     createReadArchitectureTool(language),
     createReadCharactersTool(language),
     createReadBlueprintTool(language),

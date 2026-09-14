@@ -6,10 +6,7 @@ import { useProjectStore } from '../../../stores/project-store'
 import { useWorkflowStore } from '../../../stores/workflow-store'
 import { buildAgentSystemPrompt } from '../context-builder'
 import { toolRegistry } from '../tool-registry'
-import { inspectWritingSkillTool } from '../tools/inspect-writing-skill.tool'
-import { installWritingSkillTool } from '../tools/install-writing-skill.tool'
 import { createAgentExecutionContext } from '../tools/project-context'
-import { builtinTools } from '../tools'
 import {
   clearProjectCustomPrompts,
   getBuiltinPromptTemplate,
@@ -27,20 +24,10 @@ afterEach(() => {
   toolRegistry.unregister('no_project_probe')
   toolRegistry.unregister('global_mcp_probe')
   toolRegistry.unregister('skill__global_probe')
-  toolRegistry.unregister('inspect_writing_skill')
-  toolRegistry.unregister('install_writing_skill')
-  for (const tool of builtinTools) toolRegistry.unregister(tool.name)
   clearProjectCustomPrompts()
 })
 
 describe('agent context project isolation', () => {
-  it('builds every built-in tool description in English without Chinese fallback', () => {
-    for (const tool of builtinTools) {
-      expect(tool.descriptionEn, tool.name).toBeTruthy()
-      expect(`${tool.descriptionEn}\n${tool.name}`).not.toMatch(/[\u3400-\u9fff]/u)
-    }
-  })
-
   it('uses the current UI language and only exposes project-independent tools when no project is open', async () => {
     useLocaleStore.setState({ locale: 'en-US' })
     useProjectStore.setState({ currentProject: null })
@@ -57,8 +44,6 @@ describe('agent context project isolation', () => {
       execute: async () => ({ success: true, content: 'ok' }),
     })
     toolRegistry.registerAll([
-      inspectWritingSkillTool,
-      installWritingSkillTool,
       {
         name: 'global_mcp_probe',
         description: 'Global MCP probe.',

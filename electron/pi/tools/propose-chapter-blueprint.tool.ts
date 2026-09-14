@@ -2,18 +2,11 @@ import type { AgentTool } from '@earendil-works/pi-agent-core'
 import { Type } from '@earendil-works/pi-ai'
 
 import { BlueprintRepository } from '../../repositories/blueprint-repository'
+import { buildChapterBlueprintProposal } from '../../../src/shared/domain-proposals'
 import {
   writingLanguageText,
   type WritingLanguage,
 } from '../../../src/shared/writing-language'
-
-const STRING_FIELDS = new Set([
-  'title', 'role', 'purpose', 'keyEvents', 'suspenseHook', 'userGuidance', 'notes',
-])
-const FIELD_ALIASES: Record<string, string> = {
-  '作者微操指导': 'userGuidance',
-  '用户指引': 'userGuidance',
-}
 
 const Schema = Type.Object({
   chapter_number: Type.Number(),
@@ -39,30 +32,19 @@ export function createProposeChapterBlueprintTool(
         throw new Error(text('章节号无效', 'The chapter number is invalid'))
       }
 
-      const candidate = params.changes
-      if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate) || Object.keys(candidate).length === 0) {
-        throw new Error(text('缺少章节蓝图变更字段', 'No chapter blueprint changes were provided'))
-      }
-
-      const changes: Record<string, unknown> = {}
-      for (const [field, proposed] of Object.entries(candidate)) {
-        const canonicalField = FIELD_ALIASES[field] ?? field
-        if (STRING_FIELDS.has(canonicalField)) {
-          if (typeof proposed !== 'string') throw new Error(text(`字段 ${field} 必须是文本`, `Field ${field} must be text`))
-        } else if (canonicalField === 'characters') {
-          if (!Array.isArray(proposed) || !proposed.every((item) => typeof item === 'string')) {
-            throw new Error(text('字段 characters 必须是文本数组', 'Field characters must be an array of text values'))
-          }
-        } else {
-          throw new Error(text(`未知章节蓝图字段：${field}`, `Unknown chapter blueprint field: ${field}`))
-        }
-        changes[canonicalField] = proposed
-      }
-
       const current = BlueprintRepository.getByChapter(chapterNumber)
       if (!current) {
         throw new Error(text(`第 ${chapterNumber} 章蓝图不存在`, `The blueprint for Chapter ${chapterNumber} does not exist`))
       }
+
+      // 与确认卡片共用同一份字段白名单与规范化逻辑。
+      const proposal = buildChapterBlueprintProposal(
+        params as Record<string, unknown>,
+        current,
+        text,
+      )
+      if (!proposal.valid) throw new Error(proposal.error)
+      const changes = proposal.changes as Record<string, unknown>
 
       BlueprintRepository.upsert({ ...current, ...changes } as Parameters<typeof BlueprintRepository.upsert>[0])
 

@@ -24,8 +24,8 @@ export function createReadFileTool(
 ): AgentTool<typeof Schema> {
   const text = (zhCN: string, enUS: string) => writingLanguageText(language, zhCN, enUS)
   const description = language === 'en-US'
-    ? 'Read an existing text file in the project directory. Use read_architecture for story architecture stored in project data instead of assuming an architecture file path.'
-    : '读取项目目录中实际存在的文本文件。故事架构保存在项目数据中，请使用 read_architecture 工具读取，不要假定存在架构文件路径。'
+    ? 'Read an existing text file the user keeps in the project directory (notes, imports, manuscripts). Story facts are not files: use read_architecture, read_characters, read_blueprint, read_drafts, or read_project_state. Do not assume files exist for them, and do not read the app-owned .vela directory.'
+    : '读取用户放在项目目录里的文本文件（笔记、导入素材、正文）。项目事实不是文件：故事前提/世界观/大纲用 read_architecture，角色用 read_characters，蓝图用 read_blueprint，草稿用 read_drafts，项目状态用 read_project_state。不要假设这些内容存在文件路径，也不要读取应用自有的 .vela 目录。'
 
   return {
     name: 'read_file',

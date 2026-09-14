@@ -603,17 +603,42 @@ function updateActiveAssistantMsg(updater: (msg: AgentMessage) => AgentMessage):
 
 async function handleRendererAction(action: RendererAction): Promise<RendererActionResult | void> {
   switch (action.type) {
-    case 'open_editor':
+    case 'open_editor': {
+      // 数据库驱动的页面直接打开内置编辑器；只有 file 目标才带文件内容开标签页。
+      if (action.target === 'builtin') {
+        const { openBuiltinEditor } = await import('../components/panels/sidebar/sidebar-file-openers')
+        const uiText = useLocaleStore.getState().text
+        const builtin = {
+          config: null,
+          blueprints: ['chapter-card-editor', uiText('章节蓝图', 'Chapter blueprints'), 'chapter-card'],
+          characters: ['character-editor', uiText('角色管理', 'Characters'), 'character'],
+          architecture: ['world-building-editor', uiText('故事架构', 'Story architecture'), 'world-building'],
+          synopsis: ['synopsis-editor', uiText('情节大纲', 'Plot outline'), 'synopsis'],
+        } as const
+        const entry = builtin[action.editor]
+        if (entry === null) {
+          useEditorStore.getState().openFile({
+            id: 'config',
+            name: uiText('小说配置', 'Novel configuration'),
+            type: 'config',
+            projectKey: useProjectStore.getState().currentProject?.path ?? '',
+          })
+          return
+        }
+        openBuiltinEditor(entry[0], entry[1], entry[2])
+        return
+      }
       useEditorStore.getState().openFile({
         id: `agent-${Date.now()}`,
         name: action.fileName,
-        type: action.tabType as 'chapter' | 'outline' | 'character' | 'config' | 'arch-file',
+        type: 'outline',
         filePath: action.filePath,
         content: action.content,
         savedContent: action.content,
         projectKey: useProjectStore.getState().currentProject?.path ?? '',
       })
       return
+    }
     case 'start_workflow': {
       const project = useProjectStore.getState().currentProject
       const session = projectSessionContextFromProject(project)

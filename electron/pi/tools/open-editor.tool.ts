@@ -10,15 +10,37 @@ import {
   windowsSafeFileSystem,
 } from '../../security/windows-safe-file-system'
 import type { RendererActionSink } from '../renderer-action'
+import type { BuiltinEditorTarget } from '../../../src/shared/agent-events'
 import {
   writingLanguageText,
   type WritingLanguage,
 } from '../../../src/shared/writing-language'
 
+/**
+ * 数据库驱动的内置页面不需要文件路径；只有 file 目标才读取物理文件。
+ * 内置页面的打开由渲染层完成，主进程不做多余的读盘。
+ */
+const Target = Type.Union([
+  Type.Literal('config'),
+  Type.Literal('blueprints'),
+  Type.Literal('characters'),
+  Type.Literal('architecture'),
+  Type.Literal('synopsis'),
+  Type.Literal('file'),
+])
+
 const Schema = Type.Object({
-  file_path: Type.String(),
-  tab_type: Type.Optional(Type.String()),
+  target: Target,
+  file_path: Type.Optional(Type.String()),
 })
+
+const TARGET_LABELS: Record<BuiltinEditorTarget, readonly [string, string]> = {
+  config: ['小说配置', 'Novel configuration'],
+  blueprints: ['章节蓝图', 'Chapter blueprints'],
+  characters: ['角色管理', 'Characters'],
+  architecture: ['故事架构', 'Story architecture'],
+  synopsis: ['情节大纲', 'Plot outline'],
+}
 
 export function createOpenEditorTool(
   language: WritingLanguage,
@@ -26,8 +48,8 @@ export function createOpenEditorTool(
 ): AgentTool<typeof Schema> {
   const text = (zhCN: string, enUS: string) => writingLanguageText(language, zhCN, enUS)
   const description = language === 'en-US'
-    ? 'Open a project file in an AI Novel Writer editor tab so the user can view or edit it.'
-    : '在 AI小说作家编辑器中打开指定文件的 Tab 页。用户可以直接在编辑器中查看和编辑内容。'
+    ? 'Open a page for the user: a built-in database-backed editor (config, blueprints, characters, architecture, synopsis) or a read-only view of a project file (target "file" requires file_path).'
+    : '为用户打开页面：数据库驱动的内置编辑器（小说配置 config、章节蓝图 blueprints、角色管理 characters、故事架构 architecture、情节大纲 synopsis），或以只读视图打开项目内的文件（target 用 file，需给 file_path）。'
 
   return {
     name: 'open_editor',
@@ -35,11 +57,24 @@ export function createOpenEditorTool(
     description,
     parameters: Schema,
     execute: async (_id, params) => {
+      const target = params.target
+
+      if (target !== 'file') {
+        const label = TARGET_LABELS[target]
+        rendererAction({ type: 'open_editor', target: 'builtin', editor: target })
+        return {
+          content: [{ type: 'text', text: text(
+            `已打开「${label[0]}」页面`,
+            `Opened the ${label[1]} page`,
+          ) }],
+          details: {},
+        }
+      }
+
       const filePath = params.file_path
       if (!filePath) {
-        throw new Error(text('缺少 file_path 参数', 'The file_path argument is required'))
+        throw new Error(text('target=file 时必须提供 file_path', 'file_path is required when target is "file"'))
       }
-      const tabType = params.tab_type ?? 'chapter'
 
       const projectPath = getCurrentProjectPath()
       if (!projectPath) {
@@ -64,8 +99,8 @@ export function createOpenEditorTool(
         throw new Error(text('文件读取失败', 'Could not read the file'))
       }
 
-      const fileName = filePath.split('/').pop() ?? filePath
-      rendererAction({ type: 'open_editor', filePath: fullPath, content, tabType, fileName })
+      const fileName = filePath.split(/[\\/]/).pop() ?? filePath
+      rendererAction({ type: 'open_editor', target: 'file', filePath: fullPath, content, fileName })
 
       return {
         content: [{ type: 'text', text: text(

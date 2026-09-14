@@ -586,7 +586,7 @@ Use read_characters for the character cards and read_architecture for the story 
 4. **设定遵守** — 是否与世界观设定产生矛盾
 5. **伏笔追踪** — 哪些伏笔已回收，哪些待回收
 
-请使用 list_chapters 了解进度，使用 read_architecture 获取设定，逐章检查关键节点。
+请使用 read_project_state 了解章节进度与近章要点，使用 read_architecture 获取设定，逐章检查关键节点。
 输出为表格形式，标注问题严重程度（🔴严重 / 🟡注意 / 🟢正常）。`,
       localizedContent: {
         'en-US': `# Continuity Check
@@ -600,10 +600,10 @@ Run a comprehensive continuity check on the project.
 4. **Setting rules** — conflicts with established worldbuilding
 5. **Foreshadowing** — clues already resolved and clues still open
 
-Use list_chapters to understand progress and read_architecture for established facts, then inspect the key points chapter by chapter.
+Use read_project_state for chapter progress and recent notes and read_architecture for established facts, then inspect the key points chapter by chapter.
 Return a table and label each finding as critical, warning, or clear.`,
       },
-      writingSkill: inspectWritingSkillMarkdown(`---\nname: continuity-check\ndisplay_name: Continuity Check\ndescription: Checks the novel for continuity and setting inconsistencies, contradictions, and omissions.\nlanguage: bilingual\nstage: review\n---\nUse the list_chapters and read_architecture tools for a chapter-by-chapter continuity check.`),
+      writingSkill: inspectWritingSkillMarkdown(`---\nname: continuity-check\ndisplay_name: Continuity Check\ndescription: Checks the novel for continuity and setting inconsistencies, contradictions, and omissions.\nlanguage: bilingual\nstage: review\n---\nUse the read_project_state and read_architecture tools for a chapter-by-chapter continuity check.`),
     },
     {
       metadata: {

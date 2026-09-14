@@ -9,7 +9,7 @@ import type {
   ConfigImpactBlueprintProposal,
   ToolCallInfo,
 } from '../../../shared/agent-ui-types'
-import { buildChapterBlueprintProposal } from '../../../services/agent/tools/propose-chapter-blueprint.tool'
+import { buildChapterBlueprintProposal } from '../../../shared/domain-proposals'
 import { ipc } from '../../../services/ipc-client'
 import { useLocaleStore } from '../../../stores/locale-store'
 import { useProjectStore } from '../../../stores/project-store'
@@ -66,6 +66,7 @@ function displayValue(value: unknown, locale: string): string {
 function buildSelectableProposals(
   args: Record<string, unknown>,
   unwrittenBlueprints: BlueprintData[],
+  text: (zhCN: string, enUS: string) => string,
 ): SelectableBlueprintProposal[] {
   if (!Array.isArray(args.blueprint_changes)) return []
   const byChapter = new Map(unwrittenBlueprints.map(blueprint => [blueprint.chapterNumber, blueprint]))
@@ -77,7 +78,7 @@ function buildSelectableProposals(
     if (!Number.isInteger(chapterNumber)) continue
     const blueprint = byChapter.get(chapterNumber as number)
     if (!blueprint) continue
-    const proposal = buildChapterBlueprintProposal(value, blueprint)
+    const proposal = buildChapterBlueprintProposal(value, blueprint, text)
     if (!proposal.valid) continue
     for (const diff of proposal.diffs) {
       if (JSON.stringify(diff.current) === JSON.stringify(diff.proposed)) continue
@@ -103,6 +104,7 @@ export function buildConfigImpactPreview(
   blueprints: BlueprintData[],
   drafts: DraftMeta[],
   threads: NarrativeThreadView[],
+  text: (zhCN: string, enUS: string) => string,
 ): Extract<ConfigImpactPreviewState, { kind: 'valid' }> {
   const finalizedByChapter = new Map<number, FinalizedChapter>()
   const writtenChapters = new Set<number>()
@@ -126,7 +128,7 @@ export function buildConfigImpactPreview(
     })),
     activeThreads: threads.filter(thread => thread.status !== 'resolved' && thread.status !== 'abandoned'),
     finalizedChapters: [...finalizedByChapter.values()].sort((left, right) => left.chapterNumber - right.chapterNumber),
-    blueprintProposals: buildSelectableProposals(args, unwritten),
+    blueprintProposals: buildSelectableProposals(args, unwritten, text),
   }
 }
 
@@ -135,6 +137,7 @@ export function useConfigImpactPreview(
   proposalPreview: DomainProposalPreview,
 ): ConfigImpactPreviewState {
   const currentProject = useProjectStore(state => state.currentProject)
+  const text = useLocaleStore(state => state.text)
   const changedFields = useMemo(() => proposalPreview.diffs
     .map(diff => diff.field)
     .filter(field => STORY_FACT_FIELDS.has(field)), [proposalPreview.diffs])
@@ -172,7 +175,7 @@ export function useConfigImpactPreview(
       }
       setLoaded({
         key: requestKey,
-        preview: buildConfigImpactPreview(toolCall.arguments, changedFields, blueprints, drafts, threads),
+        preview: buildConfigImpactPreview(toolCall.arguments, changedFields, blueprints, drafts, threads, text),
       })
     }).catch(() => {
       if (!disposed) setLoaded({
@@ -181,7 +184,7 @@ export function useConfigImpactPreview(
       })
     })
     return () => { disposed = true }
-  }, [changedFields, currentProject, immediate, requestKey, toolCall.arguments, toolCall.projectSession])
+  }, [changedFields, currentProject, immediate, requestKey, text, toolCall.arguments, toolCall.projectSession])
 
   if (immediate) return immediate
   return loaded?.key === requestKey ? loaded.preview : { kind: 'loading', changedFields }

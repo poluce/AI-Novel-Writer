@@ -4,20 +4,14 @@ import { Type } from '@earendil-works/pi-ai'
 import { ProjectCoreRepository } from '../../repositories/project-core-repository'
 import type { RendererActionSink } from '../renderer-action'
 import {
+  buildNovelConfigProposal,
+  type ProposalText,
+} from '../../../src/shared/domain-proposals'
+import type { NovelConfig } from '../../../src/shared/ipc-channels'
+import {
   writingLanguageText,
   type WritingLanguage,
 } from '../../../src/shared/writing-language'
-
-const STRING_FIELDS = new Set([
-  'genre', 'subGenre', 'targetAudience', 'coreOutline', 'worldSetting', 'goldenFinger',
-  'protagonistProfile', 'globalGuidance', 'writingStyle', 'referenceWorks',
-])
-const NUMBER_FIELDS = new Set(['totalChapters', 'wordsPerChapter'])
-const ENUM_FIELDS: Record<string, readonly string[]> = {
-  plotStructure: ['three_act', 'heros_journey', 'save_the_cat', 'kishotenketsu', 'multi_thread', 'freeform'],
-  narrativePOV: ['third_limited', 'first_person', 'third_omniscient', 'multi_pov'],
-  writingLanguage: ['zh-CN', 'en-US'],
-}
 
 const Schema = Type.Object({
   changes: Type.Record(Type.String(), Type.Unknown()),
@@ -39,29 +33,19 @@ export function createProposeNovelConfigTool(
     description,
     parameters: Schema,
     execute: async (_id, params) => {
-      const candidate = params.changes
-      if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate) || Object.keys(candidate).length === 0) {
-        throw new Error(text('缺少小说配置变更字段', 'No novel configuration changes were provided'))
-      }
-
-      const changes: Record<string, unknown> = {}
-      for (const [field, proposed] of Object.entries(candidate)) {
-        const canonicalField = field === 'narrativePov' ? 'narrativePOV' : field
-        const normalizedValue = canonicalField === 'writingLanguage'
-          ? proposed === '简体中文' ? 'zh-CN' : proposed === 'English' ? 'en-US' : proposed
-          : proposed
-        if (STRING_FIELDS.has(canonicalField)) {
-          if (typeof normalizedValue !== 'string') throw new Error(text(`字段 ${field} 必须是文本`, `Field ${field} must be text`))
-        } else if (NUMBER_FIELDS.has(canonicalField)) {
-          if (!Number.isInteger(normalizedValue) || (normalizedValue as number) <= 0) throw new Error(text(`字段 ${field} 必须是正整数`, `Field ${field} must be a positive integer`))
-        } else if (canonicalField in ENUM_FIELDS) {
-          const allowed = ENUM_FIELDS[canonicalField] ?? []
-          if (!allowed.includes(String(normalizedValue))) throw new Error(text(`字段 ${field} 的值 ${JSON.stringify(normalizedValue)} 不受支持`, `Field ${field} has unsupported value ${JSON.stringify(normalizedValue)}`))
-        } else {
-          throw new Error(text(`未知小说配置字段：${field}`, `Unknown novel configuration field: ${field}`))
-        }
-        changes[canonicalField] = normalizedValue
-      }
+      // 与确认卡片共用同一份字段白名单与规范化逻辑。
+      const core = ProjectCoreRepository.get()
+      const current = {
+        ...(core ?? {}),
+        narrativePOV: core?.narrativePov,
+      } as unknown as NovelConfig
+      const proposal = buildNovelConfigProposal(
+        params as Record<string, unknown>,
+        current,
+        text as ProposalText,
+      )
+      if (!proposal.valid) throw new Error(proposal.error)
+      const changes = proposal.changes as Record<string, unknown>
 
       const { narrativePOV, ...rest } = changes
       ProjectCoreRepository.update({
