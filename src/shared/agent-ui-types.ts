@@ -19,8 +19,3 @@ export interface ConfigImpactBlueprintProposal {
   readonly name: 'propose_chapter_blueprint'
   readonly arguments: Record<string, unknown>
 }
-
-export interface ToolConfirmationDecision {
-  readonly confirmed: boolean
-  readonly blueprintProposals?: readonly ConfigImpactBlueprintProposal[]
-}

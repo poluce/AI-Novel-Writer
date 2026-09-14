@@ -126,8 +126,3 @@ export async function readVelaContent(
     console.warn('[readVelaContent] 不支持的路径协议:', filePath)
     return ''
 }
-
-/** 判断路径是否为 vela:// 伪协议 */
-export function isVelaProtocol(path: string): boolean {
-    return path.startsWith('vela://')
-}

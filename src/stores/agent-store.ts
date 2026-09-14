@@ -34,13 +34,6 @@ import { useProjectStore } from './project-store'
 import { useEditorStore } from './editor-store'
 import type { Locale } from '../i18n/types'
 
-export const AGENT_GENERATION_BUDGET = Object.freeze({
-  maxAttempts: 8,
-  maxRequestedOutputTokens: 65_536,
-  maxRequestedOutputTokensPerAttempt: 8192,
-  deadlineMs: 20 * 60_000,
-})
-
 // ===== 类型定义 =====
 
 /** 对话模式：Planning（深度推理）/ Fast（快速执行） */

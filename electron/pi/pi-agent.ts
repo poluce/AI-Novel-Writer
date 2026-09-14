@@ -2,12 +2,10 @@ import { Agent } from '@earendil-works/pi-agent-core'
 import type { AgentMessage, StreamFn } from '@earendil-works/pi-agent-core'
 import { logFailure, logInfo } from '../../src/shared/fail-log'
 
-import type { ModelProfile } from '../../src/shared/ipc-channels'
 import type { PiToolCallInfo } from '../../src/shared/agent-events'
 import { afterUnknownCommit } from './commit-state'
 import { truncateToolResultContent } from './tool-result'
 import { withLlmCallAccounting } from './llm-call-accounting'
-import { createPiModels } from './pi-models'
 import type { AnyAgentTool } from './tool-types'
 import type { PiModelRuntime } from './pi-models'
 
@@ -220,23 +218,4 @@ export function createPiAgent(options: CreatePiAgentOptions): PiAgentHandle {
       return agent.state.messages
     },
   }
-}
-
-/** Build a Pi Agent directly from a persisted model profile. */
-export function createPiAgentForProfile(options: {
-  profile: ModelProfile
-  systemPrompt: string
-  tools: AnyAgentTool[]
-  confirmationToolNames?: ReadonlySet<string>
-  callbacks: PiAgentCallbacks
-}): PiAgentHandle {
-  const { models, model } = createPiModels(options.profile)
-  return createPiAgent({
-    model,
-    streamFn: models.streamSimple.bind(models),
-    systemPrompt: options.systemPrompt,
-    tools: options.tools,
-    confirmationToolNames: options.confirmationToolNames,
-    callbacks: options.callbacks,
-  })
 }

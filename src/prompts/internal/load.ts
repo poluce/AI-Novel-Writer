@@ -65,11 +65,3 @@ export function sharedInternalPrompt(
     return value === undefined ? '' : String(value)
   })
 }
-
-/** 内部提示词 key 清单；用于一致性测试与排查。 */
-export function internalPromptKeys(language: WritingLanguage): readonly string[] {
-  return [...new Set([
-    ...Object.keys(SOURCES[resolveWritingLanguage(language)]),
-    ...Object.keys(SHARED_INTERNAL_PROMPT_SOURCES),
-  ])].sort()
-}

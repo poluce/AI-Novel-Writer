@@ -72,11 +72,6 @@ export function registerMCPHandlers(): void {
     return mcpManager.getAllResources()
   })
 
-  // 调用 MCP Tool
-  ipcMain.handle('mcp:call-tool', async (_event, serverId: string, toolName: string, args: Record<string, unknown>) => {
-    return await mcpManager.callTool(serverId, toolName, args)
-  })
-
   // 获取服务器状态
   ipcMain.handle('mcp:get-servers-status', async () => {
     return mcpManager.getServersStatus()

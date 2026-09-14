@@ -1,6 +1,5 @@
 import { app, ipcMain, dialog } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
-import path from 'node:path'
 import { isProjectSessionContext } from '../../src/shared/project-session-context'
 import { getEmbeddingConfig, hasUsableEmbeddingConfig } from '../services/embedding-config'
 import type { ImportRunExecutionAuthority } from '../../src/shared/import-run'
@@ -10,12 +9,6 @@ import { getCurrentProjectPath } from '../database'
 import { projectAccess } from '../services/project-access'
 import { assertRequiredExpectedProjectPath } from '../utils/project-context'
 import { externalFileGrants } from '../services/external-file-grant-service'
-import {
-  windowsSafeFileSystem,
-  type SecureFileCapability,
-  type WindowsSafeFileSystem,
-} from '../security/windows-safe-file-system'
-import { childFileCapability } from '../security/file-capability'
 import {
   LEGACY_VECTOR_MIGRATION_BLOCKED,
   LegacyVectorMigrationBlockedError,
@@ -30,12 +23,6 @@ function text(zhCNText: string, enUSText: string): string {
   return mainText(app.getLocale(), zhCNText, enUSText)
 }
 
-function invalidExternalGrantText(): string {
-  return text('外部文件授权无效或已失效，请重新选择。', 'The external file grant is invalid or has expired. Please choose again.')
-}
-
-const MAX_SECURE_KNOWLEDGE_IMPORT_FILES = 16_384
-const MAX_SECURE_KNOWLEDGE_IMPORT_DEPTH = 64
 const MAX_REFERENCE_IMPORT_DISPLAY_CHARACTERS = 160
 
 function isControlCharacter(character: string): boolean {
@@ -58,36 +45,6 @@ function referenceImportDisplayName(binding: { chapterNumber: number; title: str
     .trim() || '无标题'
   const boundedTitle = Array.from(safeTitle).slice(0, Math.max(0, titleBudget)).join('')
   return `${prefix}${boundedTitle}${suffix}`
-}
-
-async function readGrantedKnowledgeFolder(
-  fileSystem: WindowsSafeFileSystem,
-  root: SecureFileCapability,
-): Promise<Array<{ fileName: string; content: string }>> {
-  const imported: Array<{ fileName: string; content: string }> = []
-  const visit = async (directory: SecureFileCapability, depth: number): Promise<void> => {
-    if (depth > MAX_SECURE_KNOWLEDGE_IMPORT_DEPTH) {
-      throw new Error('SECURE_FS_DIRECTORY_TOO_DEEP')
-    }
-    const entries = await fileSystem.listDirectory(directory)
-    for (const entry of entries) {
-      const child = childFileCapability(directory, entry.name)
-      if (entry.isDirectory) {
-        await visit(child, depth + 1)
-        continue
-      }
-      if (!/\.(txt|md|markdown)$/i.test(entry.name)) continue
-      if (imported.length >= MAX_SECURE_KNOWLEDGE_IMPORT_FILES) {
-        throw new Error('SECURE_FS_DIRECTORY_TOO_LARGE')
-      }
-      imported.push({
-        fileName: path.basename(entry.name),
-        content: await fileSystem.readText(child),
-      })
-    }
-  }
-  await visit(root, 0)
-  return imported
 }
 
 function legacyMigrationBlockedFailure() {
@@ -153,84 +110,9 @@ function registerKnowledgeBaseHandler<Args extends unknown[]>(
   })
 }
 
-export function registerKBController(
-  fileSystem: WindowsSafeFileSystem = windowsSafeFileSystem,
-) {
+export function registerKBController() {
   // 所有 kb:* 操作需携带同一冻结会话；选择文件/目录仍是外部授权能力。
   const ipcMain = { handle: registerKnowledgeBaseHandler }
-  ipcMain.handle('kb:import-document', async (event, grantId: string, expectedProjectPath: string) => {
-    const projectPath = requireProjectPath(expectedProjectPath)
-    let importedFile: { fileName: string; content: string }
-    try {
-      const file = externalFileGrants.resolve({
-        grantId,
-        webContentsId: event.sender.id,
-        operation: 'read',
-      })
-      importedFile = {
-        fileName: path.basename(file.relativePath),
-        content: await fileSystem.readText(file),
-      }
-    } catch {
-      return { success: false, error: invalidExternalGrantText() }
-    }
-    const embConfig = getEmbeddingConfig()
-    const protocol = embConfig?.protocol ?? 'openai'
-    const model = embConfig?.model ?? { baseUrl: '', apiKey: '' }
-    return knowledgeBaseLoader.run((kb) => kb.importText(
-      importedFile.content,
-      importedFile.fileName,
-      projectPath,
-      protocol,
-      model,
-    ))
-  })
-
-  ipcMain.handle('kb:import-folder', async (event, grantId: string, expectedProjectPath: string) => {
-    const projectPath = requireProjectPath(expectedProjectPath)
-    let importedFiles: Array<{ fileName: string; content: string }>
-    try {
-      // Directory enumeration alone is not authority to read every discovered
-      // file. Validate the separate read operation before the one-use list
-      // capability is consumed and deleted.
-      const readableFolder = externalFileGrants.revalidate({
-        grantId,
-        webContentsId: event.sender.id,
-        operation: 'read',
-      })
-      externalFileGrants.resolve({
-        grantId,
-        webContentsId: event.sender.id,
-        operation: 'list',
-      })
-      importedFiles = await readGrantedKnowledgeFolder(fileSystem, readableFolder)
-    } catch {
-      return { success: false, importedCount: 0, failedFiles: [], error: invalidExternalGrantText() }
-    }
-    const embConfig = getEmbeddingConfig()
-    const protocol = embConfig?.protocol ?? 'openai'
-    const model = embConfig?.model ?? { baseUrl: '', apiKey: '' }
-    return knowledgeBaseLoader.run(async (kb) => {
-      const failedFiles: string[] = []
-      let importedCount = 0
-      for (const importedFile of importedFiles) {
-        const result = await kb.importText(
-          importedFile.content,
-          importedFile.fileName,
-          projectPath,
-          protocol,
-          model,
-        )
-        if (result.success) {
-          importedCount++
-        } else {
-          failedFiles.push(importedFile.fileName)
-        }
-      }
-      return { success: true, importedCount, failedFiles }
-    })
-  })
-
   ipcMain.handle('kb:import-text', async (_event, text: string, fileName: string, expectedProjectPath: string) => {
     const projectPath = requireProjectPath(expectedProjectPath)
     const embConfig = getEmbeddingConfig()
@@ -321,19 +203,6 @@ export function registerKBController(
         )
       }
       return kb.searchKnowledgeFTS(query, projectPath, topK ?? 5, undefined, ['reference'])
-    })
-  })
-
-  ipcMain.handle('kb:search-with-scope', async (_event, query: string, fromChapter: number, toChapter: number, topK: number | undefined, expectedProjectPath: string) => {
-    const projectPath = requireProjectPath(expectedProjectPath)
-    const embConfig = getEmbeddingConfig()
-
-    const scope: [number, number] = [fromChapter, toChapter]
-    return knowledgeBaseLoader.run((kb) => {
-      if (embConfig) {
-        return kb.searchKnowledge(query, projectPath, embConfig.protocol, embConfig.model, topK ?? 5, scope)
-      }
-      return kb.searchKnowledgeFTS(query, projectPath, topK ?? 5, scope)
     })
   })
 

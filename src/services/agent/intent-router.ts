@@ -113,13 +113,6 @@ export function searchSlashCommands(query: string, locale: Locale = 'zh-CN'): Sl
 }
 
 /**
- * 判断用户输入是否以 / 开头
- */
-export function isSlashCommand(input: string): boolean {
-  return input.trimStart().startsWith('/')
-}
-
-/**
  * 解析 / 命令
  */
 export function parseSlashCommand(input: string, locale: Locale = 'zh-CN'): {
@@ -168,30 +161,3 @@ export function searchMentionTargets(query: string, locale: Locale = 'zh-CN'): M
     t.value.toLowerCase().includes(q)
   )
 }
-
-/**
- * 解析输入中的 @ 提及
- */
-export function parseMentions(input: string, locale: Locale = 'zh-CN'): ParsedMention[] {
-  const mentions: ParsedMention[] = []
-  const regex = /@(\S+)/g
-  let match: RegExpExecArray | null = null
-
-  while ((match = regex.exec(input)) !== null) {
-    const value = match[1]
-    const target = getAllMentionTargets(locale).find(t =>
-      t.value === value || t.displayName === value
-    )
-    if (target) {
-      mentions.push({
-        target,
-        start: match.index,
-        end: match.index + match[0].length,
-      })
-    }
-  }
-
-  return mentions
-}
-
-

@@ -58,12 +58,6 @@ export const I18N_COVERAGE_BOUNDARIES = Object.freeze({
  * boundary, so scanning them would create false positives without improving
  * the language users see.
  */
-export const I18N_COVERAGE_EXCLUSIONS = Object.freeze([
-  'LLM prompts and response-parser strings that do not reach a renderer notification sink.',
-  'Console-only diagnostics that are not passed to a renderer notification sink.',
-  'Internal identifiers, IPC channel names, paths and protocol values outside visible-copy properties.',
-])
-
 const visibleWorkflowProperties = new Set([
   'title',
   'name',

@@ -104,14 +104,6 @@ export interface FinalizeOnlyParams {
 // 2. 草稿文件工具函数 (供前端 UI 侧调用)
 // ==========================================
 
-export function getDraftDir(_projectPath: string, chapterNumber: number): string {
-  return `vela://draft/ch${chapterNumber}`
-}
-
-export function getDraftPath(_projectPath: string, chapterNumber: number, version: number): string {
-  return `vela://draft/ch${chapterNumber}/v${version}`
-}
-
 const CHAPTER_CONTEXT_READ_RESOURCE_KEYS = Object.freeze([
   workflowResourceKey('novel-config'),
   workflowResourceKey('architecture'),

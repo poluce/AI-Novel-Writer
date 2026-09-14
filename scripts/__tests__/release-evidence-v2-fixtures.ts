@@ -1,6 +1,6 @@
 import path from 'node:path'
 import process from 'node:process'
-import { MACOS_FORMAL_DISTRIBUTION_POLICY, recordReleaseCommand, sha256File } from '../release-evidence-v2.mjs'
+import { recordReleaseCommand, sha256File } from '../release-evidence-v2.mjs'
 
 export const WINDOWS_COMMAND_STEPS = [
   'install-locked-dependencies',
@@ -55,62 +55,6 @@ export function windowsAcceptanceReceipt(releaseRoot: string, version: string, n
       reference(releaseRoot, 'packaged-skin-smoke', 'packaged-skin-smoke.json'),
     ] },
     signing: { ...base(name), kind: 'windows-signing', direct: { authenticodeStatus: 'NotSigned', installerSha256: sha256 }, status: 'unsigned', validationResult: 'NotSigned', unsignedDistributionImpact: 'Windows may display an unknown-publisher warning.' },
-  }
-  return receipts[name]
-}
-
-export function macosAcceptanceReceipt(releaseRoot: string, version: string, name: string) {
-  const dmg = `ai-novel-writer-mac-arm64-${version}-installer.dmg`
-  const dmgSha256 = sha256File(path.join(releaseRoot, dmg))
-  const outputSha256 = 'b'.repeat(64)
-  const receipts: Record<string, unknown> = {
-    'dmg-mount': {
-      ...base(name), kind: 'dmg-mount', platform: 'darwin', arch: 'arm64',
-      direct: {
-        dmg: { path: `/tmp/${dmg}`, filename: dmg }, app: { path: '/Volumes/AI/AI小说作家.app', bundleName: 'AI小说作家.app' },
-        executable: { path: '/Volumes/AI/AI小说作家.app/Contents/MacOS/AI小说作家', present: true },
-        helper: { path: '/Volumes/AI/AI小说作家.app/Contents/Resources/security/darwin-safe-file-system', present: true },
-        hash: { algorithm: 'sha256', value: dmgSha256 }, mount: { path: '/Volumes/AI', attached: true, command: 'hdiutil attach -readonly -nobrowse -mountpoint' },
-        unmount: { attempted: true, succeeded: true, command: 'hdiutil detach -force -quiet' },
-      },
-    },
-    'packaged-smoke': {
-      ...base(name), kind: 'packaged-smoke', platform: 'darwin', arch: 'arm64',
-      direct: { mountedApplication: 'AI小说作家.app', secureFileSystemHelper: 'security/darwin-safe-file-system', secureFileSystemSmoke: true, dmgSha256, vectorSmoke: true, officialHomepageSmoke: true, skinSmoke: true },
-      references: {
-        vector: reference(releaseRoot, 'packaged-vector-smoke', 'packaged-vector-smoke.json'),
-        officialHomepage: reference(releaseRoot, 'packaged-official-homepage-smoke', 'packaged-official-homepage-smoke.json'),
-        skin: reference(releaseRoot, 'packaged-skin-smoke', 'packaged-skin-smoke.json'),
-        macosDmgSmoke: reference(releaseRoot, 'macos-dmg-smoke', 'macos-dmg-smoke.json'),
-      },
-    },
-    signing: {
-      ...base(name), kind: 'signing', platform: 'darwin', arch: 'arm64', status: MACOS_FORMAL_DISTRIBUTION_POLICY.codeSigning,
-      validationResult: 'Observed an ad-hoc signature without a Developer ID identity; notarization and Gatekeeper are recorded separately.',
-      unsignedDistributionImpact: 'macOS Gatekeeper may require a manual Allow action.',
-      gatekeeperImpact: 'macOS Gatekeeper may require a manual Allow action.',
-      direct: {
-        codeSigning: {
-          expected: MACOS_FORMAL_DISTRIBUTION_POLICY.codeSigning,
-          observed: 'ad_hoc',
-          signature: 'adhoc',
-          teamIdentifier: 'not set',
-          authorities: [],
-          hasDeveloperIdIdentity: false,
-          details: { command: 'codesign -dv --verbose=4', exitCode: 0, outputSha256 },
-          verification: { command: 'codesign --verify --deep --strict --verbose=2', exitCode: 0, outputSha256 },
-        },
-        notarization: {
-          expected: MACOS_FORMAL_DISTRIBUTION_POLICY.notarization,
-          observed: MACOS_FORMAL_DISTRIBUTION_POLICY.notarization,
-          basis: 'The formal release has no Apple notarization stage.',
-        },
-        gatekeeper: {
-          assessment: { command: 'spctl --assess --type execute --verbose=4', exitCode: 1, outputSha256 },
-          observed: 'manual-confirmation-may-be-required',
-        },
-      },
-    },
   }
   return receipts[name]
 }

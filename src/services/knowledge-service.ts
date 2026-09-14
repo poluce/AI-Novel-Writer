@@ -82,32 +82,10 @@ export async function getStats(expectedProjectPath: string): Promise<KBStatsData
   return unwrapKnowledgeValue(await ipc.invoke('kb:stats', expectedProjectPath))
 }
 
-/** 同时加载文档列表和统计（常用组合） */
-export async function loadKBData(expectedProjectPath: string): Promise<{ documents: KBDocument[]; stats: KBStatsData }> {
-  const [documentsResult, statsResult] = await Promise.all([
-    ipc.invoke('kb:list-documents', expectedProjectPath),
-    ipc.invoke('kb:stats', expectedProjectPath),
-  ])
-  return {
-    documents: unwrapKnowledgeValue(documentsResult),
-    stats: unwrapKnowledgeValue(statsResult),
-  }
-}
-
 /** 获取缺失向量的文档块数量 */
 export async function getVectorlessCount(expectedProjectPath: string): Promise<number> {
   const result = unwrapKnowledgeValue(await ipc.invoke('kb:get-vectorless-count', expectedProjectPath))
   return result.count
-}
-
-/** Read whether an explicit vector rebuild can safely be offered. */
-export async function getVectorRebuildStatus(expectedProjectPath: string): Promise<VectorRebuildStatus> {
-  return unwrapKnowledgeValue(await ipc.invoke('kb:get-vector-rebuild-status', expectedProjectPath))
-}
-
-/** 执行语义检索 */
-export async function searchKB(query: string, topK: number, expectedProjectPath: string): Promise<SearchResult[]> {
-  return unwrapKnowledgeValue(await ipc.invoke('kb:search', query, topK, expectedProjectPath))
 }
 
 /** 执行向量回填 */
@@ -118,14 +96,6 @@ export async function backfillVectors(expectedProjectPath: string): Promise<{ su
 /** 清空当前项目知识库 */
 export async function clearKnowledgeBase(expectedProjectPath: string): Promise<{ success: boolean; error?: string }> {
   return ipc.invoke('kb:clear-all', expectedProjectPath)
-}
-
-export async function importKnowledgeDocument(grantId: string, expectedProjectPath: string) {
-  return ipc.invoke('kb:import-document', grantId, expectedProjectPath)
-}
-
-export async function importKnowledgeFolder(grantId: string, expectedProjectPath: string) {
-  return ipc.invoke('kb:import-folder', grantId, expectedProjectPath)
 }
 
 export async function removeKnowledgeDocument(docId: string, expectedProjectPath: string) {

@@ -1034,8 +1034,6 @@ export interface DatabaseChannels {
 
 // ===== 知识库频道 =====
 export interface KnowledgeBaseChannels {
-  'kb:import-document': { args: [grantId: string, expectedProjectPath: string]; return: { success: boolean; docId?: string; chunkCount?: number; error?: string; errorCode?: AppErrorCode } }
-  'kb:import-folder': { args: [grantId: string, expectedProjectPath: string]; return: { success: boolean; importedCount: number; failedFiles: string[]; error?: string; errorCode?: AppErrorCode } }
   'kb:import-text': { args: [text: string, fileName: string, expectedProjectPath: string]; return: { success: boolean; docId?: string; chunkCount?: number; error?: string; errorCode?: AppErrorCode } }
   'kb:import-planning-text': { args: [text: string, fileName: string, expectedProjectPath: string]; return: { success: boolean; docId?: string; chunkCount?: number; error?: string; errorCode?: AppErrorCode } }
   'kb:import-reference-text': {
@@ -1048,7 +1046,6 @@ export interface KnowledgeBaseChannels {
   }
   'kb:search': { args: [query: string, topK: number | undefined, expectedProjectPath: string]; return: AppResult<Array<{ text: string; score: number; fileName: string }>> }
   'kb:search-writing-context': { args: [query: string, topK: number | undefined, expectedProjectPath: string]; return: AppResult<Array<{ text: string; score: number; fileName: string }>> }
-  'kb:search-with-scope': { args: [query: string, fromChapter: number, toChapter: number, topK: number | undefined, expectedProjectPath: string]; return: AppResult<Array<{ text: string; score: number; fileName: string }>> }
   'kb:list-documents': { args: [expectedProjectPath: string]; return: AppResult<Array<{ id: string; fileName: string; importedAt: string; chunkCount: number; filePath: string }>> }
   'kb:remove-document': { args: [docId: string, expectedProjectPath: string]; return: { success: boolean; error?: string } }
   'kb:clear-all': { args: [expectedProjectPath: string]; return: { success: boolean; error?: string } }
@@ -1155,7 +1152,6 @@ export interface MCPChannels {
   'mcp:disconnect-all': { args: []; return: { success: boolean; error?: string } }
   'mcp:list-tools': { args: []; return: MCPToolDescription[] }
   'mcp:list-resources': { args: []; return: MCPResourceDescription[] }
-  'mcp:call-tool': { args: [serverId: string, toolName: string, args: Record<string, unknown>]; return: { success: boolean; content: string; error?: string } }
   'mcp:get-servers-status': { args: []; return: MCPServerStatus[] }
   'mcp:get-config-path': { args: []; return: string }
 }
