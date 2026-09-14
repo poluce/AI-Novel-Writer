@@ -229,13 +229,18 @@ export class AgentSession {
       tokensAfter: estimateContextTokens(this.agent.messages).tokens,
       keptMessages: retainedTail.length,
     })
+    // 存档里 compaction 条目代表整个前缀，计数器从摘要 + 尾部重新起算。
+    this.persistedCount = this.agent.messages.length
+    this.previousCompaction = null
     if (!this.store || !this.conversationId) return
     try {
-      await this.store.recordCompaction(this.conversationId, { summary, tokensBefore, retainedTail })
-      // 存档里 compaction 条目已经代表整个前缀，计数器从摘要+尾部重新起算。
-      this.persistedCount = this.agent.messages.length
-      this.previousCompaction = null
+      this.previousCompaction = await this.store.recordCompaction(this.conversationId, {
+        summary,
+        tokensBefore,
+        retainedTail,
+      })
     } catch (error) {
+      // 没落盘就不知道条目 id/seq，下一次压缩当普通历史重新摘要，结果仍正确。
       logFailure('Agent', 'failed to persist compaction', error, {
         conversationId: this.conversationId,
       })
@@ -250,12 +255,17 @@ export class AgentSession {
     const entries: Entry[] = []
     let parentId: string | null = null
     let seq = 0
-    if (this.previousCompaction) {
-      entries.push(this.previousCompaction)
-      parentId = this.previousCompaction.id
-      seq = this.previousCompaction.seq + 1
+    let window = messages
+    const previous = this.previousCompaction
+    if (previous && messages[0]?.role === 'compactionSummary') {
+      // 上一次的摘要与保留尾部已经在这个条目里（它就是内存里的前 N 条），
+      // 再当普通消息加一遍会重复；Pi 拿到这个条目后做增量摘要。
+      entries.push(previous)
+      parentId = previous.id
+      seq = previous.seq + 1
+      window = messages.slice(1 + previous.retainedTail.length)
     }
-    for (const message of messages) {
+    for (const message of window) {
       const entry: MessageEntry = {
         id: `memory-${seq}`,
         parentId,

@@ -3,7 +3,13 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { afterEach, describe, expect, it } from 'vitest'
-import type { AgentMessage, Entry } from '@earendil-works/pi-agent-core'
+import {
+  DEFAULT_COMPACTION_SETTINGS,
+  prepareCompaction,
+  type AgentMessage,
+  type Entry,
+  type MessageEntry,
+} from '@earendil-works/pi-agent-core'
 
 import { AgentConversationStore, projectContext } from '../agent-conversation-store'
 
@@ -73,11 +79,14 @@ describe('AgentConversationStore', () => {
     const summarized = [userMessage('很早的问题'), assistantMessage('很早的回答')]
     const retained = [userMessage('最近的问题'), assistantMessage('最近的回答')]
     await store.appendMessages('conv-1', [...summarized, ...retained])
-    await store.recordCompaction('conv-1', {
+    const entry = await store.recordCompaction('conv-1', {
       summary: '用户问了很早的问题，助手回答了。',
       tokensBefore: 4096,
       retainedTail: retained,
     })
+    // 写回的条目带着仓库分配的 seq/timestamp，会话侧要靠它做下一次增量摘要。
+    expect(entry).toMatchObject({ type: 'compaction', tokensBefore: 4096 })
+    expect(entry?.seq).toBeGreaterThan(0)
     await store.appendMessages('conv-1', [userMessage('压缩之后的新问题')])
     await store.close()
 
@@ -89,6 +98,25 @@ describe('AgentConversationStore', () => {
     expect(JSON.stringify(snapshot?.messages[0])).toContain('很早的问题')
     expect(JSON.stringify(snapshot?.messages)).not.toContain('很早的回答')
     expect(snapshot?.previousCompaction?.tokensBefore).toBe(4096)
+
+    // 读回来的压缩条目要能直接喂给 Pi 的 prepareCompaction：它据此做增量摘要，
+    // 而不是把摘要当普通历史从零再写一遍。
+    const afterCompaction: MessageEntry[] = (snapshot?.messages.slice(3) ?? []).map((message, index) => ({
+      id: `after-${index}`,
+      parentId: null,
+      seq: 100 + index,
+      timestamp: Date.now(),
+      type: 'message',
+      message,
+    }))
+    const next = prepareCompaction(
+      [snapshot!.previousCompaction!, ...afterCompaction],
+      DEFAULT_COMPACTION_SETTINGS,
+    )
+    expect(next.ok).toBe(true)
+    if (next.ok && next.value) {
+      expect(next.value.previousSummary).toBe('用户问了很早的问题，助手回答了。')
+    }
     await reopened.close()
   })
 

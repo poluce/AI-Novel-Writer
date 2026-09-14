@@ -137,7 +137,17 @@ describe('AgentSession', () => {
       fauxAssistantMessage('回合前缀摘要。'),
       fauxAssistantMessage('好的。'),
     ])
-    const recordCompaction = vi.fn(async () => {})
+    const recordCompaction = vi.fn(async () => ({
+      id: 'stored-compaction',
+      parentId: null,
+      seq: 42,
+      timestamp: 1,
+      type: 'compaction' as const,
+      summary: '摘要：用户一直在核对第三章。',
+      retainedTail: [],
+      tokensBefore: 66,
+      fromHook: false,
+    }))
     const store = { recordCompaction, appendMessages: vi.fn(async () => {}) } as unknown as AgentConversationStore
     const model = fauxChatModel(faux)
     model.contextWindow = 60

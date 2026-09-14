@@ -27,11 +27,13 @@ const SCREEN_BODY = '屏幕上的未保存正文'
 
 let root: Root
 let container: HTMLDivElement
-async function defaultInvoke(channel: string, ..._args: unknown[]): Promise<unknown> {
+async function defaultInvoke(channel: string, ...args: unknown[]): Promise<unknown> {
   if (channel === 'db:draft-get-meta') {
+    // 桩按请求的草稿 id 回答：用例切章时读到的才是新章的数据。
+    const id = typeof args[0] === 'number' ? args[0] : 7
     return {
-      id: 7,
-      chapterNumber: 1,
+      id,
+      chapterNumber: id === 7 ? 1 : 2,
       version: 1,
       status: 'draft',
       source: 'write',
@@ -254,10 +256,6 @@ describe('DraftEditor AI source snapshot', () => {
     let openDraftEightGate: () => void = () => {}
     const draftEightGate = new Promise<void>((resolve) => { openDraftEightGate = resolve })
     invoke.mockImplementation(async (channel: string, ...args: unknown[]) => {
-      if (channel === 'db:draft-get-meta') {
-        const base = await defaultInvoke(channel) as Record<string, unknown>
-        return { ...base, id: args[0], chapterNumber: args[0] === 7 ? 1 : 2 }
-      }
       if (channel === 'db:draft-list-annotations') {
         if (args[0] === 8) {
           // 第 8 章的批注读取挂住：这一段正是"上一章批注还在内存里"的窗口。
@@ -266,7 +264,7 @@ describe('DraftEditor AI source snapshot', () => {
         }
         return args[0] === 7 ? [annotation] : []
       }
-      return defaultInvoke(channel)
+      return defaultInvoke(channel, ...args)
     })
     const loadsFor = (draftId: number) => invoke.mock.calls.some(
       ([channel, id]) => channel === 'db:draft-list-annotations' && id === draftId,

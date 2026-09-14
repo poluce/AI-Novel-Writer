@@ -84,31 +84,36 @@ export class AgentConversationStore {
     }
   }
 
-  /** 把已压缩的前缀写成 Pi 的 compaction 条目（含保留的尾部）。 */
+  /**
+   * 把已压缩的前缀写成 Pi 的 compaction 条目（含保留的尾部），
+   * 返回写进去的条目，让会话侧记住它、下一次做增量摘要。
+   */
   async recordCompaction(
     conversationId: string,
     compaction: AgentConversationCompaction,
-  ): Promise<void> {
+  ): Promise<CompactionEntry | null> {
     const session = await this.sessionFor(conversationId, true)
-    if (!session) return
+    if (!session) return null
     const branch = await this.branchOf(session)
-    if (!branch) return
+    if (!branch) return null
     const parentId = await branch.getTipId(BACKGROUND_CONTEXT)
     const id = session.idGenerator.next()
+    const entry = {
+      id,
+      parentId,
+      type: 'compaction' as const,
+      summary: compaction.summary,
+      retainedTail: [...compaction.retainedTail],
+      tokensBefore: compaction.tokensBefore,
+      fromHook: false,
+    }
     // 和 Pi 的运行层一样：条目写进去之后必须把分支尖端挪到它上面，
     // 否则后续消息会挂在压缩条目之前，压缩就等于没发生过。
-    await session.mutate((mutator) => mutator.commit([
-      insertEntry({
-        id,
-        parentId,
-        type: 'compaction',
-        summary: compaction.summary,
-        retainedTail: [...compaction.retainedTail],
-        tokensBefore: compaction.tokensBefore,
-        fromHook: false,
-      }),
+    const committed = await session.mutate((mutator) => mutator.commit([
+      insertEntry(entry),
       setValue(branchTip(BRANCH_NAME), id),
     ], BACKGROUND_CONTEXT), BACKGROUND_CONTEXT)
+    return { ...entry, seq: committed.seqs[0], timestamp: committed.timestamp }
   }
 
   async delete(conversationId: string): Promise<void> {
