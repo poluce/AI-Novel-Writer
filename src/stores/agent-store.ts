@@ -305,6 +305,10 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   },
 
   deleteConversation: (id) => {
+    // Pi 会话存档跟着一起删；失败只影响磁盘残留，不挡界面。
+    void ipc.invoke('agent:discard-session', id).catch((error) => {
+      logFailure('Agent', 'discard conversation session failed', error)
+    })
     set(state => {
       const filtered = state.conversations.filter(c => c.id !== id)
       // 如果删除的是当前会话，激活下一条或 null
@@ -316,6 +320,11 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   },
 
   clearAll: () => {
+    for (const conversation of get().conversations) {
+      void ipc.invoke('agent:discard-session', conversation.id).catch((error) => {
+        logFailure('Agent', 'discard conversation session failed', error)
+      })
+    }
     set({ conversations: [], activeConversationId: null })
   },
 

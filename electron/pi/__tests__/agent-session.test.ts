@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
-import type { AgentTool } from '@earendil-works/pi-agent-core'
+import type { AgentMessage, AgentTool } from '@earendil-works/pi-agent-core'
 import { createModels, Type } from '@earendil-works/pi-ai'
 import {
   fauxAssistantMessage,
@@ -12,6 +12,7 @@ import { fauxChatModel } from './faux-model'
 
 import { AgentSession } from '../agent-session'
 import type { PiAgentEvent } from '../agent-session'
+import type { AgentConversationStore } from '../agent-conversation-store'
 
 const AddSchema = Type.Object({ a: Type.Number(), b: Type.Number() })
 
@@ -37,6 +38,7 @@ function buildSession(decision: (callId: string) => boolean, events: PiAgentEven
 
   const session = new AgentSession({
     model: fauxChatModel(faux),
+    models,
     streamFn: models.streamSimple.bind(models),
     systemPrompt: 'You are a calculator.',
     tools: [addTool],
@@ -86,6 +88,91 @@ describe('AgentSession', () => {
     if (complete?.type === 'tool_call_complete') {
       expect(complete.call.status).toBe('failed')
     }
+  })
+
+  it('restores a snapshot from the Pi session and persists what follows', async () => {
+    const faux = fauxProvider()
+    const models = createModels()
+    models.setProvider(faux.provider)
+    faux.setResponses([fauxAssistantMessage('接着聊。')])
+    const appendMessages = vi.fn(async () => {})
+    const store = { appendMessages } as unknown as AgentConversationStore
+
+    const session = new AgentSession({
+      model: fauxChatModel(faux),
+      models,
+      streamFn: models.streamSimple.bind(models),
+      systemPrompt: 'You are a calculator.',
+      tools: [],
+      language: 'zh-CN',
+      emit: () => {},
+      store,
+      conversationId: 'conv-1',
+    })
+
+    expect(session.restoreSnapshot({
+      messages: [
+        { role: 'user', content: '上一轮的问题', timestamp: 1 },
+        { role: 'assistant', content: [{ type: 'text', text: '上一轮的回答' }], timestamp: 2 },
+      ],
+    })).toBe(true)
+    expect(session.messages).toHaveLength(2)
+
+    await session.prompt('继续')
+
+    const persisted = appendMessages.mock.calls[0] as unknown as [string, AgentMessage[]]
+    expect(persisted[0]).toBe('conv-1')
+    expect(persisted[1].map(message => message.role)).toEqual(['user', 'assistant'])
+    expect(JSON.stringify(persisted[1][0])).toContain('继续')
+  })
+
+  it('compacts an over-long context through Pi before the next turn', async () => {
+    const faux = fauxProvider()
+    const models = createModels()
+    models.setProvider(faux.provider)
+    // 压缩本身会打模型（摘要 + 被切开的回合前缀），先给它两次响应，再给本轮回答。
+    faux.setResponses([
+      fauxAssistantMessage('摘要：用户一直在核对第三章。'),
+      fauxAssistantMessage('回合前缀摘要。'),
+      fauxAssistantMessage('好的。'),
+    ])
+    const recordCompaction = vi.fn(async () => {})
+    const store = { recordCompaction, appendMessages: vi.fn(async () => {}) } as unknown as AgentConversationStore
+    const model = fauxChatModel(faux)
+    model.contextWindow = 60
+
+    const session = new AgentSession({
+      model,
+      models,
+      streamFn: models.streamSimple.bind(models),
+      systemPrompt: 'You are a calculator.',
+      tools: [],
+      language: 'zh-CN',
+      emit: () => {},
+      store,
+      conversationId: 'conv-1',
+      compactionSettings: { enabled: true, reserveTokens: 8, keepRecentTokens: 4 },
+    })
+    session.restoreSnapshot({
+      messages: Array.from({ length: 12 }, (_, index) => ({
+        role: index % 2 === 0 ? 'user' as const : 'assistant' as const,
+        content: index % 2 === 0
+          ? `第 ${index} 轮的问题，内容足够长以便触发压缩判断。`
+          : [{ type: 'text' as const, text: `第 ${index} 轮的回答，同样写得长一些。` }],
+        timestamp: index,
+      })),
+    })
+
+    await session.prompt('继续')
+
+    expect(session.messages[0]).toMatchObject({ role: 'compactionSummary' })
+    expect(JSON.stringify(session.messages[0])).toContain('摘要：用户一直在核对第三章。')
+    expect(session.messages.length).toBeLessThan(13)
+    expect(recordCompaction).toHaveBeenCalledWith('conv-1', expect.objectContaining({
+      summary: expect.stringContaining('摘要：用户一直在核对第三章。'),
+      tokensBefore: expect.any(Number),
+      retainedTail: expect.any(Array),
+    }))
   })
 
   it('restores prior user/assistant turns onto a new session', () => {

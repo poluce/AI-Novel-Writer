@@ -28,6 +28,7 @@
 - **用户数据全部可正常读取**：
   - 小说项目数据（`vela.db` 的草稿 / 蓝图 / 角色 / 定稿 / 审稿 / 恢复候选）——本次不动该 schema
   - 用户配置数据（`~/.vela/models.json` 模型配置、`mcp_config.json`、`skills/`、`prompts/` 覆盖文件、项目 `.vela/` 内容）——继续读取，不改变文件位置与格式约定
+  - 助手对话：界面存档 `.vela/agent-conversations.json` 位置与格式不变；**新增** Pi 会话存档 `.vela/agent-sessions/`（第三批，见 P8），旧的 `.vela/agent-conversations.json` 原样当迁移来源读
 
 ### 实现方式的变化（仅底层，不影响功能与数据读取）
 
@@ -46,7 +47,8 @@
 - 多会话并行 UI（会话列表、多会话同时生成）
 - 角色配置层（RoleProfile：每角色独立模型 / 提示词 / Skill / 推理强度）
 - 审稿环节单独选模型（当前 `ReviewOnlyParams` 无模型字段）
-- 会话重启持久化（现状为纯内存，重启即丢；属新增能力）
+- ~~会话重启持久化~~：**已改到本次范围内**（第三批，见 P8）；渲染层的对话存档仍在，主进程不再"重启即丢"。
+- 多会话并行的会话列表 UI 仍属后续（Pi 的分支/fork 能力本期不用）
 - **移除 NovelAI**：独立工作，见 [`2026-09-11-remove-novelai.md`](2026-09-11-remove-novelai.md)；本迁移不删预设/兼容分支/README 章节
 
 ## 自研 Agent 遗产（换 Pi 后删除）
@@ -224,7 +226,7 @@
   7. 写作助手：写入工具需确认；`toolCalling: false` 模型被拒绝
   8. 切书：在途生成 abort，助手会话不跨书保活
 - [x] **数据读取回归**：列入上表第 1 条；代码路径未改配置/提示词/MCP/Skill 落盘位置（对话历史的落盘位置在第三批改变，见 P8）
-- [x] 全量回归：`tsc --noEmit`、`check:i18n`、`pnpm build` 已通过；Windows + UTF-8 下 `vitest run` **320 files / 2736 passed / 9 skipped**（补齐 `electron.exe` 后；用 `pnpm test:node` 跑，它会自动切换 better-sqlite3 的 ABI）
+- [x] 全量回归：`tsc --noEmit`、`check:i18n`、`pnpm build` 已通过；Windows + UTF-8 下 `vitest run` **323 files / 2771 passed / 9 skipped**（补齐 `electron.exe` 后；用 `pnpm test:node` 跑，它会自动切换 better-sqlite3 的 ABI）
 - [x] Windows 原生运行验证（自动化）：本机 `electron.exe` **v41.10.7**；`prepare-native-for-electron` / `startup-native-isolation` / `main-skin-startup` 通过。GUI 手工清单见上一条，**尚未点验**
 
 ## 阶段 7：文档与发布（P7）
@@ -236,6 +238,37 @@
 - [x] electron-builder 依赖包含/排除检查：Pi 为 ESM-only，主进程 Vite 外部化 `@earendil-works/pi-*`；builder 不排除它们，随生产 node_modules 入包。native asarUnpack 仍只覆盖 sqlite/lancedb
 - [x] **CI 工作流适配**：`pr-ci.yml` 已是 Node 22.23.1 + pnpm 11.21 frozen install + typecheck/test/build；Pi 包走 lockfile，无需单独步骤
 - [x] 发布门禁检查：`release-win-verify` 仍以 `pnpm test` 为第一步；Pi 包走 lockfile，无额外供应链步骤
+
+## 阶段 8：把还能交给 Pi 的都交出去（第二批 / 第三批）
+
+> 前七阶段只换了「跑模型的引擎」，自己还留着的两件轮子在这一阶段交给 Pi：
+> 技能清单（Pi 有 `formatSkillsForSystemPrompt`）和会话存档 + 上下文压缩
+> （Pi 有 `harness/session` 与 `harness/compaction`）。决策见
+> [`0019-pi-owns-conversation-storage-and-compaction.md`](../adr/0019-pi-owns-conversation-storage-and-compaction.md)。
+
+### 类型收口与目录（第一批收尾）
+
+- [x] `AgentTool<any>` / `Model<any>` → 单一定义的容器类型：`AnyAgentTool = AgentTool<TSchema, unknown>`（`electron/pi/tool-types.ts`）与 `PiChatModel`（`electron/pi/pi-models.ts`）。库的泛型既不协变也不逆变，这是唯一既过类型检查又不写 `any` 的形态
+- [x] `src/services/agent/tools/project-context.ts` → `src/services/agent/project-context.ts`（它服务整个 agent 目录，不专属工具层）
+- [x] 迁移计划校订：P2「工具仍在渲染层」、P4「工作流入口尚未改走此层」等过时表述已改；手工回归清单改回未勾选，明确仍待点验
+
+### 技能清单进系统提示词（第二批）
+
+- [x] 渲染层把已加载技能压成目录（`src/services/agent/skill-catalog.ts` + `src/shared/agent-skills.ts`），随 `agent:prompt` / `agent:system-prompt` 交给主进程
+- [x] 主进程用 Pi 的 `formatSkillsForSystemPrompt` 渲染进系统提示词；技能正文仍然不进提示词，另附一句本应用的调用方式（用户 `/技能名` 或工作流阶段绑定，不要用 read_file 读技能文件）
+- [x] 目录在主进程校验（`isAgentSkillCatalog`），异常负载只丢目录、不影响该轮；描述与条数有上限
+- [x] 显示名/描述规则收敛为 `skillDisplayName` / `skillDescription`，技能列表、斜杠菜单、注入文案三处重复的三元表达式统一
+- [x] 系统提示词改成每轮刷新，新装的技能下一轮即对模型可见
+
+### 会话存档与压缩交给 Pi（第三批）
+
+- [x] Pi 会话存档 `electron/pi/agent-conversation-store.ts`：`JsonlSessionRepo` + `StorageBackedSession`，落在 `<项目>/.vela/agent-sessions/`，一个对话一个会话（`main` 分支），存原始 `AgentMessage`（含工具回合）
+- [x] 读档按 Pi 的上下文投影规则（最近一条 compaction 之前只留摘要与保留尾部；失败/中止的助手回合不进上下文）；函数 Pi 未导出，按同语义实现并标注对照
+- [x] 会话恢复优先级：Pi 会话存档 → 渲染层纯文本历史（旧数据因此自然迁移，不需要额外导入脚本或标记文件）
+- [x] 压缩走 Pi：`estimateContextTokens` + `shouldCompact` + `prepareCompaction` + `compact`（阈值 `DEFAULT_COMPACTION_SETTINGS`），在每轮开始前判断；结果按 Pi 的 `compactionSummary` 表示，并落一条 `compaction` 条目（提交时同时推进分支尖端）
+- [x] 压缩的那次模型调用进 `llm_calls`（`withCompactionCallAccounting`）
+- [x] 存档尽力而为：读写失败只记日志；`agent:discard-session` 在用户删会话/清空时删掉对应存档
+- [x] 测试：`electron/pi/__tests__/agent-conversation-store.test.ts`（落盘往返、压缩投影、删除、写失败不炸）、`agent-session.test.ts`（真实 Pi 压缩：66 → 20 tokens）、`agent-session-manager.test.ts`（存档优先、旧历史兜底、读档失败兜底、丢弃）
 
 ## 附加任务：DSH 插件移除（独立于 Pi 迁移）— ✅ 已完成
 

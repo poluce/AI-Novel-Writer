@@ -52,6 +52,8 @@ describe('Agent IPC bridge', () => {
       'model-a',
       expect.any(Object),
       [],
+      // 技能目录随每一轮发给主进程，供系统提示词列出可用技能。
+      expect.any(Array),
     )
   })
 
@@ -101,6 +103,7 @@ describe('Agent IPC bridge', () => {
       undefined,
       expect.any(Object),
       [],
+      expect.any(Array),
     )
   })
 

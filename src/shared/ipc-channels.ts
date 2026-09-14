@@ -1181,6 +1181,10 @@ export interface AgentChannels {
     args: [conversationId: string]
     return: { success: boolean }
   }
+  'agent:discard-session': {
+    args: [conversationId: string]
+    return: { success: boolean }
+  }
   'agent:system-prompt': {
     args: [skills?: AgentSkillCatalogEntry[]]
     return: { success: boolean; prompt?: string; error?: string }

@@ -1,6 +1,7 @@
 import { ipcMain, BrowserWindow } from 'electron'
 
 import { AgentSessionManager } from './agent-session-manager'
+import { AgentConversationStore } from './agent-conversation-store'
 import { setPiProjectCloseHook } from './in-flight'
 import { createRendererActionDispatcher } from './renderer-action-dispatch'
 import type { AgentEditorSnapshot, RendererActionResult } from '../../src/shared/agent-events'
@@ -63,6 +64,36 @@ function acceptedSkillCatalog(value: unknown): AgentSkillCatalogEntry[] | undefi
   return value
 }
 
+/**
+ * 助手会话存档按项目隔离：换书必须换存档，且旧存档要关掉文件句柄。
+ * 只在有项目时创建；项目路径变了就重建。
+ */
+let conversationStore: AgentConversationStore | null = null
+let conversationStorePath: string | null = null
+
+function resolveConversationStore(): AgentConversationStore | null {
+  const projectPath = getCurrentProjectPath()
+  if (!projectPath) {
+    closeConversationStore()
+    return null
+  }
+  if (conversationStore && conversationStorePath === projectPath) return conversationStore
+  closeConversationStore()
+  conversationStore = new AgentConversationStore(projectPath)
+  conversationStorePath = projectPath
+  return conversationStore
+}
+
+function closeConversationStore(): void {
+  const store = conversationStore
+  conversationStore = null
+  conversationStorePath = null
+  if (!store) return
+  void store.close().catch((error) => {
+    logFailure('Agent', 'failed to close conversation store', error)
+  })
+}
+
 function mainWindow(): BrowserWindow | null {
   return BrowserWindow.getAllWindows()[0] ?? null
 }
@@ -113,10 +144,13 @@ export function registerAgentController(): void {
       mainWindow()?.webContents.send('agent:event', { conversationId, event })
     },
     rendererAction: (action) => dispatcher.rendererAction(action),
+    resolveConversationStore: () => resolveConversationStore(),
   })
   setPiProjectCloseHook(() => {
     dispatcher.abortAll()
     manager.abortAll()
+    // 存档随项目关闭一起收起；下次 prompt 会为当前项目重新打开。
+    closeConversationStore()
   })
 
   ipcMain.handle('agent:prompt', async (
@@ -140,6 +174,11 @@ export function registerAgentController(): void {
 
   ipcMain.handle('agent:confirm', async (_event, conversationId: string, toolCallId: string, confirmed: boolean) => {
     return manager.confirm(conversationId, toolCallId, confirmed)
+  })
+
+  ipcMain.handle('agent:discard-session', async (_event, conversationId: string) => {
+    if (!conversationId || typeof conversationId !== 'string') return { success: false }
+    return manager.discard(conversationId)
   })
 
   ipcMain.handle('agent:abort', async (_event, conversationId: string) => {
