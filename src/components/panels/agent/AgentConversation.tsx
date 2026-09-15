@@ -9,6 +9,7 @@ import type { Locale } from '../../../i18n/types'
 import { captureAgentEditorSnapshot } from '../../../services/agent/editor-snapshot'
 import { buildL1AgentContext } from '../../../services/agent/l1-context'
 import { buildAgentSkillCatalog } from '../../../services/agent/skill-catalog'
+import { skillRegistry } from '../../../services/agent/skill-registry'
 import AgentMessage from './AgentMessage'
 import AgentInputBox from './AgentInputBox'
 import { formatRelativeTime } from '../../../utils/time'
@@ -254,6 +255,7 @@ function AgentToolbar() {
 
   const openSystemPrompt = async () => {
     try {
+      await skillRegistry.ensureLoaded()
       const result = await ipc.invoke(
         'agent:system-prompt',
         buildAgentSkillCatalog(agentWritingLanguage(locale)),

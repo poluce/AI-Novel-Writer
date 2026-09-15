@@ -86,6 +86,7 @@ function isMissingProjectSkillDirectory(error: unknown): boolean {
 class SkillRegistryImpl {
   private skills: Map<string, LoadedSkill> = new Map()
   private loadTail: Promise<void> = Promise.resolve()
+  private loadedOnce = false
 
   /** 注册一个 Skill */
   register(skill: LoadedSkill): void {
@@ -116,9 +117,11 @@ class SkillRegistryImpl {
     return this.skills.size
   }
 
-  /** 清空 */
+  /** 清空（含加载状态：下一次 ensureLoaded 会重新读一次） */
   clear(): void {
     this.skills.clear()
+    this.loadedOnce = false
+    this.loadTail = Promise.resolve()
   }
 
   /** 从主进程管理的用户 Skill 目录加载，渲染进程不接触 VELA_HOME 路径。 */
@@ -235,6 +238,20 @@ class SkillRegistryImpl {
     return load
   }
 
+  /**
+   * 确保技能至少成功加载过一次。
+   *
+   * 技能目录要随系统提示词一起下发给模型，而加载是异步的（用户技能经 IPC、
+   * 项目技能读目录）：如果直接读注册表，第一次发消息就会把空目录发给模型。
+   * 这里等已经排队或在跑的那次加载，已完成则立即返回，失败则重试一次。
+   */
+  async ensureLoaded(): Promise<void> {
+    if (this.loadedOnce) return
+    await this.loadTail
+    if (this.loadedOnce) return
+    await this.loadAll()
+  }
+
   private async loadAllAtomic(): Promise<void> {
     const projectSession = projectSessionContextFromProject(
       useProjectStore.getState().currentProject,
@@ -272,6 +289,7 @@ class SkillRegistryImpl {
     }
 
     this.skills = staged
+    this.loadedOnce = true
 
     // Skill 不作为 Tool 暴露给模型：模型工具表由主进程 Pi Agent 构建
     // （electron/pi/tool-builder.ts），这里的注册表只服务渲染层。

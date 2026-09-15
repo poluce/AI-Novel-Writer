@@ -107,6 +107,32 @@ describe('Agent IPC bridge', () => {
     )
   })
 
+  it('ships the skill catalog even when the registry starts loading with this first message', async () => {
+    // 清空会话后发第一条：会话是这时才建的，技能注册表也跟着才开始加载。
+    // 系统提示词里的技能目录必须在发送前等到加载完成，不能读空注册表。
+    const { skillRegistry } = await import('../../services/agent/skill-registry')
+    skillRegistry.clear()
+    useAgentStore.setState({ toolsInitialized: false })
+    ipcInvoke.mockImplementation(async (channel: string) => {
+      if (channel === 'skills:list-user') {
+        return [{
+          name: 'scene-craft',
+          baseDir: 'managed://skills/scene-craft',
+          filePath: 'managed://skills/scene-craft/SKILL.md',
+          content: '---\nname: scene-craft\ndescription: 场景塑造\nstage: drafting\n---\n正文',
+        }]
+      }
+      return { success: true }
+    })
+
+    await useAgentStore.getState().sendMessage('看看技能')
+
+    const promptCall = ipcInvoke.mock.calls.find(([channel]) => channel === 'agent:prompt')
+    const catalog = promptCall?.[6] as Array<{ name: string }>
+    expect(catalog.map(item => item.name)).toContain('scene-craft')
+    expect(catalog.length).toBeGreaterThan(1)
+  })
+
   it('derives generating from the active conversation streaming message', async () => {
     let resolvePrompt: ((value: { success: boolean }) => void) | undefined
     ipcInvoke.mockImplementation(() => new Promise(resolve => {

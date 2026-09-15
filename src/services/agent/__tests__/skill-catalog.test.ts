@@ -76,6 +76,36 @@ describe('agent skill catalog', () => {
     expect(capped.at(-1)?.name).toBe('skill-199')
   })
 
+  it('waits for an in-flight load instead of reading an empty registry', async () => {
+    const invoke = vi.mocked((await import('../../ipc-client')).ipc.invoke)
+    invoke.mockResolvedValue([{
+      name: 'scene-craft',
+      baseDir: 'managed://skills/scene-craft',
+      filePath: 'managed://skills/scene-craft/SKILL.md',
+      content: '---\nname: scene-craft\ndescription: 场景塑造\nstage: drafting\n---\n正文',
+    }])
+    invoke.mockClear()
+    void skillRegistry.loadAll()
+
+    await skillRegistry.ensureLoaded()
+
+    expect(buildAgentSkillCatalog('zh-CN').map(item => item.name)).toContain('scene-craft')
+    // 已经在加载的那一次就够用，不重复读盘。
+    expect(invoke.mock.calls.filter(([channel]) => channel === 'skills:list-user')).toHaveLength(1)
+  })
+
+  it('returns immediately once skills are loaded', async () => {
+    const invoke = vi.mocked((await import('../../ipc-client')).ipc.invoke)
+    invoke.mockResolvedValue([])
+    invoke.mockClear()
+    await skillRegistry.loadAll()
+    const callsAfterLoad = invoke.mock.calls.length
+
+    await skillRegistry.ensureLoaded()
+
+    expect(invoke.mock.calls).toHaveLength(callsAfterLoad)
+  })
+
   it('shares one display-name and description rule with the skill list UI', () => {
     const skill = userSkill()
     expect(skillDisplayName(skill, 'zh-CN')).toBe('场景塑造')

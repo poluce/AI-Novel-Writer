@@ -552,6 +552,9 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       set({ activeRequestId: assistantMsg.id })
 
       logInfo('Agent', 'sending prompt', { conversationId: convId, modelId, chars: content.trim().length })
+      // 技能目录随系统提示词一起下发：注册表可能刚开始加载（例如刚清空会话后
+      // 新建第一条），先等它，别把空目录发给模型。
+      await skillRegistry.ensureLoaded()
       const result = await ipc.invoke(
         'agent:prompt',
         convId,
