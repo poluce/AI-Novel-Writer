@@ -4,6 +4,10 @@ allowBuilds:
   electron-winstaller: true
   esbuild: true
   '@lancedb/lancedb-win32-x64-msvc': true
+  # 这两个包带 postinstall，但本仓库不需要它们的构建产物；显式拒绝以免
+  # 每次 install 都在 strictDepBuilds 上失败。
+  '@google/genai': false
+  protobufjs: false
 
 overrides:
   '@babel/core@7.29.0': 7.29.7
