@@ -20,6 +20,7 @@ import {
 import { openChapterFile } from './sidebar-file-openers'
 import { showSidebarMenu } from './sidebar-menu'
 import { chapterTitleCache, chapterTitleCacheKey } from './manuscript-title-cache'
+import { readVelaContent } from '../../../services/vela-protocol'
 import {
   confirmLegacyKnowledgeAbsentAndContinue,
   deleteFinalizedChapter,
@@ -72,20 +73,9 @@ async function readChapterTitle(
     } catch { /* 蓝图读取失败时 fallback 到文件首行 */ }
   }
 
-  // fallback: 读取正文首行
-  let fileContent = ''
-  if (filePath.startsWith('vela://')) {
-    const { readVelaContent } = await import('../../../services/vela-protocol')
-    fileContent = await readVelaContent(filePath, projectSession)
-  } else {
-    const result = await ipc.invokeWithProjectSession(
-      projectSession,
-      'fs:read-file',
-      filePath,
-      projectSession.projectPath,
-    )
-    if (result.success) fileContent = result.content
-  }
+  // fallback: 读取正文首行。manuscript 节点由已定稿草稿合成，路径恒为
+  // `vela://manuscript/{id}`（见 ProjectTree），所以只有这一条读取路径。
+  const fileContent = await readVelaContent(filePath, projectSession)
 
   if (!isProjectSessionCurrent(projectSession)) return null
 
@@ -125,8 +115,7 @@ export default function ManuscriptGroup({ files, projectPath }: { files: Manuscr
     const load = async () => {
       // 只读取当前 state 中还没有的路径（增量更新，避免重复 IPC 调用）
       const missing = files.filter(f => (
-        !f.name.includes('_notes')
-        && !titleMap[chapterTitleCacheKey(projectPath, f.path)]
+        !titleMap[chapterTitleCacheKey(projectPath, f.path)]
       ))
       if (missing.length === 0) return
       const entries: Record<string, string> = {}
@@ -169,8 +158,8 @@ export default function ManuscriptGroup({ files, projectPath }: { files: Manuscr
     return titleMap[chapterTitleCacheKey(projectPath, f.path)] ?? fallback
   }
 
-  // 只显示正文章节（过滤掉旧的 _notes 文件）
-  const chapterFiles = files.filter(f => !f.name.includes('_notes'))
+  // 正文章节的显示名；节点由已定稿草稿合成，不再有旧的 _notes 文件需要过滤。
+  const chapterFiles = files
 
   const fetchIncompleteDeletions = useCallback(async (projectSession: ProjectSessionContext) => {
     const requestId = ++deletionLoadSequence.current

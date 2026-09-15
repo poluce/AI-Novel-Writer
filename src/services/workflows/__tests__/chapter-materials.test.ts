@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { adjacentEvidencePassages, assembleChapterMaterials } from '../chapter-materials'
+import {
+  adjacentEvidencePassages,
+  assembleChapterMaterials,
+  type FinalizedMaterialSource,
+} from '../chapter-materials'
 
 describe('chapter materials', () => {
   it.each([
@@ -81,6 +85,7 @@ describe('chapter materials', () => {
         title: '拒绝',
         content: '林岚拒绝交出钥匙。',
         evidence: ['不存在的错误摘要'],
+        sourceStatus: 'current',
       }],
       candidates: [],
       relevanceTerms: ['林岚'],
@@ -109,6 +114,7 @@ describe('chapter materials', () => {
         title: '拒绝',
         content: '林岚拒绝交出钥匙。',
         evidence: ['拒绝交出钥匙'],
+        sourceStatus: 'current',
       }],
       candidates: [],
       relevanceTerms: ['林岚'],
@@ -125,13 +131,14 @@ describe('chapter materials', () => {
   })
 
   it('keeps the previous finalized ending dependency when its prompt block exceeds the budget', () => {
-    const source = {
+    const source: FinalizedMaterialSource = {
       chapterNumber: 1,
       draftId: 11,
       title: '拒绝',
       content: '林岚拒绝交出钥匙。',
       evidence: ['拒绝交出钥匙'],
       includeEnding: true,
+      sourceStatus: 'current',
       sourceIdentity: { kind: 'finalized' as const, finalizationId: 'finalization-11', contentHash: 'a'.repeat(64) },
     }
     const bundle = assembleChapterMaterials({

@@ -15,7 +15,8 @@ export interface FinalizedMaterialSource {
   content: string
   evidence: readonly string[]
   includeEnding?: boolean
-  sourceStatus?: 'current' | 'stale' | 'legacy' | 'invalid'
+  /** 定稿来源索引的状态；每个生产者在构造时必须显式给出。 */
+  sourceStatus: 'current' | 'stale' | 'legacy' | 'invalid'
   sourceIdentity?:
     | { kind: 'finalized'; finalizationId: string; contentHash: string }
     | { kind: 'legacy-finalized' }
@@ -176,8 +177,8 @@ export function assembleChapterMaterials(input: {
     if (selectedPassages.length === 0) continue
     const included = includeOptional(promptLanguageText(
       input.writingLanguage,
-      `【定稿原文 · 第${source.chapterNumber}章 · draft ${source.draftId} · 定位索引${source.sourceStatus ?? 'legacy'}】\n${selectedPassages.join('\n\n')}`,
-      `[Finalized manuscript · Chapter ${source.chapterNumber} · draft ${source.draftId} · locator ${source.sourceStatus ?? 'legacy'}]\n${selectedPassages.join('\n\n')}`,
+      `【定稿原文 · 第${source.chapterNumber}章 · draft ${source.draftId} · 定位索引${source.sourceStatus}】\n${selectedPassages.join('\n\n')}`,
+      `[Finalized manuscript · Chapter ${source.chapterNumber} · draft ${source.draftId} · locator ${source.sourceStatus}]\n${selectedPassages.join('\n\n')}`,
     ), { source: 'finalized', chapterNumber: source.chapterNumber, reason: 'budget' })
     if (included) {
       includedFinalizedFacts += passages.locatedEvidence
