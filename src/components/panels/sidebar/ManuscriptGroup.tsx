@@ -28,7 +28,10 @@ import {
 type ManuscriptFileNode = FileNode & { chapterTitle?: string }
 
 /**
- * 已定稿 metadata 优先；旧定稿再 fallback 到蓝图和文件首行。
+ * 已定稿 metadata 优先；旧定稿再 fallback 到蓝图；两者都没有就用界面兜底名。
+ *
+ * 不再回落到正文首行：那要为一行的标签读整章正文，而且结果会顶掉 `第{n}章`
+ * 这个可预期的显示名（决定见审计文档「六、处置结果」）。
  *
  * @param filePath    manuscript 文件路径
  * @param fallback    兜底显示名（如 "第1章"）
@@ -54,7 +57,7 @@ async function readChapterTitle(
   }
   if (chapterTitleCache.has(cacheKey)) return chapterTitleCache.get(cacheKey)!
 
-  // 旧定稿没有 outbox 标题时，沿用蓝图 fallback。
+  // 旧定稿没有 outbox 标题时，沿用蓝图标题。
   if (chapterNumber) {
     try {
       const bpResult = await ipc.invokeWithProjectSession(
@@ -69,26 +72,11 @@ async function readChapterTitle(
         chapterTitleCache.set(cacheKey, display)
         return display
       }
-    } catch { /* 蓝图读取失败时 fallback 到文件首行 */ }
+    } catch { /* 蓝图读取失败时用界面兜底名 */ }
   }
 
-  // fallback: 读取正文首行。manuscript 节点由已定稿草稿合成，路径恒为
-  // `vela://manuscript/{id}`（见 ProjectTree），所以只有这一条读取路径。
-  // 这里保持动态导入：改成静态导入会让这次读取在首帧内完成，于是先渲染的
-  // 是正文首行标题而不是 `第{n}章` 兜底名（`authoritative-chapter-title` 用例
-  // 锁的是首帧状态）。要改这个观感是产品决定，别顺手改导入方式。
-  const { readVelaContent } = await import('../../../services/vela-protocol')
-  const fileContent = await readVelaContent(filePath, projectSession)
-
   if (!isProjectSessionCurrent(projectSession)) return null
-
-  if (!fileContent) return fallback
-  const firstLine = fileContent.split('\n').find((l: string) => l.trim())
-  if (!firstLine) return fallback
-  const title = firstLine.replace(/^#+\s*/, '').trim()
-  const display = title || fallback
-  chapterTitleCache.set(cacheKey, display)
-  return display
+  return fallback
 }
 
 // ===== 正文章节组件 =====

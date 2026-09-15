@@ -5,7 +5,8 @@
 > `src/services/workflows|services` 与 `src/components|stores|shared|repositories|controllers`，
 > 其结论已由本人抽样复核（发现并更正 2 处，见文末「更正」）。
 >
-> **处置状态（2026-09-16）**：五、建议动作 1/2/5/6 已执行，另附带 2.C 的其余可删项；
+> **处置状态（2026-09-16）**：五、建议动作 1/2/5/6 已执行，另附带 2.C 的其余可删项，
+> 以及清理时新发现并当轮决定的一处（定稿章节名不再回落到正文首行）；
 > 逐条结果见文末「六、处置结果」。本文件记录的是审计当时的发现，未回改上文结论。
 
 ## 判定口径
@@ -232,6 +233,7 @@ reasoning effort / response_format，助手对话则完全用供应商默认值*
 | `generate-draft.command.ts:705` 旧 pseudoPath 兜底 | 删除不可达分支 |
 | `chapter-materials.ts` `sourceStatus ?? 'legacy'` | `FinalizedMaterialSource.sourceStatus` 改为必填，兜底删除（生产者全部显式赋值） |
 | `ManuscriptGroup.tsx` `fs:read-file` 兜底、`_notes` 过滤 | 删除（节点由已定稿草稿合成，路径恒为 `vela://manuscript/{id}`，文件名恒为 `chapter_{n}.md`） |
+| `ManuscriptGroup.tsx` 正文首行标题回落 | 删除（作者决定，理由见本节末「新发现的一处矛盾」）；定稿在无 outbox 标题、无蓝图时只显示 `第{n}章` |
 | `workflow-utils.ts:125-127` 过期注释 | 改为"持久化在项目库的 post_process 表中" |
 | `llm:generate` 通道 + `llm-store.generate` + `LLMResponse` 类型 | 删除；控制器用例改用 `llm:generate-stream` 断言同一套参数策略，流式路径继续在记账时带上 `finishReason` |
 
@@ -266,7 +268,7 @@ reasoning effort / response_format，助手对话则完全用供应商默认值*
   本轮不动。
 - 3.2-⑤⑥ 与 3.1 的边界说明：纯整理，收益最小，留待顺手时做。
 
-### 清理过程中新发现的一处矛盾（未处理）
+### 清理过程中新发现的一处矛盾（已决定：去掉正文首行兜底）
 
 `ManuscriptGroup.readChapterTitle` 对「既无 outbox 标题、又无蓝图」的定稿会回落到
 **正文首行**当标题（函数注释写明这是有意的）。但 `authoritative-chapter-title` 用例里
@@ -275,5 +277,18 @@ reasoning effort / response_format，助手对话则完全用供应商默认值*
 
 这处矛盾此前被一个**竞态**掩盖：正文读取用的是动态 `import()`，首帧断言跑在它落定之前，
 所以只看到 `第{n}章` 兜底名。把动态导入改成静态导入后该用例立刻失败（最终态两条路径完全
-一致，只是时序变了）。本轮因此**保持动态导入不动**（见该文件注释），把选择留给产品：
-要么承认正文首行兜底、改测试；要么去掉这条兜底、让定稿在无标题时只显示 `第{n}章`。
+一致，只是时序变了）。
+
+**决定（作者，2026-09-16）：删掉这条回落。** 定稿章节在没有 outbox 标题也没有蓝图时，
+只显示 `第{n}章`。理由：
+
+- 成本确定：为一行的显示名要把**整章正文**经 `db:draft-get-full` 读一遍；
+- 结果不可预期：显示出来的是正文首行（还会顶掉 `第{n}章` 这个章节号），首行是散文时
+  章节名就成了半句话；
+- 去掉之后，测试里"不该读正文"这条立场自动成立，mock 与实现不再互相矛盾。
+
+落地：`ManuscriptGroup.readChapterTitle` 删掉正文读取分支（连带那个动态导入），
+`authoritative-chapter-title` 用例改为**等异步解析落定后**再断言（旧的时序断言在两种实现下
+都会通过，等于没有守住任何东西），并新增 `db:draft-get-full` 零调用断言。
+已验证：新实现通过；把旧实现放回去，用例按预期失败在
+`not.toContain('不应读取的正文首行')`。

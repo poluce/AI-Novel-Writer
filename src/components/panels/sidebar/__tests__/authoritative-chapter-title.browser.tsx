@@ -63,6 +63,11 @@ function switchProject(path: string, id: string): void {
   })
 }
 
+/** 侧边栏标题不该读正文；返回调用过 `db:draft-get-full` 的参数列表供断言。 */
+function manuscriptBodyReads(): unknown[][] {
+  return invoke.mock.calls.filter(([channel]) => channel === 'db:draft-get-full')
+}
+
 beforeEach(() => {
   clearChapterTitleCache()
   useLocaleStore.setState({ locale: 'zh-CN' })
@@ -83,6 +88,8 @@ beforeEach(() => {
       return null
     }
     if (channel === 'chapter:list-incomplete-deletions') return { success: true, operations: [] }
+    // 诱饵：侧边栏标题只认 outbox 标题与蓝图，正文首行永远不该被读。
+    // 用例用 manuscriptBodyReads() 断言这条通道一次都没被调用。
     if (channel === 'db:draft-get-full') {
       return { id: args[0], content: '# 不应读取的正文首行' }
     }
@@ -145,8 +152,17 @@ describe('authoritative finalized chapter titles', () => {
       )
     })
 
+    // 等异步标题解析真正落定再断言：旧实现会在这之后去读正文首行并把它当标题，
+    // 不等就会像从前一样只看到「还没解析完」的中间态。
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50))
+    })
+
     expect(container?.textContent).not.toContain('旧码头的红钟')
+    expect(container?.textContent).not.toContain('不应读取的正文首行')
     expect(container?.textContent?.match(/第1章/gu)).toHaveLength(2)
+    // 没有 outbox 标题也没有蓝图时用界面兜底名，不读正文（见审计文档「六、处置结果」）。
+    expect(manuscriptBodyReads()).toHaveLength(0)
   })
 
   it('never leaks cached chapter titles when switching projects with the same draft identity', async () => {
