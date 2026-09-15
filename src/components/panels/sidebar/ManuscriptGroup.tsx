@@ -20,7 +20,6 @@ import {
 import { openChapterFile } from './sidebar-file-openers'
 import { showSidebarMenu } from './sidebar-menu'
 import { chapterTitleCache, chapterTitleCacheKey } from './manuscript-title-cache'
-import { readVelaContent } from '../../../services/vela-protocol'
 import {
   confirmLegacyKnowledgeAbsentAndContinue,
   deleteFinalizedChapter,
@@ -75,6 +74,10 @@ async function readChapterTitle(
 
   // fallback: 读取正文首行。manuscript 节点由已定稿草稿合成，路径恒为
   // `vela://manuscript/{id}`（见 ProjectTree），所以只有这一条读取路径。
+  // 这里保持动态导入：改成静态导入会让这次读取在首帧内完成，于是先渲染的
+  // 是正文首行标题而不是 `第{n}章` 兜底名（`authoritative-chapter-title` 用例
+  // 锁的是首帧状态）。要改这个观感是产品决定，别顺手改导入方式。
+  const { readVelaContent } = await import('../../../services/vela-protocol')
   const fileContent = await readVelaContent(filePath, projectSession)
 
   if (!isProjectSessionCurrent(projectSession)) return null
