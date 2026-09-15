@@ -14,6 +14,7 @@ import {
 } from '@earendil-works/pi-agent-core'
 import { createModels, Type, type Context } from '@earendil-works/pi-ai'
 import { NodeExecutionEnv } from '@earendil-works/pi-agent-core/harness/env/nodejs'
+import { branchTip, laneConfig, laneState } from '@earendil-works/pi-agent-core/harness/session'
 import {
   fauxAssistantMessage,
   fauxProvider,
@@ -273,6 +274,56 @@ describe('AgentSession', () => {
     if (confirm?.type === 'tool_call_confirm') expect(confirm.call.toolName).toBe('bash')
     const complete = events.find((e) => e.type === 'tool_call_complete')
     expect(complete?.type === 'tool_call_complete' && complete.call.status).toBe('failed')
+  })
+
+  it('keeps the harness execution tools after a per-turn domain tool refresh', async () => {
+    // 管理器每轮都会用领域工具重设一次工具表；执行工具必须在重设后仍然在列，
+    // 否则 harness 的 `activeToolNames ⊆ tools` 校验会让整轮以
+    // "One or more configured tools are unavailable in this process" 告终。
+    const { session, events } = await buildSession({
+      tools: [addTool] as never,
+      withExecutionEnv: true,
+      responses: [fauxAssistantMessage('你好')],
+    })
+
+    await session.setTools([addTool] as never)
+    await session.prompt('你好')
+    await session.close()
+
+    expect(events.some(event => event.type === 'error')).toBe(false)
+    expect(events.some(event => event.type === 'done')).toBe(true)
+  })
+
+  it('reconciles a persisted lane configuration with the current model and tools', async () => {
+    // 上一次运行的存档可能钉着已经删掉的模型（或一份过期的工具名单），
+    // harness 每次生成前都拿存档里的配置做校验，不对齐就会整轮失败在
+    // "The configured model is unavailable in this process"。
+    const repo = new MemorySessionRepo()
+    const staleSession = await repo.create({ id: 'conv-stale' }, BACKGROUND_CONTEXT)
+    await staleSession.setValue(branchTip(AGENT_LANE_NAME), null, BACKGROUND_CONTEXT)
+    await staleSession.setValue(laneState(AGENT_LANE_NAME), {
+      currentOperationId: null,
+      lastOperationId: null,
+      inbox: [],
+    }, BACKGROUND_CONTEXT)
+    await staleSession.setValue(laneConfig(AGENT_LANE_NAME), {
+      model: { provider: 'removed-provider', modelId: 'removed-model' },
+      thinkingLevel: 'off',
+      activeToolNames: ['read', 'write', 'edit', 'bash'],
+    }, BACKGROUND_CONTEXT)
+
+    const { session, events } = await buildSession({
+      tools: [addTool] as never,
+      withExecutionEnv: true,
+      harnessSession: staleSession,
+      responses: [fauxAssistantMessage('你好')],
+    })
+
+    await session.prompt('你好')
+    await session.close()
+
+    expect(events.some(event => event.type === 'error')).toBe(false)
+    expect(events.some(event => event.type === 'done')).toBe(true)
   })
 
   it('terminates the turn when a harness write leaves an unknown commit state', async () => {

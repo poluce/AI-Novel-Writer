@@ -38,6 +38,22 @@ export type { PiAgentEvent } from '../../src/shared/agent-events'
 /** 一个会话文件里的唯一 lane；分支/导航能力留给后续产品。 */
 export const AGENT_LANE_NAME = 'main'
 
+/**
+ * 一个会话的完整工具表 = 领域工具 + harness 执行工具。
+ *
+ * 创建与每轮 `setTools` 都走这里：lane 的 `activeToolNames` 只在创建时固定一次，
+ * 工具表若在后续轮次缩水，harness 的 `activeToolNames ⊆ tools` 校验就会失败。
+ */
+function composeHarnessTools(
+  domainTools: readonly AnyAgentTool[],
+  executionEnv: ExecutionEnv | null,
+): AnyHarnessTool[] {
+  return [
+    ...domainTools.map(toHarnessTool),
+    ...(executionEnv ? buildExecutionTools() : []),
+  ]
+}
+
 export interface AgentSessionOptions {
   /** 这次会话的 pi-ai 运行时；harness 直接用它发请求。 */
   models: Models
@@ -94,6 +110,8 @@ export class AgentSession {
   private readonly model: PiModelRuntime['model']
   /** 执行工具的提交态记录；没有执行环境时为 null。 */
   private readonly commitTracker: ConfinedExecutionEnv | null
+  /** 挂 harness 执行工具的执行环境；`setTools` 每轮要用它把执行工具补回来。 */
+  private readonly executionEnv: ExecutionEnv | null
   private readonly unsubscribes: Array<() => void> = []
 
   private editorSnapshot: AgentEditorSnapshot | null = null
@@ -124,6 +142,7 @@ export class AgentSession {
     this.systemPrompt = options.systemPrompt
     this.modelIdentity = options.modelIdentity
     this.model = options.model
+    this.executionEnv = options.executionEnv ?? null
     this.commitTracker = options.executionEnv instanceof ConfinedExecutionEnv
       ? options.executionEnv
       : null
@@ -137,10 +156,7 @@ export class AgentSession {
    */
   static async create(options: AgentSessionOptions): Promise<AgentSession> {
     const executionEnv = options.executionEnv ?? null
-    const tools: AnyHarnessTool[] = [
-      ...options.tools.map(toHarnessTool),
-      ...(executionEnv ? buildExecutionTools() : []),
-    ]
+    const tools = composeHarnessTools(options.tools, executionEnv)
     const { harness } = await AgentHarness.create({
       session: options.session,
       models: options.models,
@@ -153,7 +169,34 @@ export class AgentSession {
       compaction: options.compactionSettings ?? DEFAULT_COMPACTION_SETTINGS,
     } as AgentHarnessOptions<HarnessToolContext>, BACKGROUND_CONTEXT)
     const lane = await harness.lane(AGENT_LANE_NAME, BACKGROUND_CONTEXT)
-    return new AgentSession(options, harness, lane)
+    const session = new AgentSession(options, harness, lane)
+    await session.reconcileLaneConfiguration(tools.map(tool => tool.name))
+    return session
+  }
+
+  /**
+   * 打开会话时把 lane 配置对齐到当前运行时。
+   *
+   * 存档里的 lane 配置是**上一次运行的快照**，而 harness 每次生成前都拿它做校验
+   * （`prepareGeneration` 用它查模型、并检查 `activeToolNames ⊆ tools`）。存档里
+   * 可能钉着已经删掉的模型，或一份与当前工具表不一致的名单，那样这一轮只会得到
+   * "The configured model is unavailable in this process" / "One or more configured
+   * tools are unavailable in this process"。这里显式覆盖一次，失败只记日志：
+   * 对齐不了时行为与从前一致，不会让会话打不开。
+   */
+  private async reconcileLaneConfiguration(toolNames: readonly string[]): Promise<void> {
+    try {
+      await this.lane.setModel(
+        { provider: this.model.provider, modelId: this.model.id },
+        BACKGROUND_CONTEXT,
+      )
+      await this.lane.setActiveTools([...toolNames], BACKGROUND_CONTEXT)
+    } catch (error) {
+      logFailure('Agent', 'failed to reconcile lane configuration', error, {
+        conversationId: this.conversationId,
+        scope: this.scope,
+      })
+    }
   }
 
   // ===== 钩子：领域语义都挂在这里 =====
@@ -348,7 +391,10 @@ export class AgentSession {
   }
 
   async setTools(tools: AnyAgentTool[]): Promise<void> {
-    await this.harness.setTools(tools.map(toHarnessTool), BACKGROUND_CONTEXT)
+    // 领域工具每轮重建（技能目录、范围会变），但 harness 的执行工具必须一起保留：
+    // lane 的 `activeToolNames` 在创建时就固定为完整名单，只设领域工具会让
+    // `activeToolNames ⊆ tools` 校验失败，整轮直接以「工具不可用」告终。
+    await this.harness.setTools(composeHarnessTools(tools, this.executionEnv), BACKGROUND_CONTEXT)
   }
 
   /** 存档里已有的条目条数；0 表示这是一段全新的会话。 */
