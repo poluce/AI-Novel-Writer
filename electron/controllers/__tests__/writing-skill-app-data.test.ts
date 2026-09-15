@@ -187,6 +187,23 @@ Different content.`)
       .toContain('Revise with concrete action')
   })
 
+  it('rejects a skill name that violates the SKILL.md spec before writing', async () => {
+    // 规范要求小写字母/数字/连字符：大写名字装进来只会一直带诊断，直接拒绝。
+    vi.stubGlobal('fetch', vi.fn(async () => skillResponse(`---
+name: SceneCraft
+description: Uppercase name.
+---
+Body.`)))
+
+    const inspected = await handler('skills:inspect-github')({}, sourceUrl) as { success: boolean }
+    expect(inspected.success).toBe(true)
+    const response = await handler('skills:install-github')({}, sourceUrl) as { success: boolean; error?: string }
+
+    expect(response.success).toBe(false)
+    expect(response.error).toMatch(/SKILL\.md/)
+    expect(fs.existsSync(path.join(velaHome, 'skills', 'SceneCraft'))).toBe(false)
+  })
+
   it('installs quoted frontmatter under the normalized bindable id', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => skillResponse(`---
 name: "quoted-prose"

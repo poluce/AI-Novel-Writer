@@ -1,8 +1,13 @@
+import fs from 'node:fs'
+import path from 'node:path'
+
 import type { AgentTool } from '@earendil-works/pi-agent-core'
 import { Type } from '@earendil-works/pi-ai'
 
 import { writingLanguageText, type WritingLanguage } from '../../../src/shared/writing-language'
+import { inspectWritingSkillMarkdown } from '../../../src/shared/writing-skills'
 import type { AgentSkillCatalogEntry } from '../../../src/shared/agent-skills'
+import { logFailure } from '../../../src/shared/fail-log'
 
 const Schema = Type.Object({
   name: Type.String(),
@@ -17,6 +22,8 @@ const Schema = Type.Object({
 export function createLoadWritingSkillTool(
   language: WritingLanguage,
   skills: readonly AgentSkillCatalogEntry[],
+  /** 允许直读的技能根；技能被改动后以磁盘为准，其余情况用目录快照兜底。 */
+  skillRoots: readonly string[] = [],
 ): AgentTool<typeof Schema> {
   const text = (zhCN: string, enUS: string) => writingLanguageText(language, zhCN, enUS)
   const available = skills.filter(skill => skill.disableModelInvocation !== true)
@@ -40,7 +47,7 @@ export function createLoadWritingSkillTool(
           `No skill named "${name}". Available skills: ${available.map(item => item.name).join(', ') || '(none)'}`,
         ))
       }
-      const content = skill.content?.trim()
+      const content = (readSkillFromDisk(skill.location, skillRoots) ?? skill.content)?.trim()
       if (!content) {
         throw new Error(text(
           `技能“${name}”没有可读正文。`,
@@ -49,8 +56,43 @@ export function createLoadWritingSkillTool(
       }
       return {
         content: [{ type: 'text', text: content }],
-        details: { name: skill.name, source: skill.source, location: skill.location },
+        // 技能目录一并给出，方便模型理解正文里提到的文件名归属（不承诺可读）。
+        details: {
+          name: skill.name,
+          source: skill.source,
+          location: skill.location,
+          baseDir: path.dirname(skill.location),
+        },
       }
     },
   }
+}
+
+/**
+ * 正文以磁盘为准：技能是用户可以直接编辑的文件，注册表里的正文只是加载时的
+ * 快照。只有在 `location` 落在允许的技能根内时才直读——越界一律回落到快照，
+ * 避免这条通道变成任意文件读取。
+ */
+function readSkillFromDisk(
+  location: string,
+  roots: readonly string[],
+): string | null {
+  if (roots.length === 0) return null
+  if (!roots.some(root => isContainedPath(root, location))) return null
+  try {
+    const raw = fs.readFileSync(location, 'utf8')
+    const inspected = inspectWritingSkillMarkdown(raw)
+    return inspected.content || raw
+  } catch (error) {
+    logFailure('AgentTool', 'failed to read skill body from disk', error, { location })
+    return null
+  }
+}
+
+function isContainedPath(root: string, candidate: string): boolean {
+  const relative = path.relative(path.resolve(root), path.resolve(candidate))
+  return relative !== ''
+    && relative !== '..'
+    && !relative.startsWith(`..${path.sep}`)
+    && !path.isAbsolute(relative)
 }

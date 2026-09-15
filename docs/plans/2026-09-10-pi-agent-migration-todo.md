@@ -314,6 +314,21 @@
 - [x] Node 套件与浏览器套件全绿（见提交说明中的计数）
 - [ ] 手动点验：真实模型下确认卡、技能按需读取、项目/界面助手各自的文件边界（作者待勾）
 
+## 阶段 10：技能目录改走 Pi 的 SKILL.md 加载器（2026-09-15）
+
+> 阶段 8 只把技能清单交给 Pi 渲染，目录扫描还是自研的（简易 frontmatter 解析、
+> 自家名字校验、不合规静默跳过）。这一阶段把**发现与解析**也交给 Pi。决策见
+> [`0022-skill-catalog-loads-through-pi-loader.md`](../adr/0022-skill-catalog-loads-through-pi-loader.md)。
+
+- [x] 主进程 `writing-skill-catalog.ts`：用 `loadSourcedSkills` + `NodeExecutionEnv` 扫描用户级与项目级两个根，返回 `{ skills, diagnostics }`
+- [x] YAML frontmatter、忽略文件（`.gitignore` / `.ignore` / `.fdignore`）、跳过点目录与 `node_modules`、技能根目录直接放 `.md`、`disable-model-invocation` 全部按规范生效
+- [x] 名字与描述按规范校验，违规**不再静默丢弃**：技能保留在列表里，诊断进设置页「技能目录诊断」
+- [x] IPC 拆成 `skills:load-user-catalog`（应用数据边界）与 `skills:load-catalog`（项目会话范围，主进程认证项目身份并把技能根钉在项目内）
+- [x] 渲染层注册表不再自己翻目录，只做目录记录 → 注册表条目的映射
+- [x] `load_writing_skill` 正文以磁盘为准（允许的技能根内直读，读不到回落快照）
+- [x] 面向用户的规则写进 `docs/product-domain.md`（含比规范更严的"只收自包含提示词技能"）
+- [x] 测试：主进程加载器 10 例（真文件、YAML 块标量、忽略文件、根级 `.md`、名字/描述诊断、兼容性判定、符号链接根拒绝）、IPC 边界 3 例、注册表映射 5 例、`load_writing_skill` 磁盘/快照 4 例、设置页诊断 1 例
+
 ## 附加任务：DSH 插件移除（独立于 Pi 迁移）— ✅ 已完成
 
 > 决定：**彻底删除 DSH 插件，仓库内不保留任何插件内容**（原计划"确认不受影响"作废）。

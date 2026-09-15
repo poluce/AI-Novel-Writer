@@ -7,6 +7,7 @@ import { AgentSessionManager } from './agent-session-manager'
 import { AgentConversationStore } from './agent-conversation-store'
 import { setPiProjectCloseHook } from './in-flight'
 import { globalExecutionEnv, projectExecutionEnv } from './execution-tools'
+import { projectSkillsRoot, userSkillsRoot } from '../services/writing-skill-catalog'
 import { createRendererActionDispatcher } from './renderer-action-dispatch'
 import type { AgentEditorSnapshot, RendererActionResult } from '../../src/shared/agent-events'
 import { isAgentSkillCatalog, type AgentSkillCatalogEntry } from '../../src/shared/agent-skills'
@@ -186,6 +187,15 @@ export function registerAgentController(): void {
       if (scope === 'global') return globalExecutionEnv()
       const projectPath = getCurrentProjectPath()
       return projectPath ? projectExecutionEnv(projectPath) : null
+    },
+    // 技能正文以磁盘为准：只有落在技能根内的路径才允许直读。
+    resolveSkillRoots: () => {
+      const roots: string[] = []
+      const userRoot = userSkillsRoot()
+      if (userRoot) roots.push(userRoot)
+      const projectPath = getCurrentProjectPath()
+      if (projectPath) roots.push(projectSkillsRoot(projectPath))
+      return roots
     },
   })
   setPiProjectCloseHook(() => {

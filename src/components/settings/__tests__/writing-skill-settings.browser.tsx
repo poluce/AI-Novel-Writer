@@ -14,8 +14,10 @@ const invoke = vi.fn()
 const originalProjectState = useProjectStore.getState()
 const originalLocaleState = useLocaleStore.getState()
 
+let diagnostics: unknown[] = []
+
 function ipcResult(channel: string) {
-  if (channel === 'skills:list-user') return []
+  if ((channel === 'skills:load-catalog' || channel === 'skills:load-user-catalog')) return { skills: [], diagnostics }
   if (channel === 'fs:list-dir') return []
   if (channel === 'fs:check-exists') return false
   if (channel === 'fs:read-file') return { success: false, content: '', error: 'missing' }
@@ -37,6 +39,7 @@ function ipcResult(channel: string) {
 }
 
 beforeEach(async () => {
+  diagnostics = []
   invoke.mockImplementation(async (channel: string) => ipcResult(channel))
   Object.defineProperty(window, 'velaAPI', {
     configurable: true,
@@ -140,5 +143,31 @@ describe('writing skill settings', () => {
 
     expect(library?.textContent).toContain('长篇连续性与场景推进')
     expect(builtinOptions()).toContain('自然语言润色')
+  })
+})
+
+describe('writing skill catalog diagnostics', () => {
+  it('shows spec diagnostics next to the library instead of hiding the skill', async () => {
+    diagnostics = [{
+      code: 'invalid_metadata',
+      message: 'name "SceneCraft" does not match parent directory "scene-craft"',
+      path: 'C:/Users/me/.vela/skills/scene-craft/SKILL.md',
+      source: 'user',
+    }]
+    await act(async () => root?.unmount())
+    container?.remove()
+    container = document.createElement('div')
+    document.body.append(container)
+    root = createRoot(container)
+    await act(async () => root?.render(<SkillSettings />))
+    await act(async () => {
+      await vi.waitFor(() => expect(
+        container?.textContent,
+      ).toContain('does not match parent directory'))
+    })
+
+    expect(container?.textContent).toContain('Skill catalog diagnostics')
+    expect(container?.textContent).toContain('C:/Users/me/.vela/skills/scene-craft/SKILL.md')
+    expect(container?.textContent).not.toContain('技能目录诊断')
   })
 })

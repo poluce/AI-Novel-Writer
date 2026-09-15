@@ -14,16 +14,17 @@ import { ipc } from '../ipc-client'
 import { logFailure } from '../../shared/fail-log'
 import { useProjectStore } from '../../stores/project-store'
 import type { ProjectSessionContext } from '../../shared/ipc-channels'
-import {
-  projectSessionContextFromProject,
-  sameProjectSessionContext,
-} from '../../shared/project-session-context'
+import { projectSessionContextFromProject } from '../../shared/project-session-context'
 import type { WritingLanguage } from '../../shared/writing-language'
 import {
   inspectWritingSkillMarkdown,
   type WritingSkillInspection,
   type WritingSkillSource,
 } from '../../shared/writing-skills'
+import type {
+  WritingSkillCatalogDiagnostic,
+  WritingSkillCatalogRecord,
+} from '../../shared/writing-skill-catalog'
 
 // ===== 类型定义 =====
 
@@ -74,14 +75,6 @@ export interface LoadedSkill {
 
 // ===== Skill Registry =====
 
-function isMissingProjectSkillDirectory(error: unknown): boolean {
-  const code = error && typeof error === 'object' && 'code' in error
-    ? error.code
-    : undefined
-  if (code === 'ENOENT' || code === 'SECURE_FS_NOT_FOUND') return true
-  const message = error instanceof Error ? error.message : ''
-  return /(?:^|:\s)(?:SECURE_FS_NOT_FOUND|ENOENT: no such file or directory(?:,|$))/.test(message)
-}
 
 class SkillRegistryImpl {
   private skills: Map<string, LoadedSkill> = new Map()
@@ -117,116 +110,54 @@ class SkillRegistryImpl {
     return this.skills.size
   }
 
+  /** 最近一次加载的规范诊断（名字不符规范、描述超长等）。 */
+  private diagnostics: WritingSkillCatalogDiagnostic[] = []
+
+  /** 最近一次加载的诊断；设置页据此提示而不是静默跳过。 */
+  listDiagnostics(): WritingSkillCatalogDiagnostic[] {
+    return [...this.diagnostics]
+  }
+
   /** 清空（含加载状态：下一次 ensureLoaded 会重新读一次） */
   clear(): void {
     this.skills.clear()
+    this.diagnostics = []
     this.loadedOnce = false
     this.loadTail = Promise.resolve()
   }
 
-  /** 从主进程管理的用户 Skill 目录加载，渲染进程不接触 VELA_HOME 路径。 */
-  private async loadUserSkills(target: Map<string, LoadedSkill>): Promise<number> {
-    let count = 0
+  /**
+   * 技能目录由主进程扫描（Pi 的加载器：YAML frontmatter、忽略文件、规范校验），
+   * 渲染层只负责把它映射成注册表条目并记住诊断。
+   */
+  private async loadCatalog(target: Map<string, LoadedSkill>): Promise<number> {
+    const projectSession = projectSessionContextFromProject(useProjectStore.getState().currentProject)
     try {
-      const entries = await ipc.invoke('skills:list-user')
-      for (const entry of entries) {
-        const skill = parseSkillMd(entry.content, entry.name, 'user', entry.baseDir, entry.filePath)
+      const catalog = projectSession
+        ? await ipc.invokeWithProjectSession(
+          projectSession,
+          'skills:load-catalog',
+          projectSession.projectPath,
+        )
+        : await ipc.invoke('skills:load-user-catalog')
+      this.diagnostics = catalog.diagnostics
+      let count = 0
+      for (const record of catalog.skills) {
+        const skill = toLoadedSkill(record, projectSession ?? undefined)
         if (!skill) continue
         target.set(skill.skillId, skill)
         count++
       }
+      return count
     } catch (error) {
-      logFailure('Skill', 'load user skills failed', error)
+      logFailure('Skill', 'load skill catalog failed', error)
+      this.diagnostics = [{
+        code: 'list_failed',
+        message: error instanceof Error ? error.message : String(error),
+        path: '',
+      }]
+      return 0
     }
-    return count
-  }
-
-  /**
-   * 从当前项目边界内加载 Skills。
-   *
-   * 项目路径仍须通过项目会话在主进程重新校验。
-   */
-  private async loadProjectSkills(
-    dir: string,
-    projectPath: string,
-    projectSession: ProjectSessionContext,
-    target: Map<string, LoadedSkill>,
-  ): Promise<number> {
-    let count = 0
-    const exists = await ipc.invokeWithProjectSession(
-      projectSession,
-      'fs:check-exists',
-      dir,
-      projectPath,
-    )
-    if (
-      !sameProjectSessionContext(
-        projectSession,
-        projectSessionContextFromProject(useProjectStore.getState().currentProject),
-      )
-    ) return count
-    if (!exists) return count
-
-    let entries
-    try {
-      entries = await ipc.invokeWithProjectSession(
-        projectSession,
-        'fs:list-dir',
-        dir,
-        projectPath,
-      )
-    } catch (error) {
-      if (isMissingProjectSkillDirectory(error)) return count
-      throw error
-    }
-    if (
-      !sameProjectSessionContext(
-        projectSession,
-        projectSessionContextFromProject(useProjectStore.getState().currentProject),
-      )
-    ) return count
-    for (const entry of entries) {
-      if (
-        !sameProjectSessionContext(
-          projectSession,
-          projectSessionContextFromProject(useProjectStore.getState().currentProject),
-        )
-      ) return count
-      if (!entry.isDir) continue
-
-      const skillFile = `${entry.path}/SKILL.md`
-      try {
-        const result = await ipc.invokeWithProjectSession(
-          projectSession,
-          'fs:read-file',
-          skillFile,
-          projectPath,
-        )
-        if (
-          !sameProjectSessionContext(
-            projectSession,
-            projectSessionContextFromProject(useProjectStore.getState().currentProject),
-          )
-        ) return count
-        if (!result.success) continue
-
-        const skill = parseSkillMd(
-          result.content,
-          entry.name,
-          'project',
-          entry.path,
-          skillFile,
-          projectSession,
-        )
-        if (skill) {
-          target.set(skill.skillId, skill)
-          count++
-        }
-      } catch {
-        // 单个 Skill 加载失败不影响整体
-      }
-    }
-    return count
   }
 
   /**
@@ -261,32 +192,14 @@ class SkillRegistryImpl {
     // 注册内置 Skill
     registerBuiltinSkills({ register: skill => staged.set(skill.skillId, skill) })
 
-    // 用户 Skill 路径只能由主进程的固定应用数据服务访问。
-    const userCount = await this.loadUserSkills(staged)
-    if (userCount > 0) {
-      console.log(`[Skills] 加载了 ${userCount} 个用户 Skill`)
+    const count = await this.loadCatalog(staged)
+    if (count > 0) {
+      console.log(`[Skills] 加载了 ${count} 个用户/项目 Skill`)
     }
-
-    // 加载项目 Skill（项目/.vela/skills/）
-    if (
-      ipc.isElectron
-      && projectSession
-      && sameProjectSessionContext(
-        projectSession,
-        projectSessionContextFromProject(useProjectStore.getState().currentProject),
-      )
-    ) {
-      const projectSkillsDir = `${projectSession.projectPath}/.vela/skills`
-      const projectCount = await this.loadProjectSkills(
-        projectSkillsDir,
-        projectSession.projectPath,
-        projectSession,
-        staged,
-      )
-      if (projectCount > 0) {
-        console.log(`[Skills] 加载了 ${projectCount} 个项目 Skill`)
-      }
+    if (this.diagnostics.length > 0) {
+      console.warn(`[Skills] ${this.diagnostics.length} 条技能诊断：`, this.diagnostics)
     }
+    void projectSession
 
     this.skills = staged
     this.loadedOnce = true
@@ -302,6 +215,53 @@ class SkillRegistryImpl {
 export const skillRegistry = new SkillRegistryImpl()
 
 // ===== SKILL.md 解析 =====
+
+/**
+ * 目录记录 → 注册表条目。
+ *
+ * 名字与描述由主进程用 Pi 的加载器（YAML + 规范校验）解析好；这里只做
+ * 最低限度的可用性检查——规范违规（大写、与目录名不一致、描述超长）不
+ * 静默丢弃，而是留在诊断里给设置页显示。这样"技能没出现"永远有原因可查。
+ */
+function toLoadedSkill(
+  record: WritingSkillCatalogRecord,
+  projectSession?: ProjectSessionContext,
+): LoadedSkill | null {
+  const name = record.name.trim()
+  if (!name) return null
+  const writingSkill: WritingSkillInspection = {
+    metadata: {
+      name,
+      displayName: record.displayName,
+      description: record.description,
+      version: record.version,
+      language: record.language,
+      stage: record.stage,
+    },
+    content: record.content,
+    compatible: record.compatible,
+    reasons: [...record.reasons],
+    suggestedStage: record.suggestedStage,
+    utf8Bytes: record.utf8Bytes,
+  }
+  return {
+    metadata: {
+      name,
+      displayName: record.displayName,
+      description: record.description || `Skill: ${name}`,
+      version: record.version,
+      // Pi 的 `disable-model-invocation` 与我们的 `userInvocable` 是同一件事。
+      userInvocable: record.disableModelInvocation ? false : true,
+    },
+    content: record.content,
+    source: record.source,
+    baseDir: record.baseDir,
+    filePath: record.filePath,
+    ...(record.source === 'project' && projectSession ? { projectSession } : {}),
+    skillId: `${record.source}:${name}`,
+    writingSkill,
+  }
+}
 
 /**
  * 解析 SKILL.md 文件内容

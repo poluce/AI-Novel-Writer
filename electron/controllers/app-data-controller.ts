@@ -8,6 +8,14 @@ import { VELA_HOME, writeJsonFile } from '../utils/config-utils'
 import { appendVelaLog } from '../utils/app-log'
 import type { DiagnosticLogRecord } from '../../src/shared/fail-log'
 import { inspectWritingSkill, installWritingSkill } from '../services/writing-skill-service'
+import { loadWritingSkillCatalog, projectSkillsRoot } from '../services/writing-skill-catalog'
+import type { ProjectSessionContext } from '../../src/shared/ipc-channels'
+import { projectAccess } from '../services/project-access'
+import { getCurrentProjectPath } from '../database'
+import {
+  assertProjectFilePath,
+  assertRequiredExpectedProjectPath,
+} from '../utils/project-context'
 
 function text(zhCNText: string, enUSText: string): string {
   return mainText(app.getLocale(), zhCNText, enUSText)
@@ -194,30 +202,27 @@ export function registerAppDataController(): void {
     }
   })
 
-  ipcMain.handle('skills:list-user', async () => {
-    const skillsDirectory = path.join(VELA_HOME, 'skills')
-    if (!fs.existsSync(skillsDirectory)) return []
+  /**
+   * 技能目录：用户级 + 当前项目级。
+   *
+   * 带项目时必须先以当前租约认证项目身份，并把技能根钉在项目内；不带项目
+   * （界面助手/启动早期）只读应用数据目录下的用户技能。扫描本身交给 Pi 的
+   * 加载器，规范诊断随目录一起返回，渲染层据此提示而不是静默跳过。
+   */
+  ipcMain.handle('skills:load-user-catalog', async () => {
+    return loadWritingSkillCatalog({ projectPath: null })
+  })
 
-    const canonicalSkillsDirectory = ensureOwnedSkillsRoot()
-    const skills: Array<{ name: string; content: string; baseDir: string; filePath: string }> = []
-    for (const entry of fs.readdirSync(canonicalSkillsDirectory, { withFileTypes: true })) {
-      if (!entry.isDirectory() || entry.isSymbolicLink()) continue
-      try {
-        const baseDir = fs.realpathSync.native(path.join(canonicalSkillsDirectory, entry.name))
-        if (!isContainedPath(canonicalSkillsDirectory, baseDir)) continue
-        const filePath = fs.realpathSync.native(path.join(baseDir, 'SKILL.md'))
-        if (!isContainedPath(baseDir, filePath) || !fs.statSync(filePath).isFile()) continue
-        skills.push({
-          name: entry.name,
-          content: fs.readFileSync(filePath, 'utf8'),
-          baseDir,
-          filePath,
-        })
-      } catch {
-        // 单个用户 Skill 无效时不阻断其余 Skill。
-      }
-    }
-    return skills
+  ipcMain.handle('skills:load-catalog', async (
+    _event,
+    expectedProjectPath: string,
+    context: ProjectSessionContext,
+  ) => {
+    const active = projectAccess.assertCurrentProjectContext(context, getCurrentProjectPath())
+    assertRequiredExpectedProjectPath(active.rootPath, expectedProjectPath)
+    const skillsRoot = projectSkillsRoot(expectedProjectPath)
+    assertProjectFilePath(skillsRoot, active.rootPath, 'writable')
+    return loadWritingSkillCatalog({ projectPath: expectedProjectPath })
   })
 
   ipcMain.handle('skills:inspect-github', async (_event, sourceUrl: string) => {

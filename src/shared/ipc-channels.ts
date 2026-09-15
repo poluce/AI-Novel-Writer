@@ -560,9 +560,24 @@ export interface AppDataChannels {
   'prompt:load-global': { args: []; return: AppPromptLoadReceipt }
   'prompt:save-global': { args: [template: AppPromptTemplate]; return: { success: boolean; error?: string } }
   'prompt:delete-global': { args: [key: string, writingLanguage: WritingLanguage]; return: { success: boolean; error?: string } }
-  'skills:list-user': {
+  /**
+   * 用户级技能目录（应用数据边界，不带项目会话）。
+   *
+   * 主进程用 Pi 的加载器扫描，连带返回规范校验的诊断。
+   */
+  'skills:load-user-catalog': {
     args: []
-    return: Array<{ name: string; content: string; baseDir: string; filePath: string }>
+    return: import('./writing-skill-catalog').WritingSkillCatalog
+  }
+  /**
+   * 用户级 + 当前项目级技能目录。
+   *
+   * 属于项目会话范围：渲染层必须带冻结的完整租约，主进程先认证项目身份、
+   * 再把项目技能根钉在项目内。
+   */
+  'skills:load-catalog': {
+    args: [expectedProjectPath: string]
+    return: import('./writing-skill-catalog').WritingSkillCatalog
   }
   'skills:inspect-github': {
     args: [sourceUrl: string]

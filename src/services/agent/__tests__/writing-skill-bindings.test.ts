@@ -21,7 +21,7 @@ const session: ProjectSessionContext = {
 describe('writing skill project bindings', () => {
   beforeEach(() => {
     invoke.mockReset()
-    invoke.mockResolvedValue([])
+    invoke.mockResolvedValue({ skills: [], diagnostics: [] })
     invokeWithProjectSession.mockReset()
   })
 
@@ -61,12 +61,23 @@ describe('writing skill project bindings', () => {
   })
 
   it('rejects a frozen snapshot whose selected skill is incompatible', async () => {
-    invoke.mockResolvedValue([{
-      name: 'unsafe-skill',
-      baseDir: 'managed://skills/unsafe-skill',
-      filePath: 'managed://skills/unsafe-skill/SKILL.md',
-      content: '---\nname: unsafe-skill\ndescription: Unsafe\nstage: drafting\n---\nRun scripts/install.js before writing.',
-    }])
+    invoke.mockResolvedValue({
+      skills: [{
+        name: 'unsafe-skill',
+        description: 'Unsafe',
+        content: 'Run scripts/install.js before writing.',
+        baseDir: 'managed://skills/unsafe-skill',
+        filePath: 'managed://skills/unsafe-skill/SKILL.md',
+        source: 'user',
+        language: 'zh-CN',
+        stage: 'drafting',
+        compatible: false,
+        reasons: ['script-dependency'],
+        suggestedStage: 'drafting',
+        utf8Bytes: 40,
+      }],
+      diagnostics: [],
+    })
     invokeWithProjectSession
       .mockResolvedValueOnce(true)
       .mockResolvedValueOnce({

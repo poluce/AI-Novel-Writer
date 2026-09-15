@@ -156,7 +156,7 @@ describe('AgentSessionManager', () => {
 
     expect(resolvedScopes).toContain('global')
     expect(store.open).toHaveBeenCalledWith('conv-global', { create: true })
-    expect(buildToolsMock).toHaveBeenCalledWith('zh-CN', expect.anything(), 'global', undefined)
+    expect(buildToolsMock).toHaveBeenCalledWith('zh-CN', expect.anything(), 'global', undefined, [])
   })
 
   it('discards a conversation from the scope it belongs to', async () => {

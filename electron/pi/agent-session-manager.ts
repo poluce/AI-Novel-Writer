@@ -37,6 +37,8 @@ export interface AgentSessionManagerOptions {
   resolveConversationStore?: (scope: AgentScope) => AgentConversationStore | null
   /** Pi harness 执行工具的沙箱环境；不返回就不挂这些工具。 */
   resolveToolEnvironment?: (scope: AgentScope) => ExecutionEnv | null
+  /** 允许直读正文的技能根（用户级 + 项目级）；不返回就只用目录快照。 */
+  resolveSkillRoots?: () => readonly string[]
 }
 
 /**
@@ -75,7 +77,13 @@ export class AgentSessionManager {
       const language = this.options.resolveLanguage(conversationId)
       session.setEditorSnapshot(editorSnapshot)
       session.setSystemPrompt(this.options.resolveSystemPrompt(conversationId, scope, skills))
-      await session.setTools(buildAgentTools(language, this.options.rendererAction, scope, skills))
+      await session.setTools(buildAgentTools(
+        language,
+        this.options.rendererAction,
+        scope,
+        skills,
+        this.options.resolveSkillRoots?.() ?? [],
+      ))
       const resources = AgentSessionManager.resourcesFor(skills)
       if (resources) await session.setResources(resources)
       await session.prompt(input)
@@ -169,7 +177,13 @@ export class AgentSessionManager {
         modelName: profile.modelName,
       },
       systemPrompt: this.options.resolveSystemPrompt(conversationId, scope, skills),
-      tools: buildAgentTools(language, this.options.rendererAction, scope, skills),
+      tools: buildAgentTools(
+        language,
+        this.options.rendererAction,
+        scope,
+        skills,
+        this.options.resolveSkillRoots?.() ?? [],
+      ),
       confirmationToolNames: confirmationToolNames(),
       ...(resources ? { resources } : {}),
       ...(executionEnv ? { executionEnv } : {}),

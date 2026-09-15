@@ -45,6 +45,7 @@ export function buildAgentTools(
   rendererAction: RendererActionSink,
   scope: AgentScope = 'project',
   skills: readonly AgentSkillCatalogEntry[] = [],
+  skillRoots: readonly string[] = [],
 ): AnyAgentTool[] {
   const projectTools: AnyAgentTool[] = scope === 'project'
     ? [
@@ -69,7 +70,7 @@ export function buildAgentTools(
     ...projectTools,
     createInspectWritingSkillTool(language),
     // 渐进式披露：目录进提示词，正文由模型按需取（两个作用域都有）。
-    createLoadWritingSkillTool(language, skills),
+    createLoadWritingSkillTool(language, skills, skillRoots),
     ...buildMcpAgentTools(language),
   ].map(withExecutionMode)
 }

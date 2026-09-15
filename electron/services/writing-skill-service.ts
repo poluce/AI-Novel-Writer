@@ -15,6 +15,25 @@ import { VELA_HOME } from '../utils/config-utils'
 const WRITING_SKILL_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 const MAX_WRITING_SKILL_BYTES = 64 * 1024
 
+/**
+ * 技能名的 SKILL.md 规范：小写字母/数字/连字符、≤64 字符、不以连字符开头或
+ * 结尾、不出现连续连字符。目录名就是技能名，安装时按它建目录。
+ */
+const WRITING_SKILL_SPEC_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+const WRITING_SKILL_SPEC_NAME_MAX = 64
+
+function assertSpecSkillName(name: string): void {
+  if (
+    name.length > WRITING_SKILL_SPEC_NAME_MAX
+    || !WRITING_SKILL_SPEC_NAME.test(name)
+  ) {
+    throw new Error(text(
+      `技能名“${name}”不符合 SKILL.md 规范：只能用小写字母、数字与连字符，长度不超过 64，且不能以连字符开头或结尾。`,
+      `The skill name "${name}" does not follow the SKILL.md spec: lowercase letters, digits, and hyphens only, at most 64 characters, and it must not start or end with a hyphen.`,
+    ))
+  }
+}
+
 function text(zhCNText: string, enUSText: string): string {
   return mainText(app.getLocale(), zhCNText, enUSText)
 }
@@ -206,6 +225,8 @@ export async function installWritingSkill(sourceUrl: string): Promise<WritingSki
         `This is not a self-contained prompt skill: ${inspection.reasons.join(', ')}`,
       ))
     }
+    // 装进来的技能名必须能通过规范校验，否则用户会装到一个永远带诊断的技能。
+    assertSpecSkillName(inspection.metadata.name)
     const requestedDirectory = writingSkillDirectory(inspection.metadata.name)
     if (fs.existsSync(requestedDirectory)) {
       throw new Error(text(

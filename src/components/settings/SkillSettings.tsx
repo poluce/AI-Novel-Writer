@@ -11,6 +11,7 @@ import { useLocaleStore } from '../../stores/locale-store'
 import { useProjectStore } from '../../stores/project-store'
 import { ipc } from '../../services/ipc-client'
 import { skillRegistry, type LoadedSkill } from '../../services/agent/skill-registry'
+import type { WritingSkillCatalogDiagnostic } from '../../shared/writing-skill-catalog'
 import {
   loadWritingSkillBindings,
   saveWritingSkillBinding,
@@ -106,10 +107,12 @@ export default function SkillSettings() {
   const [inspection, setInspection] = useState<RemoteWritingSkillInspection | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [diagnostics, setDiagnostics] = useState<WritingSkillCatalogDiagnostic[]>([])
 
   const reload = async (session: ProjectSessionContext | null = projectSession) => {
     await skillRegistry.loadAll()
     setSkills(skillRegistry.listAll())
+    setDiagnostics(skillRegistry.listDiagnostics())
     if (session) {
       const loaded = await loadWritingSkillBindings(session)
       setBindings(loaded.bindings)
@@ -125,6 +128,7 @@ export default function SkillSettings() {
         await skillRegistry.loadAll()
         if (disposed) return
         setSkills(skillRegistry.listAll())
+        setDiagnostics(skillRegistry.listDiagnostics())
         if (projectSession) {
           const loaded = await loadWritingSkillBindings(projectSession)
           if (!disposed) setBindings(loaded.bindings)
@@ -307,6 +311,37 @@ export default function SkillSettings() {
           ))}
         </div>
       </section>
+
+      {diagnostics.length > 0 && (
+        <section className="space-y-2" aria-labelledby="writing-skill-diagnostics-title">
+          <div>
+            <h3 id="writing-skill-diagnostics-title" className="flex items-center gap-1.5 text-sm font-semibold text-[var(--color-text)]">
+              <AlertTriangle size={14} className="text-[var(--color-warning-text)]" />
+              {text('技能目录诊断', 'Skill catalog diagnostics')}
+            </h3>
+            <p className="mt-1 text-xs leading-5 text-[var(--color-text-muted)]">
+              {text(
+                '这些技能仍会出现在列表里，但不符合 SKILL.md 规范（名字、描述长度等），可能无法被正确调用。',
+                'These skills still show up in the list, but they do not follow the SKILL.md spec (name, description length, and so on) and may not be callable correctly.',
+              )}
+            </p>
+          </div>
+          <ul className="space-y-1.5">
+            {diagnostics.map(diagnostic => (
+              <li
+                key={`${diagnostic.code}:${diagnostic.path}:${diagnostic.message}`}
+                className="rounded-xl border border-[var(--color-border)] bg-[var(--color-panel)] px-4 py-2.5"
+              >
+                {/* 诊断文案来自 Pi 的规范校验，按数据展示，不再二次翻译。 */}
+                <p className="text-xs text-[var(--color-text-secondary)]">{diagnostic.message}</p>
+                {diagnostic.path && (
+                  <p className="mt-1 break-all font-mono text-[0.68rem] text-[var(--color-text-muted)]">{diagnostic.path}</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="space-y-2" aria-labelledby="writing-skill-library-title">
         <h3 id="writing-skill-library-title" className="text-sm font-semibold text-[var(--color-text)]">

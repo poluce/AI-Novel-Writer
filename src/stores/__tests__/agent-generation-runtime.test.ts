@@ -117,13 +117,24 @@ describe('Agent IPC bridge', () => {
     skillRegistry.clear()
     useAgentStore.setState({ toolsInitialized: false })
     ipcInvoke.mockImplementation(async (channel: string) => {
-      if (channel === 'skills:list-user') {
-        return [{
-          name: 'scene-craft',
-          baseDir: 'managed://skills/scene-craft',
-          filePath: 'managed://skills/scene-craft/SKILL.md',
-          content: '---\nname: scene-craft\ndescription: 场景塑造\nstage: drafting\n---\n正文',
-        }]
+      if (channel === 'skills:load-user-catalog') {
+        return {
+          skills: [{
+            name: 'scene-craft',
+            description: '场景塑造',
+            content: '正文',
+            baseDir: 'managed://skills/scene-craft',
+            filePath: 'managed://skills/scene-craft/SKILL.md',
+            source: 'user',
+            language: 'zh-CN',
+            stage: 'drafting',
+            compatible: true,
+            reasons: [],
+            suggestedStage: 'drafting',
+            utf8Bytes: 6,
+          }],
+          diagnostics: [],
+        }
       }
       return { success: true }
     })

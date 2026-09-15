@@ -10,13 +10,26 @@ vi.mock('../../../stores/project-store', () => ({
 describe('writing skill registry identity and command exposure', () => {
   beforeEach(() => invoke.mockReset())
 
-  it('uses the shared frontmatter parser so quoted names produce bindable ids without quotes', async () => {
-    invoke.mockResolvedValue([{
-      name: 'quoted-skill',
-      baseDir: 'managed://skills/quoted-skill',
-      filePath: 'managed://skills/quoted-skill/SKILL.md',
-      content: '---\nname: "quoted-skill"\ndescription: "Quoted metadata"\nstage: "drafting"\n---\nUse concrete action.',
-    }])
+  it('uses the catalog record name verbatim, so quoted frontmatter never leaks into ids', async () => {
+    // 主进程用 Pi 的 YAML 解析器读出 `name: "quoted-skill"` → `quoted-skill`；
+    // 渲染层只做映射，不再自己解析（YAML 解析的覆盖在主进程加载器用例里）。
+    invoke.mockResolvedValue({
+      skills: [{
+        name: 'quoted-skill',
+        description: 'Quoted metadata',
+        content: 'Use concrete action.',
+        baseDir: 'managed://skills/quoted-skill',
+        filePath: 'managed://skills/quoted-skill/SKILL.md',
+        source: 'user',
+        language: 'zh-CN',
+        stage: 'drafting',
+        compatible: true,
+        reasons: [],
+        suggestedStage: 'drafting',
+        utf8Bytes: 19,
+      }],
+      diagnostics: [],
+    })
 
     const { skillRegistry } = await import('../skill-registry')
     await skillRegistry.loadAll()
@@ -33,8 +46,8 @@ describe('writing skill registry identity and command exposure', () => {
       const promise = new Promise<T>(next => { resolve = next })
       return { promise, resolve }
     }
-    const firstUserRead = deferred<unknown[]>()
-    const secondUserRead = deferred<unknown[]>()
+    const firstUserRead = deferred<unknown>()
+    const secondUserRead = deferred<unknown>()
     const { parseSkillMd, skillRegistry } = await import('../skill-registry')
     const previous = parseSkillMd(
       '---\nname: previous-user-skill\ndescription: Previous\nstage: drafting\n---\nKeep prior content.',
@@ -56,28 +69,47 @@ describe('writing skill registry identity and command exposure', () => {
     expect(invoke).toHaveBeenCalledOnce()
     expect(skillRegistry.getById('user:previous-user-skill')).toBe(previous)
 
-    firstUserRead.resolve([])
+    firstUserRead.resolve({ skills: [], diagnostics: [] })
     await vi.waitFor(() => expect(invoke).toHaveBeenCalledTimes(2))
-    secondUserRead.resolve([])
+    secondUserRead.resolve({ skills: [], diagnostics: [] })
     await Promise.all([firstLoad, secondLoad])
     expect(skillRegistry.getById('builtin:long-form-continuity')).toBeDefined()
   })
 
   it('keeps same-named skills by stable id', async () => {
-    invoke.mockResolvedValue([
-      {
-        name: 'writing-coach',
-        baseDir: 'managed://skills/writing-coach',
-        filePath: 'managed://skills/writing-coach/SKILL.md',
-        content: '---\nname: writing-coach\ndescription: User writing coach\nstage: refinement\n---\nUse concrete prose.',
-      },
-      {
-        name: 'scene-craft',
-        baseDir: 'managed://skills/scene-craft',
-        filePath: 'managed://skills/scene-craft/SKILL.md',
-        content: '---\nname: scene-craft\ndescription: Scene craft\nstage: drafting\n---\nUse concrete action.',
-      },
-    ])
+    invoke.mockResolvedValue({
+      skills: [
+        {
+          name: 'writing-coach',
+          description: 'User writing coach',
+          content: 'Use concrete prose.',
+          baseDir: 'managed://skills/writing-coach',
+          filePath: 'managed://skills/writing-coach/SKILL.md',
+          source: 'user',
+          language: 'zh-CN',
+          stage: 'refinement',
+          compatible: true,
+          reasons: [],
+          suggestedStage: 'refinement',
+          utf8Bytes: 19,
+        },
+        {
+          name: 'scene-craft',
+          description: 'Scene craft',
+          content: 'Use concrete action.',
+          baseDir: 'managed://skills/scene-craft',
+          filePath: 'managed://skills/scene-craft/SKILL.md',
+          source: 'user',
+          language: 'zh-CN',
+          stage: 'drafting',
+          compatible: true,
+          reasons: [],
+          suggestedStage: 'drafting',
+          utf8Bytes: 19,
+        },
+      ],
+      diagnostics: [],
+    })
 
     const { skillRegistry } = await import('../skill-registry')
     await skillRegistry.loadAll()
@@ -88,7 +120,7 @@ describe('writing skill registry identity and command exposure', () => {
   })
 
   it('keeps every real built-in Skill letter-perfect in English and Chinese copy', async () => {
-    invoke.mockResolvedValue([])
+    invoke.mockResolvedValue({ skills: [], diagnostics: [] })
     const { skillRegistry } = await import('../skill-registry')
     await skillRegistry.loadAll()
 

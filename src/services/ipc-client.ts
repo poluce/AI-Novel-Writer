@@ -53,7 +53,8 @@ function isCapabilityOrAppDataChannel(channel: string): boolean {
   return channel.startsWith('fs:grant-')
     || channel.startsWith('dialog:select-')
     || channel.startsWith('prompt:')
-    || channel.startsWith('skills:')
+    // 技能目录有一个通道要读项目内的 `.vela/skills`，它走项目会话边界。
+    || (channel.startsWith('skills:') && channel !== 'skills:load-catalog')
 }
 
 function isProjectScopedChannel(channel: string): boolean {
@@ -62,6 +63,7 @@ function isProjectScopedChannel(channel: string): boolean {
     || channel.startsWith('kb:')
     || channel.startsWith('chapter:')
     || channel.startsWith('fs:')
+    || channel === 'skills:load-catalog'
     || channel === 'project:save'
     || channel === 'project:delete'
 }
