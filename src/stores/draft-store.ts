@@ -85,13 +85,6 @@ interface DraftState {
     expectedProjectSession?: ProjectSessionContext,
   ) => Promise<void>
 
-  /** 手动标记草稿状态（修稿/审稿后更新用） */
-  markDraftStatus: (
-    draftPath: string,
-    chapterNumber: number,
-    status: DraftStatus,
-    expectedProjectSession?: ProjectSessionContext,
-  ) => Promise<void>
   /** 清除指定章节的缓存（下次访问时重新加载） */
   invalidateChapter: (chapterNumber: number) => void
   /** 应用合并后的修稿，更新文件和各类状态 */
@@ -247,42 +240,6 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
     }
   },
 
-
-  markDraftStatus: async (draftPath, chapterNumber, status, expectedProjectSession) => {
-    // 从路径提取版本号
-    const versionMatch = draftPath.match(/draft_v(\d+)\.md$/)
-    const project = useProjectStore.getState().currentProject
-    const projectSession = currentDraftProjectSession(project?.path, expectedProjectSession)
-    if (!project || !projectSession) return
-    const directDraftId = /^vela:\/(?:draft|manuscript)\/(\d+)$/.exec(draftPath)?.[1]
-    let draftId = directDraftId ? Number(directDraftId) : undefined
-    if (draftId === undefined) {
-      if (!versionMatch) return
-      const drafts = await ipc.invokeWithProjectSession(
-        projectSession,
-        'db:draft-list',
-        chapterNumber,
-        project.path,
-      )
-      if (!isDraftProjectSessionCurrent(projectSession)) return
-      draftId = drafts.find(draft => draft.version === Number(versionMatch[1]))?.id
-    }
-    if (!draftId) return
-    requireIpcSuccess(
-      await ipc.invokeWithProjectSession(
-        projectSession,
-        'db:draft-update-status',
-        draftId,
-        status,
-        undefined,
-        project.path,
-      ),
-      '更新草稿状态',
-    )
-    if (!isDraftProjectSessionCurrent(projectSession)) return
-    // 重新加载该章草稿以刷新缓存
-    await get().loadChapterDrafts(chapterNumber, project.path, projectSession)
-  },
 
   invalidateChapter: (chapterNumber) => {
     set(s => {

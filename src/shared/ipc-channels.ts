@@ -414,10 +414,6 @@ export interface LLMChannels {
     args: [leaseId: string]
     return: { success: boolean; error?: string }
   }
-  'llm:generate': {
-    args: [request: LLMRequest]
-    return: LLMResponse
-  }
   'llm:generate-stream': {
     args: [requestId: string, request: LLMRequest]
     return: { requestId: string; started: boolean; error?: string }
@@ -650,20 +646,6 @@ export interface ModelExecutionLeaseReceipt {
   createdAt: number
   expiresAt: number
 }
-
-interface LLMResponseBase {
-  content: string
-  usage?: TokenUsage
-  error?: string
-}
-
-/** Every non-stream response carries explicit terminal evidence. */
-export type LLMResponse =
-  | (LLMResponseBase & { success: true; finishReason: 'stop' })
-  | (LLMResponseBase & {
-      success: false
-      finishReason: Exclude<LLMFinishReason, 'stop'>
-    })
 
 /**
  * Provider-neutral end state for generated text. `stop` is the only state

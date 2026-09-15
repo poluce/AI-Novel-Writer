@@ -7,7 +7,6 @@ import type {
   ModelDiscoveryResult,
   ModelDiscoveryRequest,
   ModelProfile,
-  LLMResponse,
   TokenUsage,
 } from '../shared/ipc-channels'
 import type { CreativeStrategy, GenerationReasoningStage } from '../shared/reasoning-types'
@@ -46,12 +45,6 @@ interface LLMState {
   setDefaultModel: (modelId: string) => Promise<boolean>
   /** 设置默认向量模型（持久化到 ~/.vela/config.json） */
   setDefaultEmbeddingModel: (modelId: string) => Promise<boolean>
-  /** 非流式生成 */
-  generate: (
-    messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
-    modelId?: string,
-    options?: { responseFormat?: { type: string }; maxTokens?: number; purpose?: string; projectSession?: import('../shared/ipc-channels').ProjectSessionContext; modelExecutionLeaseId?: string; creativeStrategy?: CreativeStrategy; reasoningStage?: GenerationReasoningStage }
-  ) => Promise<LLMResponse>
   /** 流式生成 */
   generateStream: (
     messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
@@ -156,30 +149,6 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
       alertError(String(error), { title: '模型设置保存失败' })
       return false
     }
-  },
-
-  generate: async (messages, modelId, options) => {
-    const mid = modelId ?? get().defaultModelId
-    if (!mid) return { success: false, content: '', finishReason: 'error', error: '未配置默认模型' }
-    const projectSession = options?.projectSession
-      ?? projectSessionContextFromProject(useProjectStore.getState().currentProject)
-      ?? undefined
-    const creativeStrategy = options?.creativeStrategy
-      ?? useProjectStore.getState().currentProject?.novelConfig.creativeStrategy
-      ?? 'auto'
-    const response = await ipc.invoke('llm:generate', {
-      modelId: mid,
-      purpose: options?.purpose ?? 'generation',
-      creativeStrategy,
-      reasoningStage: options?.reasoningStage
-        ?? (options?.responseFormat ? 'planning' : 'drafting'),
-      projectSession,
-      modelExecutionLeaseId: options?.modelExecutionLeaseId,
-      messages,
-      responseFormat: options?.responseFormat as { type: 'json_object' | 'text' } | undefined,
-      maxTokens: options?.maxTokens,
-    })
-    return requireIpcSuccess(response, '模型生成')
   },
 
   generateStream: async (messages, callbacks, modelId, options) => {

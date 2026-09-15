@@ -385,7 +385,7 @@ describe('createImportWorkflow', () => {
 
     expect(characterSyncMocks.retry).toHaveBeenCalledWith('sync-1', session.projectPath, session)
     expect(snapshot.stage).toBe('refresh')
-    expect(ipcMocks.invoke.mock.calls.map(call => call[1])).not.toContain('llm:generate')
+    expect(ipcMocks.invoke.mock.calls.map(call => call[1])).not.toContain('llm:generate-stream')
   })
 
   it('creates an author-only finalization plan without reference analysis stages', () => {

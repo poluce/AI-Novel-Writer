@@ -31,12 +31,7 @@ export interface RefineFromReviewParams {
   confirmedReviewContent?: string
   /** ID of the review row that stores the confirmed snapshot. */
   reviewSourceId?: number
-  /** @deprecated Raw AI review content is deliberately never sent to the refiner. */
-  reviewReport?: string
-  reviewFileName?: string
   chapterNumber: number
-  /** @deprecated Author guidance must be persisted in the confirmation snapshot. */
-  userRefinePrompt?: string
 }
 
 export class RefineFromReviewCommand extends BaseWorkflowCommand<string> {

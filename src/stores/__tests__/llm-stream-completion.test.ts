@@ -107,24 +107,9 @@ describe('LLM stream completion propagation', () => {
     expect(useLLMStore.getState().activeRequests.size).toBe(0)
   })
 
-  it('rejects non-stream business failures instead of returning them as content', async () => {
-    mocks.invoke.mockResolvedValueOnce({ success: false, content: '', error: 'provider failed' })
+  it('forwards one frozen model execution lease through streaming requests', async () => {
+    mocks.invoke.mockImplementation(async () => ({ requestId: 'leased-stream', started: true }))
 
-    await expect(useLLMStore.getState().generate(
-      [{ role: 'user', content: '写正文' }],
-    )).rejects.toThrow('provider failed')
-  })
-
-  it('forwards one frozen model execution lease through regular and streaming requests', async () => {
-    mocks.invoke.mockImplementation(async (channel: string) => channel === 'llm:generate'
-      ? { success: true, content: 'done', finishReason: 'stop' }
-      : { requestId: 'leased-stream', started: true })
-
-    await useLLMStore.getState().generate(
-      [{ role: 'user', content: 'write' }],
-      'model',
-      { modelExecutionLeaseId: 'opaque-model-lease' },
-    )
     const requestId = await useLLMStore.getState().generateStream(
       [{ role: 'user', content: 'continue' }],
       {},
@@ -133,10 +118,6 @@ describe('LLM stream completion propagation', () => {
     )
 
     expect(requestId).toEqual(expect.any(String))
-    expect(mocks.invoke).toHaveBeenCalledWith('llm:generate', expect.objectContaining({
-      modelId: 'model',
-      modelExecutionLeaseId: 'opaque-model-lease',
-    }))
     expect(mocks.invoke).toHaveBeenCalledWith(
       'llm:generate-stream',
       expect.any(String),
@@ -147,7 +128,7 @@ describe('LLM stream completion propagation', () => {
     )
   })
 
-  it('captures the project creative strategy for normal and workflow streaming requests', async () => {
+  it('captures the project creative strategy for streaming requests', async () => {
     useProjectStore.setState({
       currentProject: {
         id: 'project-a',
@@ -174,14 +155,8 @@ describe('LLM stream completion propagation', () => {
         updatedAt: '2026-08-16T00:00:00.000Z',
       },
     })
-    mocks.invoke.mockImplementation(async (channel: string) => channel === 'llm:generate'
-      ? { success: true, content: 'done', finishReason: 'stop' }
-      : { requestId: 'strategy-stream', started: true })
+    mocks.invoke.mockImplementation(async () => ({ requestId: 'strategy-stream', started: true }))
 
-    await useLLMStore.getState().generate([{ role: 'user', content: 'plan' }], 'model', {
-      purpose: 'chapter-blueprint',
-      reasoningStage: 'planning',
-    })
     await useLLMStore.getState().generateStream(
       [{ role: 'user', content: 'draft' }],
       {},
@@ -189,11 +164,6 @@ describe('LLM stream completion propagation', () => {
       { purpose: 'chapter-draft', reasoningStage: 'drafting' },
     )
 
-    expect(mocks.invoke).toHaveBeenCalledWith('llm:generate', expect.objectContaining({
-      purpose: 'chapter-blueprint',
-      creativeStrategy: 'consistency-first',
-      reasoningStage: 'planning',
-    }))
     expect(mocks.invoke).toHaveBeenCalledWith(
       'llm:generate-stream',
       expect.any(String),

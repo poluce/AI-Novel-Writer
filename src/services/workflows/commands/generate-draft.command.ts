@@ -702,7 +702,7 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
       draftPersisted = true
       callbacks.replaceText?.(cleanDraftText)
 
-      const pseudoPath = createResult.id ? `vela://draft/${createResult.id}` : `vela://draft/ch${this.chapterInfo.chapterNumber}/v${nextVersion}`
+      const pseudoPath = `vela://draft/${createResult.id}`
 
       context.data.draft = cleanDraftText
       context.data.draftContent = cleanDraftText

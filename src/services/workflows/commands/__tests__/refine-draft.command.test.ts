@@ -838,8 +838,6 @@ describe('RefineFromReviewCommand bounded visible completion', () => {
       draftContent: sourceDraft,
       confirmedReviewContent: persistedConfirmation,
       reviewSourceId: CONFIRMATION_REVIEW_ID,
-      reviewReport: '{"summary":"原始 AI 报告也不能进入模型"}',
-      userRefinePrompt: '瞬态 UI 提示不得绕过确认快照。',
       chapterNumber: 1,
     }, { createRuntime })
 
@@ -862,7 +860,6 @@ describe('RefineFromReviewCommand bounded visible completion', () => {
     expect(prompt).toContain('保留开头的悬念。')
     expect(prompt).not.toContain('这个被作者忽略，不能送入模型。')
     expect(prompt).not.toContain('原始 AI 总结绝不能进入修稿提示。')
-    expect(prompt).not.toContain('瞬态 UI 提示不得绕过确认快照。')
 
     const pendingRevision = invoke.mock.calls.find(([channel]) => channel === 'db:revision-replace-pending')?.[1]
     expect(pendingRevision).toMatchObject({

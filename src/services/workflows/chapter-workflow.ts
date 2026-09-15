@@ -1,6 +1,5 @@
 import { workflowResourceKey, type WorkflowDefinition } from '../../stores/workflow-store'
 import type { DraftMeta } from '../draft-index'
-import { requireIpcSuccess } from '../ipc-result'
 import { ipc } from '../ipc-client'
 
 import type { DraftStatus } from '../../shared/draft-status'
@@ -14,8 +13,9 @@ import type { Locale } from '../../i18n/types'
 import { useLocaleStore } from '../../stores/locale-store'
 
 // ==========================================
-// 1. 结构与类型导出 (保留对外的向后兼容)
+// 1. 结构与类型导出
 // ==========================================
+
 export type { DraftStatus, DraftMeta }
 
 export interface ChapterInfo {
@@ -71,13 +71,8 @@ export interface RefineFromReviewParams {
   confirmedReviewContent?: string
   /** ID of the confirmation review row, recorded on the resulting revision. */
   reviewSourceId?: number
-  /** @deprecated Raw AI review text must not become a model instruction. */
-  reviewReport?: string
-  reviewFileName?: string
   /** Renderer-owned selection, frozen onto this workflow rather than LLM input. */
   generationModelId?: string
-  /** @deprecated Author guidance is part of the confirmation snapshot. */
-  userRefinePrompt?: string
 }
 
 export interface ReviewOnlyParams {
@@ -187,28 +182,6 @@ export async function parseDraftMeta(
   )
   const d = drafts.find((draft) => draft.version === version)
   return d ? (d as unknown as DraftMeta) : null
-}
-
-export async function updateDraftStatus(
-  filePath: string,
-  newStatus: DraftStatus,
-  expectedProjectPath: string,
-  projectSession: ProjectSessionContext,
-): Promise<void> {
-  const meta = await parseDraftMeta(filePath, expectedProjectPath, projectSession)
-  if (meta) {
-    requireIpcSuccess(
-      await ipc.invokeWithProjectSession(
-        projectSession,
-        'db:draft-update-status',
-        meta.id,
-        newStatus,
-        undefined,
-        expectedProjectPath,
-      ),
-      '更新草稿状态',
-    )
-  }
 }
 
 // ==========================================
