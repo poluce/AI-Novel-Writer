@@ -28,11 +28,17 @@ import {
 } from '../shared/draft-excerpt'
 import { ipc } from '../services/ipc-client'
 import { logFailure, logInfo } from '../shared/fail-log'
-import type { PiToolCallInfo, RendererAction, RendererActionResult } from '../shared/agent-events'
+import type {
+  PiAgentEvent,
+  PiToolCallInfo,
+  RendererAction,
+  RendererActionResult,
+} from '../shared/agent-events'
 import { useLocaleStore } from './locale-store'
 import { useProjectStore } from './project-store'
 import { useEditorStore } from './editor-store'
 import type { Locale } from '../i18n/types'
+import { DEFAULT_AGENT_SCOPE, type AgentScope } from '../shared/agent-scope'
 
 // ===== 类型定义 =====
 
@@ -65,14 +71,20 @@ export interface AgentConversation {
   mode: AgentMode
   /** 当前会话使用的模型 ID（null 表示使用默认） */
   modelId: string | null
+  /** 属于哪个助手：项目助手（跟着书）/ 界面助手（跟着应用） */
+  scope: AgentScope
 }
 
 // ===== Store 状态接口 =====
 
 export interface AgentState {
-  /** 所有会话列表（最新的排在前面） */
+  /** 所有会话列表（最新的排在前面，两个助手共用一份，用 scope 区分） */
   conversations: AgentConversation[]
-  /** 当前活跃会话 ID */
+  /** 当前展示的助手作用域 */
+  activeScope: AgentScope
+  /** 每个作用域各自记住的活跃会话（切回来时还原） */
+  scopeActiveConversationIds: Record<AgentScope, string | null>
+  /** 当前活跃会话 ID（属于 activeScope） */
   activeConversationId: string | null
   /** 是否显示历史面板 */
   showHistory: boolean
@@ -100,8 +112,10 @@ export interface AgentState {
   selectConversation: (id: string) => void
   /** 删除指定会话 */
   deleteConversation: (id: string) => void
-  /** 清空所有会话 */
+  /** 清空当前助手的会话（不会动另一个助手） */
   clearAll: () => void
+  /** 切换助手作用域（项目助手 / 界面助手） */
+  setScope: (scope: AgentScope) => void
   /** 切换历史面板 */
   toggleHistory: () => void
   /** 设置历史面板可见性 */
@@ -120,6 +134,8 @@ export interface AgentState {
   beginProjectLoad: () => void
   /** 用当前项目存档替换内存中的会话 */
   hydrateFromArchive: (projectSession: ProjectSessionContext, archive: AgentConversationArchive) => void
+  /** 用某个助手的存档替换该作用域的会话（项目/界面共用） */
+  replaceConversations: (scope: AgentScope, archive: AgentConversationArchive) => void
   addComposerCitation: (citation: DraftPassageCitation) => void
   removeComposerCitation: (id: string) => void
 }
@@ -129,10 +145,14 @@ export interface AgentState {
 /** 生成唯一 ID */
 const genId = () => crypto.randomUUID()
 
-function fromPersistedConversation(conversation: PersistedAgentConversation): AgentConversation {
+function fromPersistedConversation(
+  conversation: PersistedAgentConversation,
+  scope: AgentScope,
+): AgentConversation {
   return {
     id: conversation.id,
     title: conversation.title,
+    scope,
     createdAt: conversation.createdAt,
     updatedAt: conversation.updatedAt,
     mode: conversation.mode,
@@ -189,11 +209,17 @@ const generateHelpText = (locale: Locale): string => {
 }
 
 // ===== 主进程 Agent 会话状态 =====
-/** 当前流式会话 ID（用于路由 agent:event） */
-let activeConversationId: string | null = null
-/** 当前流式助手消息 ID（用于更新助手消息） */
-let activeAssistantMsgId: string | null = null
-let activeRequestUiLocale: Locale | null = null
+/**
+ * 在途回合表：按会话 ID 记录这一轮的助手消息与界面语言。
+ *
+ * 之前是「当前会话」两个单例，切到另一个助手就会把后台那一侧的流式事件
+ * 丢掉；改成按会话索引之后，两边同时生成也不会串。
+ */
+interface InflightTurn {
+  assistantMsgId: string
+  uiLocale: Locale
+}
+const inflightTurns = new Map<string, InflightTurn>()
 
 /** True when the active conversation has an in-flight assistant turn. */
 export function selectIsGenerating(state: Pick<AgentState, 'conversations' | 'activeConversationId'>): boolean {
@@ -250,6 +276,8 @@ export function applyToolCallResult(
 
 export const useAgentStore = create<AgentState>()((set, get) => ({
   conversations: [],
+  activeScope: DEFAULT_AGENT_SCOPE,
+  scopeActiveConversationIds: { project: null, global: null },
   activeConversationId: null,
   showHistory: false,
   defaultMode: 'planning',
@@ -284,23 +312,54 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       // Null means “use the default once when a run starts”; the runtime then
       // freezes the selected lease across the entire ReAct loop.
       modelId: null,
+      scope: get().activeScope,
     }
     set(state => ({
       conversations: [newConv, ...state.conversations],
       activeConversationId: newConv.id,
+      scopeActiveConversationIds: {
+        ...state.scopeActiveConversationIds,
+        [newConv.scope]: newConv.id,
+      },
       showHistory: false,
     }))
     return newConv
   },
 
   selectConversation: (id) => {
-    set({ activeConversationId: id, showHistory: false })
+    set(state => ({
+      activeConversationId: id,
+      scopeActiveConversationIds: { ...state.scopeActiveConversationIds, [state.activeScope]: id },
+      showHistory: false,
+    }))
+  },
+
+  setScope: (scope) => {
+    const state = get()
+    if (state.activeScope === scope) return
+    const remembered = state.scopeActiveConversationIds[scope] ?? null
+    const inScope = state.conversations.filter(conversation => conversation.scope === scope)
+    const nextActive = remembered && inScope.some(conversation => conversation.id === remembered)
+      ? remembered
+      : inScope[0]?.id ?? null
+    set({
+      activeScope: scope,
+      activeConversationId: nextActive,
+      scopeActiveConversationIds: {
+        ...state.scopeActiveConversationIds,
+        [state.activeScope]: state.activeConversationId,
+        [scope]: nextActive,
+      },
+      showHistory: false,
+    })
   },
 
   deleteConversation: (id) => {
-    // Pi 会话存档跟着一起删；失败只影响磁盘残留，不挡界面。
-    void ipc.invoke('agent:discard-session', id).catch((error) => {
-      logFailure('Agent', 'discard conversation session failed', error)
+    // Pi 会话存档跟着一起删；存档在哪个作用域，就删哪一份。
+    const scope = get().conversations.find(conversation => conversation.id === id)?.scope
+      ?? get().activeScope
+    void ipc.invoke('agent:discard-session', id, scope).catch((error) => {
+      logFailure('Agent', 'discard conversation session failed', error, { conversationId: id, scope })
     })
     set(state => {
       const filtered = state.conversations.filter(c => c.id !== id)
@@ -313,23 +372,35 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   },
 
   clearAll: () => {
-    for (const conversation of get().conversations) {
-      void ipc.invoke('agent:discard-session', conversation.id).catch((error) => {
-        logFailure('Agent', 'discard conversation session failed', error)
+    const state = get()
+    // 只清当前助手：在项目里点「清空」不能把界面助手的全局会话一起删掉。
+    const doomed = state.conversations.filter(conversation => conversation.scope === state.activeScope)
+    for (const conversation of doomed) {
+      void ipc.invoke('agent:discard-session', conversation.id, conversation.scope).catch((error) => {
+        logFailure('Agent', 'discard conversation session failed', error, {
+          conversationId: conversation.id,
+          scope: conversation.scope,
+        })
       })
     }
-    set({ conversations: [], activeConversationId: null })
+    set(current => ({
+      conversations: current.conversations.filter(c => c.scope !== current.activeScope),
+      activeConversationId: null,
+      scopeActiveConversationIds: { ...current.scopeActiveConversationIds, [current.activeScope]: null },
+    }))
   },
 
   beginProjectLoad: () => {
-    set({
-      conversations: [],
+    set(state => ({
+      conversations: state.conversations.filter(c => c.scope !== 'project'),
+      activeScope: 'project',
       activeConversationId: null,
+      scopeActiveConversationIds: { ...state.scopeActiveConversationIds, project: null },
       showHistory: false,
       activeRequestId: null,
       dataProjectSession: null,
       composerCitations: [],
-    })
+    }))
   },
 
   addComposerCitation: (citation) => {
@@ -348,17 +419,41 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   },
 
   hydrateFromArchive: (projectSession, archive) => {
-    const conversations = archive.conversations.map(fromPersistedConversation)
+    const conversations = archive.conversations.map(item => fromPersistedConversation(item, 'project'))
     const activeConversationId = archive.activeConversationId
       && conversations.some(conversation => conversation.id === archive.activeConversationId)
       ? archive.activeConversationId
       : conversations[0]?.id ?? null
-    set({
-      conversations,
+    set(state => ({
+      // 界面助手的会话与当前项目无关，保留它们。
+      conversations: [...conversations, ...state.conversations.filter(c => c.scope !== 'project')],
+      activeScope: 'project',
       activeConversationId,
+      scopeActiveConversationIds: { ...state.scopeActiveConversationIds, project: activeConversationId },
       showHistory: false,
       activeRequestId: null,
       dataProjectSession: projectSession,
+    }))
+  },
+
+  replaceConversations: (scope, archive) => {
+    const conversations = archive.conversations.map(item => fromPersistedConversation(item, scope))
+    const activeConversationId = archive.activeConversationId
+      && conversations.some(conversation => conversation.id === archive.activeConversationId)
+      ? archive.activeConversationId
+      : conversations[0]?.id ?? null
+    set(state => {
+      const others = state.conversations.filter(c => c.scope !== scope)
+      const keepCurrent = state.activeScope !== scope
+      return {
+        conversations: [...conversations, ...others],
+        activeConversationId: keepCurrent ? state.activeConversationId : activeConversationId,
+        scopeActiveConversationIds: {
+          ...state.scopeActiveConversationIds,
+          [scope]: activeConversationId,
+          ...(keepCurrent ? { [state.activeScope]: state.activeConversationId } : {}),
+        },
+      }
     })
   },
 
@@ -526,8 +621,6 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
           : c
       ),
     }))
-    activeRequestUiLocale = requestLocale
-
     // 辅助函数：更新助手消息
     const updateAssistantMsg = (updater: (msg: AgentMessage) => AgentMessage) => {
       set(state => ({
@@ -545,10 +638,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     }
 
     try {
-      // 设置活跃会话 + 助手消息（用于路由 agent:event）
-      activeConversationId = convId
-      activeAssistantMsgId = assistantMsg.id
-      activeRequestUiLocale = requestLocale
+      // 记录这一轮的在途回合（按会话索引，另一侧后台生成也能收到自己的事件）
+      inflightTurns.set(convId, { assistantMsgId: assistantMsg.id, uiLocale: requestLocale })
       set({ activeRequestId: assistantMsg.id })
 
       logInfo('Agent', 'sending prompt', { conversationId: convId, modelId, chars: content.trim().length })
@@ -563,6 +654,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         captureAgentEditorSnapshot(),
         toAgentPromptHistory(conv.messages),
         buildAgentSkillCatalog(executionContext.writingLanguage),
+        conv.scope,
       )
       if (!result.success) {
         logFailure('Agent', 'renderer prompt returned failure', undefined, {
@@ -601,43 +693,53 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   },
 
   cancelGeneration: async () => {
-    const cancelledUiLocale = activeRequestUiLocale ?? useLocaleStore.getState().locale
+    const state = get()
+    const convId = state.activeConversationId
+    const cancelledUiLocale = (convId ? inflightTurns.get(convId)?.uiLocale : null)
+      ?? useLocaleStore.getState().locale
     const stoppedText = cancelledUiLocale === 'en-US'
       ? '\n\n_(Generation stopped)_'
       : '\n\n_（已停止生成）_'
     // 通知主进程中止当前会话的 Agent
-    if (activeConversationId) {
-      await ipc.invoke('agent:abort', activeConversationId)
+    if (convId) {
+      await ipc.invoke('agent:abort', convId)
+      inflightTurns.delete(convId)
     }
 
-    // 找到正在 streaming 的消息，关闭其状态
-    set(state => ({
+    // 只关闭当前会话里正在 streaming 的消息
+    set(current => ({
       activeRequestId: null,
-      conversations: state.conversations.map(c => ({
-        ...c,
-        messages: c.messages.map(m =>
-          m.streaming ? { ...m, streaming: false, content: m.content + stoppedText } : m
-        ),
-      })),
+      conversations: current.conversations.map(c => c.id !== convId
+        ? c
+        : {
+          ...c,
+          messages: c.messages.map(m =>
+            m.streaming ? { ...m, streaming: false, content: m.content + stoppedText } : m
+          ),
+        }),
     }))
   },
 
   resolveToolConfirmation: (toolCallId, confirmed) => {
-    if (activeConversationId) {
-      void ipc.invoke('agent:confirm', activeConversationId, toolCallId, confirmed)
+    const convId = get().activeConversationId
+    if (convId) {
+      void ipc.invoke('agent:confirm', convId, toolCallId, confirmed)
     }
   },
 }))
 
 // ===== 主进程 Agent 事件订阅 =====
 
-function updateActiveAssistantMsg(updater: (msg: AgentMessage) => AgentMessage): void {
-  const convId = activeConversationId
-  const msgId = activeAssistantMsgId
-  if (!convId || !msgId) return
+/** 按会话更新在途回合的助手消息（不依赖"当前可见的是哪一个"）。 */
+function updateInflightAssistantMsg(
+  conversationId: string,
+  updater: (msg: AgentMessage) => AgentMessage,
+): void {
+  const msgId = inflightTurns.get(conversationId)?.assistantMsgId
+  if (!msgId) return
   useAgentStore.setState(state => ({
     conversations: state.conversations.map(c =>
-      c.id === convId
+      c.id === conversationId
         ? { ...c, messages: c.messages.map(m => m.id === msgId ? updater(m) : m) }
         : c
     ),
@@ -755,21 +857,28 @@ export async function handleRendererAction(action: RendererAction): Promise<Rend
   }
 }
 
-if (typeof window !== 'undefined') {
-  ipc.on('agent:event', ({ conversationId, event }) => {
-    if (conversationId !== activeConversationId) return
+/**
+ * 处理主进程推来的 Agent 事件：按会话定位在途回合，当前可见的是哪一个不影响。
+ * 导出以便直接测试路由（渲染层监听在 window 存在时才注册）。
+ */
+export function handleAgentEvent({ conversationId, event }: {
+  conversationId: string
+  event: PiAgentEvent
+}): void {
+  {
+    if (!inflightTurns.has(conversationId)) return
     switch (event.type) {
       case 'text_delta':
-        updateActiveAssistantMsg(m => ({ ...m, content: m.content + event.delta }))
+        updateInflightAssistantMsg(conversationId, m => ({ ...m, content: m.content + event.delta }))
         break
       case 'tool_call_start':
-        updateActiveAssistantMsg(m => ({
+        updateInflightAssistantMsg(conversationId, m => ({
           ...m,
           toolCalls: [...(m.toolCalls ?? []), toToolCallInfo(event.call)],
         }))
         break
       case 'tool_call_confirm':
-        updateActiveAssistantMsg(m => ({
+        updateInflightAssistantMsg(conversationId, m => ({
           ...m,
           toolCalls: (m.toolCalls ?? []).map(tc =>
             tc.id === event.call.id ? { ...tc, status: 'waiting_confirm' as const } : tc
@@ -777,14 +886,22 @@ if (typeof window !== 'undefined') {
         }))
         break
       case 'tool_call_complete':
-        updateActiveAssistantMsg(m => applyToolCallResult(m, event.call, currentArtifactContext()))
+        updateInflightAssistantMsg(
+          conversationId,
+          m => applyToolCallResult(m, event.call, currentArtifactContext()),
+        )
         break
       case 'done':
         logInfo('Agent', 'renderer received done', {
           conversationId,
           chars: event.fullText.length,
         })
-        updateActiveAssistantMsg(m => ({ ...m, content: event.fullText, streaming: false }))
+        updateInflightAssistantMsg(conversationId, m => ({
+          ...m,
+          content: event.fullText,
+          streaming: false,
+        }))
+        inflightTurns.delete(conversationId)
         useAgentStore.setState(state => ({
           activeRequestId: null,
           conversations: state.conversations.map(c =>
@@ -797,11 +914,20 @@ if (typeof window !== 'undefined') {
           conversationId,
           message: event.message,
         })
-        updateActiveAssistantMsg(m => ({ ...m, content: event.message, streaming: false }))
+        updateInflightAssistantMsg(conversationId, m => ({
+          ...m,
+          content: event.message,
+          streaming: false,
+        }))
+        inflightTurns.delete(conversationId)
         useAgentStore.setState({ activeRequestId: null })
         break
     }
-  })
+  }
+}
+
+if (typeof window !== 'undefined') {
+  ipc.on('agent:event', handleAgentEvent)
 
   ipc.on('agent:renderer-action', ({ action, requestId }) => {
     void handleRendererAction(action).then((result) => {

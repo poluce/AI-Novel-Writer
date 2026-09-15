@@ -54,6 +54,8 @@ describe('Agent IPC bridge', () => {
       [],
       // 技能目录随每一轮发给主进程，供系统提示词列出可用技能。
       expect.any(Array),
+      // 会话属于哪个助手：项目助手 / 界面助手。
+      'project',
     )
   })
 
@@ -104,6 +106,7 @@ describe('Agent IPC bridge', () => {
       expect.any(Object),
       [],
       expect.any(Array),
+      'project',
     )
   })
 

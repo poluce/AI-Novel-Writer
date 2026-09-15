@@ -61,7 +61,9 @@ describeWithChrome('locale shell browser regression', () => {
     await page.getByTestId('switch-to-english').click()
 
     await expect.poll(() => page.getByText('Welcome to AI Novel Writer').count()).toBe(1)
-    expect(await page.getByText('AI Writing Assistant', { exact: true }).count()).toBe(1)
+    // 面板顶部现在是助手切换：项目助手 / 界面助手。
+    expect(await page.getByRole('tab', { name: 'Project' }).count()).toBe(1)
+    expect(await page.getByRole('tab', { name: 'App' }).count()).toBe(1)
     expect(await page.getByText('Your AI creative assistant', { exact: false }).count()).toBe(1)
     expect(await page.getByText('Model calls', { exact: true }).count()).toBe(1)
     expect(await page.getByText('欢迎使用 AI小说作家').count()).toBe(0)

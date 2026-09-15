@@ -121,6 +121,24 @@ describe('buildMainProcessAgentSystemPrompt', () => {
     expect(emptySkills).not.toContain('<available_skills>')
   })
 
+  it('drops the project workflow sentence from the skill note for the app assistant', () => {
+    const skill = {
+      name: 'scene-craft',
+      description: 'Scene craft',
+      location: '/home/me/.vela/skills/scene-craft/SKILL.md',
+      source: 'user' as const,
+    }
+    const projectPrompt = buildMainProcessAgentSystemPrompt(core(), undefined, [skill], 'project')
+    expect(projectPrompt).toContain('写作工作流也可以在某个阶段绑定技能')
+
+    const globalPrompt = buildMainProcessAgentSystemPrompt(null, undefined, [skill], 'global')
+    expect(globalPrompt).toContain('<available_skills>')
+    expect(globalPrompt).toContain('用户在输入框输入 `/技能名` 时')
+    expect(globalPrompt).not.toContain('工作流也可以在某个阶段绑定技能')
+    // 界面助手没有项目事实。
+    expect(globalPrompt).not.toContain('当前项目上下文')
+  })
+
   it('hides skills marked as not user-invocable from the model list', () => {
     const prompt = buildMainProcessAgentSystemPrompt(core(), undefined, [
       {

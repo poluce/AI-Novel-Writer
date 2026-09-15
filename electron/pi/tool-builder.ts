@@ -1,6 +1,7 @@
 
 import type { WritingLanguage } from '../../src/shared/writing-language'
 import type { RendererActionSink } from '../../src/shared/agent-events'
+import type { AgentScope } from '../../src/shared/agent-scope'
 
 import { createReadArchitectureTool } from './tools/read-architecture.tool'
 import { createReadCharactersTool } from './tools/read-characters.tool'
@@ -31,28 +32,39 @@ function withExecutionMode(tool: AnyAgentTool): AnyAgentTool {
   return sequential ? { ...tool, executionMode: 'sequential' as const } : tool
 }
 
-/** Build built-in + currently connected MCP tools for one agent session. */
+/**
+ * Build the tools one agent session may use.
+ *
+ * 项目助手挂全部项目工具；界面助手（没有项目时也在用）只挂不依赖项目的
+ * 技能检查与 MCP——项目读写类工具在没有项目时只会失败。
+ */
 export function buildAgentTools(
   language: WritingLanguage,
   rendererAction: RendererActionSink,
+  scope: AgentScope = 'project',
 ): AnyAgentTool[] {
+  const projectTools: AnyAgentTool[] = scope === 'project'
+    ? [
+      createReadArchitectureTool(language),
+      createReadCharactersTool(language),
+      createReadBlueprintTool(language),
+      createReadDraftsTool(language),
+      createReadProjectStateTool(language),
+      createSearchKnowledgeTool(language),
+      createReadFileTool(language),
+      createWriteFileTool(language),
+      createInstallWritingSkillTool(language),
+      createBindWritingSkillTool(language),
+      createOpenEditorTool(language, rendererAction),
+      createStartWorkflowTool(language, rendererAction),
+      createReplaceDraftExcerptTool(language, rendererAction),
+      createProposeNovelConfigTool(language, rendererAction),
+      createProposeChapterBlueprintTool(language),
+    ]
+    : []
   return [
-    createReadArchitectureTool(language),
-    createReadCharactersTool(language),
-    createReadBlueprintTool(language),
-    createReadDraftsTool(language),
-    createReadProjectStateTool(language),
-    createSearchKnowledgeTool(language),
-    createReadFileTool(language),
-    createWriteFileTool(language),
+    ...projectTools,
     createInspectWritingSkillTool(language),
-    createInstallWritingSkillTool(language),
-    createBindWritingSkillTool(language),
-    createOpenEditorTool(language, rendererAction),
-    createStartWorkflowTool(language, rendererAction),
-    createReplaceDraftExcerptTool(language, rendererAction),
-    createProposeNovelConfigTool(language, rendererAction),
-    createProposeChapterBlueprintTool(language),
     ...buildMcpAgentTools(language),
   ].map(withExecutionMode)
 }

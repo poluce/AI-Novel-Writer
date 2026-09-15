@@ -1,3 +1,6 @@
+import fs from 'node:fs'
+import path from 'node:path'
+
 import { ipcMain, BrowserWindow } from 'electron'
 
 import { AgentSessionManager } from './agent-session-manager'
@@ -6,13 +9,16 @@ import { setPiProjectCloseHook } from './in-flight'
 import { createRendererActionDispatcher } from './renderer-action-dispatch'
 import type { AgentEditorSnapshot, RendererActionResult } from '../../src/shared/agent-events'
 import { isAgentSkillCatalog, type AgentSkillCatalogEntry } from '../../src/shared/agent-skills'
+import { isAgentScope, type AgentScope } from '../../src/shared/agent-scope'
 import type { AgentPromptHistoryTurn } from '../../src/shared/agent-conversation-archive'
 
 import {
   readJsonFile,
+  ensureVelaHome,
   MODELS_CONFIG_PATH,
   GLOBAL_CONFIG_PATH,
   DEFAULT_GLOBAL_CONFIG,
+  VELA_HOME,
 } from '../utils/config-utils'
 import { getCurrentProjectPath } from '../database'
 import { logFailure } from '../../src/shared/fail-log'
@@ -38,14 +44,32 @@ function resolveLanguage(): WritingLanguage {
   return core?.writingLanguage ?? DEFAULT_WRITING_LANGUAGE
 }
 
-function resolveSystemPrompt(skills?: readonly AgentSkillCatalogEntry[]): string {
-  const core = ProjectCoreRepository.get()
+function resolveSystemPrompt(
+  scope: AgentScope,
+  skills?: readonly AgentSkillCatalogEntry[],
+): string {
+  // 界面助手没有项目事实：core 传 null，身份提示词也只读全局覆盖文件。
+  const core = scope === 'project' ? ProjectCoreRepository.get() : null
+  const projectPath = scope === 'project' ? getCurrentProjectPath() : undefined
   const language = core?.writingLanguage ?? DEFAULT_WRITING_LANGUAGE
   return buildMainProcessAgentSystemPrompt(
     core,
-    loadAssistantWritingIdentity(language, { projectPath: getCurrentProjectPath() }),
+    loadAssistantWritingIdentity(language, { projectPath }),
     skills,
+    scope,
   )
+}
+
+/** 作用域由渲染层给出；缺失或非法时按项目助手处理（保持旧行为）。 */
+function acceptedScope(value: unknown): AgentScope {
+  if (value === undefined) return 'project'
+  if (!isAgentScope(value)) {
+    logFailure('Agent', 'rejected malformed agent scope', undefined, {
+      received: typeof value,
+    })
+    return 'project'
+  }
+  return value
 }
 
 /**
@@ -70,8 +94,14 @@ function acceptedSkillCatalog(value: unknown): AgentSkillCatalogEntry[] | undefi
  */
 let conversationStore: AgentConversationStore | null = null
 let conversationStorePath: string | null = null
+// 界面助手与项目无关，整个应用生命周期共用一份存档。
+let globalConversationStore: AgentConversationStore | null = null
 
-function resolveConversationStore(): AgentConversationStore | null {
+function resolveConversationStore(scope: AgentScope): AgentConversationStore | null {
+  if (scope === 'global') {
+    globalConversationStore ??= AgentConversationStore.forGlobal()
+    return globalConversationStore
+  }
   const projectPath = getCurrentProjectPath()
   if (!projectPath) {
     closeConversationStore()
@@ -79,7 +109,7 @@ function resolveConversationStore(): AgentConversationStore | null {
   }
   if (conversationStore && conversationStorePath === projectPath) return conversationStore
   closeConversationStore()
-  conversationStore = new AgentConversationStore(projectPath)
+  conversationStore = AgentConversationStore.forProject(projectPath)
   conversationStorePath = projectPath
   return conversationStore
 }
@@ -92,6 +122,11 @@ function closeConversationStore(): void {
   void store.close().catch((error) => {
     logFailure('Agent', 'failed to close conversation store', error)
   })
+}
+
+/** 界面助手的界面存档：~/.vela 只有主进程能写，渲染层只收发字符串。 */
+function globalConversationsPath(): string {
+  return path.join(VELA_HOME, 'agent-conversations.json')
 }
 
 function mainWindow(): BrowserWindow | null {
@@ -138,18 +173,18 @@ export function registerAgentController(): void {
   })
   const manager = new AgentSessionManager({
     resolveModel,
-    resolveSystemPrompt: (_conversationId, skills) => resolveSystemPrompt(skills),
+    resolveSystemPrompt: (_conversationId, scope, skills) => resolveSystemPrompt(scope, skills),
     resolveLanguage: () => resolveLanguage(),
     emit: (conversationId, event) => {
       mainWindow()?.webContents.send('agent:event', { conversationId, event })
     },
     rendererAction: (action) => dispatcher.rendererAction(action),
-    resolveConversationStore: () => resolveConversationStore(),
+    resolveConversationStore: (scope) => resolveConversationStore(scope),
   })
   setPiProjectCloseHook(() => {
     dispatcher.abortAll()
     manager.abortAll()
-    // 存档随项目关闭一起收起；下次 prompt 会为当前项目重新打开。
+    // 项目存档随项目关闭一起收起；界面助手的存档与应用同生命周期。
     closeConversationStore()
   })
 
@@ -161,6 +196,7 @@ export function registerAgentController(): void {
     editorSnapshot?: AgentEditorSnapshot,
     history?: AgentPromptHistoryTurn[],
     skills?: unknown,
+    scope?: unknown,
   ) => {
     return manager.prompt(
       conversationId,
@@ -169,6 +205,7 @@ export function registerAgentController(): void {
       editorSnapshot,
       history,
       acceptedSkillCatalog(skills),
+      acceptedScope(scope),
     )
   })
 
@@ -176,9 +213,9 @@ export function registerAgentController(): void {
     return manager.confirm(conversationId, toolCallId, confirmed)
   })
 
-  ipcMain.handle('agent:discard-session', async (_event, conversationId: string) => {
+  ipcMain.handle('agent:discard-session', async (_event, conversationId: string, scope?: unknown) => {
     if (!conversationId || typeof conversationId !== 'string') return { success: false }
-    return manager.discard(conversationId)
+    return manager.discard(conversationId, acceptedScope(scope))
   })
 
   ipcMain.handle('agent:abort', async (_event, conversationId: string) => {
@@ -193,14 +230,40 @@ export function registerAgentController(): void {
     return { success: dispatcher.complete(requestId, result) }
   })
 
-  ipcMain.handle('agent:system-prompt', async (_event, skills?: unknown) => {
+  ipcMain.handle('agent:system-prompt', async (_event, skills?: unknown, scope?: unknown) => {
     try {
-      return { success: true, prompt: resolveSystemPrompt(acceptedSkillCatalog(skills)) }
+      return {
+        success: true,
+        prompt: resolveSystemPrompt(acceptedScope(scope), acceptedSkillCatalog(skills)),
+      }
     } catch (error) {
       return {
         success: false,
         error: error instanceof Error ? error.message : String(error),
       }
+    }
+  })
+
+  ipcMain.handle('agent:load-global-conversations', async () => {
+    try {
+      const filePath = globalConversationsPath()
+      if (!fs.existsSync(filePath)) return { exists: false, content: '' }
+      return { exists: true, content: fs.readFileSync(filePath, 'utf8') }
+    } catch (error) {
+      logFailure('Agent', 'failed to read global conversations', error)
+      return { exists: false, content: '', error: String(error) }
+    }
+  })
+
+  ipcMain.handle('agent:save-global-conversations', async (_event, content: unknown) => {
+    if (typeof content !== 'string') return { success: false, error: '会话存档内容无效' }
+    try {
+      ensureVelaHome()
+      fs.writeFileSync(globalConversationsPath(), content, 'utf8')
+      return { success: true }
+    } catch (error) {
+      logFailure('Agent', 'failed to write global conversations', error)
+      return { success: false, error: String(error) }
     }
   })
 }

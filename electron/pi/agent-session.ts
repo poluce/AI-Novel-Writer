@@ -26,6 +26,7 @@ import { buildL1AgentContext } from './agent-l1-context'
 import type { AgentEditorSnapshot, PiAgentEvent } from '../../src/shared/agent-events'
 import type { AgentPromptHistoryTurn } from '../../src/shared/agent-conversation-archive'
 import type { WritingLanguage } from '../../src/shared/writing-language'
+import type { AgentScope } from '../../src/shared/agent-scope'
 import type { AnyAgentTool } from './tool-types'
 import type { PiModelRuntime } from './pi-models'
 
@@ -46,6 +47,8 @@ export interface AgentSessionOptions {
   /** Durable Pi session for this conversation; absent means memory-only. */
   store?: AgentConversationStore
   conversationId?: string
+  /** 项目助手 / 界面助手；只影响日志与后续扩展。 */
+  scope?: AgentScope
   /** Pi's own compaction thresholds. Defaults to `DEFAULT_COMPACTION_SETTINGS`. */
   compactionSettings?: CompactionSettings
 }
@@ -66,6 +69,7 @@ export class AgentSession {
   private readonly store: AgentConversationStore | null
   private readonly conversationId: string | null
   private readonly compactionSettings: CompactionSettings
+  private readonly scope: AgentScope
   /** 已写进 Pi 会话的消息条数，避免重复追加。 */
   private persistedCount = 0
   /** 最近一次压缩条目；下一次压缩据此增量更新摘要。 */
@@ -79,6 +83,7 @@ export class AgentSession {
     this.store = options.store ?? null
     this.conversationId = options.conversationId ?? null
     this.compactionSettings = options.compactionSettings ?? DEFAULT_COMPACTION_SETTINGS
+    this.scope = options.scope ?? 'project'
     this.agent = createPiAgent({
       model: options.model,
       streamFn: options.streamFn,
@@ -144,7 +149,7 @@ export class AgentSession {
     const conversationId = this.conversationId
     if (!store || !conversationId) return
     void store.appendMessages(conversationId, messages).catch((error) => {
-      logFailure('Agent', 'failed to seed conversation session', error, { conversationId })
+      logFailure('Agent', 'failed to seed conversation session', error, { conversationId, scope: this.scope })
     })
   }
 
@@ -192,6 +197,7 @@ export class AgentSession {
     if (!preparation.ok) {
       logFailure('Agent', 'compaction preparation failed', undefined, {
         conversationId: this.conversationId,
+        scope: this.scope,
         error: String(preparation.error),
       })
       return
@@ -212,6 +218,7 @@ export class AgentSession {
     if (!result.ok) {
       logFailure('Agent', 'compaction failed', undefined, {
         conversationId: this.conversationId,
+        scope: this.scope,
         error: String(result.error),
       })
       return
@@ -225,6 +232,7 @@ export class AgentSession {
     ])
     logInfo('Agent', 'compacted conversation context', {
       conversationId: this.conversationId,
+      scope: this.scope,
       tokensBefore,
       tokensAfter: estimateContextTokens(this.agent.messages).tokens,
       keptMessages: retainedTail.length,
@@ -243,6 +251,7 @@ export class AgentSession {
       // 没落盘就不知道条目 id/seq，下一次压缩当普通历史重新摘要，结果仍正确。
       logFailure('Agent', 'failed to persist compaction', error, {
         conversationId: this.conversationId,
+        scope: this.scope,
       })
     }
   }
@@ -294,6 +303,7 @@ export class AgentSession {
       // 存档失败不回滚计数器以外的任何东西：下一轮会补齐后续消息。
       logFailure('Agent', 'failed to persist conversation messages', error, {
         conversationId: this.conversationId,
+        scope: this.scope,
       })
     }
   }

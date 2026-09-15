@@ -47,7 +47,7 @@ afterEach(() => {
 describe('AgentConversationStore', () => {
   it('round-trips a conversation, keeping tool turns and their structure', async () => {
     const projectPath = temporaryProject()
-    const store = new AgentConversationStore(projectPath)
+    const store = AgentConversationStore.forProject(projectPath)
     await store.appendMessages('conv-1', [
       userMessage('看看第三章'),
       assistantMessage('好的。'),
@@ -56,7 +56,7 @@ describe('AgentConversationStore', () => {
     ])
     await store.close()
 
-    const reopened = new AgentConversationStore(projectPath)
+    const reopened = AgentConversationStore.forProject(projectPath)
     const snapshot = await reopened.load('conv-1')
     expect(snapshot?.messages.map(message => message.role))
       .toEqual(['user', 'assistant', 'toolResult', 'assistant'])
@@ -68,14 +68,14 @@ describe('AgentConversationStore', () => {
   })
 
   it('returns null for a conversation that was never stored', async () => {
-    const store = new AgentConversationStore(temporaryProject())
+    const store = AgentConversationStore.forProject(temporaryProject())
     expect(await store.load('missing')).toBeNull()
     await store.close()
   })
 
   it('keeps only the summary and retained tail after a compaction', async () => {
     const projectPath = temporaryProject()
-    const store = new AgentConversationStore(projectPath)
+    const store = AgentConversationStore.forProject(projectPath)
     const summarized = [userMessage('很早的问题'), assistantMessage('很早的回答')]
     const retained = [userMessage('最近的问题'), assistantMessage('最近的回答')]
     await store.appendMessages('conv-1', [...summarized, ...retained])
@@ -90,7 +90,7 @@ describe('AgentConversationStore', () => {
     await store.appendMessages('conv-1', [userMessage('压缩之后的新问题')])
     await store.close()
 
-    const reopened = new AgentConversationStore(projectPath)
+    const reopened = AgentConversationStore.forProject(projectPath)
     const snapshot = await reopened.load('conv-1')
     expect(snapshot?.messages.map(message => message.role))
       .toEqual(['compactionSummary', 'user', 'assistant', 'user'])
@@ -122,7 +122,7 @@ describe('AgentConversationStore', () => {
 
   it('deletes the stored session with the conversation', async () => {
     const projectPath = temporaryProject()
-    const store = new AgentConversationStore(projectPath)
+    const store = AgentConversationStore.forProject(projectPath)
     await store.appendMessages('conv-1', [userMessage('hi')])
     await store.delete('conv-1')
     expect(await store.load('conv-1')).toBeNull()
@@ -134,9 +134,33 @@ describe('AgentConversationStore', () => {
     // 用一个文件占住 .vela/agent-sessions，写入必然失败。
     fs.mkdirSync(path.join(projectPath, '.vela'), { recursive: true })
     fs.writeFileSync(path.join(projectPath, '.vela', 'agent-sessions'), 'not a directory')
-    const store = new AgentConversationStore(projectPath)
+    const store = AgentConversationStore.forProject(projectPath)
     expect(await store.load('conv-1')).toBeNull()
     await store.close()
+  })
+})
+
+describe('AgentConversationStore.forGlobal', () => {
+  it('keeps the app assistant sessions under the app data root, outside any project', async () => {
+    const appDataRoot = temporaryProject()
+    const store = AgentConversationStore.forGlobal(appDataRoot)
+    await store.appendMessages('conv-global', [userMessage('没打开项目时的提问')])
+    await store.close()
+
+    const reopened = AgentConversationStore.forGlobal(appDataRoot)
+    const snapshot = await reopened.load('conv-global')
+    expect(snapshot?.messages.map(message => message.role)).toEqual(['user'])
+    let sessionsDir = ''
+    const walk = (dir: string): void => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name)
+        if (entry.isDirectory()) walk(full)
+        else if (entry.name.endsWith('.jsonl')) sessionsDir = full
+      }
+    }
+    walk(path.join(appDataRoot, 'agent-sessions'))
+    expect(sessionsDir).toContain(path.join('agent-sessions'))
+    await reopened.close()
   })
 })
 

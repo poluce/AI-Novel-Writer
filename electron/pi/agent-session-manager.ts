@@ -6,6 +6,7 @@ import type { AgentConversationStore } from './agent-conversation-store'
 
 import type { AgentEditorSnapshot, PiAgentEvent, RendererActionSink } from '../../src/shared/agent-events'
 import type { AgentSkillCatalogEntry } from '../../src/shared/agent-skills'
+import type { AgentScope } from '../../src/shared/agent-scope'
 import type { AgentPromptHistoryTurn } from '../../src/shared/agent-conversation-archive'
 import type { ModelProfile } from '../../src/shared/ipc-channels'
 import type { WritingLanguage } from '../../src/shared/writing-language'
@@ -14,13 +15,17 @@ import { logFailure, logInfo } from '../../src/shared/fail-log'
 export interface AgentSessionManagerOptions {
   /** Resolve a persisted model profile for a turn (modelId may be undefined). */
   resolveModel: (modelId: string | undefined) => ModelProfile | null
-  resolveSystemPrompt: (conversationId: string, skills?: readonly AgentSkillCatalogEntry[]) => string
+  resolveSystemPrompt: (
+    conversationId: string,
+    scope: AgentScope,
+    skills?: readonly AgentSkillCatalogEntry[],
+  ) => string
   resolveLanguage: (conversationId: string) => WritingLanguage
   /** Forward a normalized agent event toward the renderer. */
   emit: (conversationId: string, event: PiAgentEvent) => void
   rendererAction: RendererActionSink
-  /** Durable Pi session for the current project; absent means memory-only. */
-  resolveConversationStore?: () => AgentConversationStore | null
+  /** Durable Pi session for one scope; absent means memory-only. */
+  resolveConversationStore?: (scope: AgentScope) => AgentConversationStore | null
 }
 
 /**
@@ -40,6 +45,7 @@ export class AgentSessionManager {
     editorSnapshot?: AgentEditorSnapshot,
     history?: readonly AgentPromptHistoryTurn[],
     skills?: readonly AgentSkillCatalogEntry[],
+    scope: AgentScope = 'project',
   ): Promise<{ success: boolean; error?: string }> {
     try {
       const profile = this.options.resolveModel(modelId)
@@ -51,9 +57,9 @@ export class AgentSessionManager {
         provider: profile?.provider,
         chars: input.length,
       })
-      const session = await this.getOrCreate(conversationId, modelId, history, skills)
+      const session = await this.getOrCreate(conversationId, modelId, history, skills, scope)
       session.setEditorSnapshot(editorSnapshot)
-      session.setSystemPrompt(this.options.resolveSystemPrompt(conversationId, skills))
+      session.setSystemPrompt(this.options.resolveSystemPrompt(conversationId, scope, skills))
       session.setTools(buildAgentTools(this.options.resolveLanguage(conversationId), this.options.rendererAction))
       await session.prompt(input)
       logInfo('Agent', 'prompt finished', { conversationId, modelId })
@@ -82,13 +88,13 @@ export class AgentSessionManager {
    * 丢弃一个对话：内存会话与 Pi 会话存档一起删。用户删除会话时才调用，
    * 切书走 `abortAll`（保留存档，下次打开还在）。
    */
-  async discard(conversationId: string): Promise<{ success: boolean }> {
+  async discard(conversationId: string, scope: AgentScope = 'project'): Promise<{ success: boolean }> {
     const session = this.sessions.get(conversationId)
     if (session) {
       session.abort()
       this.sessions.delete(conversationId)
     }
-    const store = this.options.resolveConversationStore?.() ?? null
+    const store = this.options.resolveConversationStore?.(scope) ?? null
     if (store) {
       try {
         await store.delete(conversationId)
@@ -111,6 +117,7 @@ export class AgentSessionManager {
     modelId?: string,
     history?: readonly AgentPromptHistoryTurn[],
     skills?: readonly AgentSkillCatalogEntry[],
+    scope: AgentScope = 'project',
   ): Promise<AgentSession> {
     const existing = this.sessions.get(conversationId)
     if (existing) return existing
@@ -120,19 +127,26 @@ export class AgentSessionManager {
 
     const { models, model } = createPiModels(profile)
     const language = this.options.resolveLanguage(conversationId)
-    const tools = buildAgentTools(language, this.options.rendererAction)
-    const store = this.options.resolveConversationStore?.() ?? null
+    const tools = buildAgentTools(language, this.options.rendererAction, scope)
+    const store = this.options.resolveConversationStore?.(scope) ?? null
 
     const session = new AgentSession({
       model,
       models,
       streamFn: models.streamSimple.bind(models),
-      systemPrompt: this.options.resolveSystemPrompt(conversationId, skills),
+      systemPrompt: this.options.resolveSystemPrompt(conversationId, scope, skills),
       tools,
       confirmationToolNames: confirmationToolNames(),
       language,
       emit: (event) => this.options.emit(conversationId, event),
       ...(store ? { store, conversationId } : {}),
+      scope,
+    })
+    logInfo('Agent', 'agent session opened', {
+      conversationId,
+      scope,
+      durable: !!store,
+      modelName: profile.modelName,
     })
     const restored = await this.restoreFromStore(session, store, conversationId)
     if (!restored && history && history.length > 0) session.restoreHistory(history)

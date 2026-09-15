@@ -81,7 +81,10 @@ describe('Agent reachable UI locale', () => {
     expect(container.textContent).toContain('Reference context')
     expect(container.textContent).toContain('Story architecture')
     expect(container.textContent).toContain('Coming soon')
-    expect(container.textContent).toContain('AI Writing Assistant')
+    // 顶部标题位置换成了助手切换，两份标签都要跟着界面语言走。
+    expect(container.textContent).toContain('Project')
+    expect(container.textContent).toContain('App')
+    expect(container.textContent).not.toContain('项目助手')
 
     const moreButton = container.querySelector<HTMLButtonElement>('[title="More options"]')
     expect(moreButton).not.toBeNull()

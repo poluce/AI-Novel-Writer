@@ -14,6 +14,7 @@ import type { ModelCapabilities } from './provider-presets'
 import type { ModelProviderResourceId } from './model-provider-resources'
 import type { WritingLanguage } from './writing-language'
 import type { AgentSkillCatalogEntry } from './agent-skills'
+import type { AgentScope } from './agent-scope'
 import type { AgentEditorSnapshot, PiAgentEvent, RendererAction, RendererActionResult } from './agent-events'
 import type { AgentPromptHistoryTurn } from './agent-conversation-archive'
 import type { DraftStatus } from './draft-status'
@@ -1146,6 +1147,7 @@ export interface AgentChannels {
       editorSnapshot?: AgentEditorSnapshot,
       history?: AgentPromptHistoryTurn[],
       skills?: AgentSkillCatalogEntry[],
+      scope?: AgentScope,
     ]
     return: { success: boolean; error?: string }
   }
@@ -1158,11 +1160,20 @@ export interface AgentChannels {
     return: { success: boolean }
   }
   'agent:discard-session': {
-    args: [conversationId: string]
+    args: [conversationId: string, scope?: AgentScope]
     return: { success: boolean }
   }
+  /** 界面助手（无项目）的界面存档：~/.vela 只有主进程能读写。 */
+  'agent:load-global-conversations': {
+    args: []
+    return: { exists: boolean; content: string; error?: string }
+  }
+  'agent:save-global-conversations': {
+    args: [content: string]
+    return: { success: boolean; error?: string }
+  }
   'agent:system-prompt': {
-    args: [skills?: AgentSkillCatalogEntry[]]
+    args: [skills?: AgentSkillCatalogEntry[], scope?: AgentScope]
     return: { success: boolean; prompt?: string; error?: string }
   }
   'agent:renderer-action-result': {

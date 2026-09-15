@@ -1,6 +1,7 @@
 import { Plus, MoreHorizontal, X, Server, Sparkles, ChevronRight, History } from 'lucide-react'
 import { useAgentStore } from '../../../stores/agent-store'
 import { useLayoutStore } from '../../../stores/layout-store'
+import { useProjectStore } from '../../../stores/project-store'
 import { useMCPStore } from '../../../stores/mcp-store'
 import { skillRegistry, type LoadedSkill } from '../../../services/agent/skill-registry'
 import { skillDescription, skillDisplayName } from '../../../services/agent/skill-catalog'
@@ -11,12 +12,53 @@ import { MenuItem } from '../../ui/MenuItem'
 import { useOutsideClick } from '../../../hooks/useOutsideClick'
 import { useLocaleStore } from '../../../stores/locale-store'
 
+/** 助手切换的一枚标签 */
+function ScopeTab({
+  active,
+  disabled,
+  title,
+  label,
+  onClick,
+}: {
+  active: boolean
+  disabled?: boolean
+  title: string
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      title={title}
+      disabled={disabled}
+      onClick={onClick}
+      className="px-2 py-0.5 rounded text-[0.7rem] font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      style={{
+        backgroundColor: active ? 'var(--color-accent)' : 'transparent',
+        color: active ? '#fff' : 'var(--color-text-secondary)',
+      }}
+    >
+      {label}
+    </button>
+  )
+}
+
 /**
  * Agent 面板顶部工具栏
  */
 export default function AgentHeader() {
   const text = useLocaleStore(s => s.text)
-  const { createConversation, toggleHistory, showHistory, getActiveConversation } = useAgentStore()
+  const {
+    createConversation,
+    toggleHistory,
+    showHistory,
+    getActiveConversation,
+    activeScope,
+    setScope,
+  } = useAgentStore()
+  const hasProject = useProjectStore(s => s.currentProject !== null)
   const toggleAIPanel = useLayoutStore(s => s.toggleAIPanel)
   const [showMore, setShowMore] = useState(false)
   const [subView, setSubView] = useState<'main' | 'mcp' | 'skills'>('main')
@@ -54,12 +96,28 @@ export default function AgentHeader() {
         borderBottom: '1px solid var(--color-border)',
       }}
     >
-      {/* 标题 */}
+      {/* 助手切换：项目助手（跟着书）/ 界面助手（跟着应用） */}
       <div
-        className="flex min-w-0 items-center overflow-hidden text-ellipsis whitespace-nowrap gap-1"
-        style={{ color: 'var(--color-text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}
+        className="flex min-w-0 items-center gap-0.5 rounded-md p-0.5"
+        style={{ backgroundColor: 'var(--color-hover)' }}
+        role="tablist"
+        aria-label={text('助手切换', 'Assistant switch')}
       >
-        {text('AI 写作助手', 'AI Writing Assistant')}
+        <ScopeTab
+          active={activeScope === 'project'}
+          disabled={!hasProject}
+          title={hasProject
+            ? text('项目助手：读写当前项目资料', 'Project assistant: works on this project')
+            : text('打开项目后可用', 'Available once a project is open')}
+          label={text('项目助手', 'Project')}
+          onClick={() => setScope('project')}
+        />
+        <ScopeTab
+          active={activeScope === 'global'}
+          title={text('界面助手：不依赖项目，随时可用', 'App assistant: always available, no project needed')}
+          label={text('界面助手', 'App')}
+          onClick={() => setScope('global')}
+        />
       </div>
 
       {/* 右侧工具按钮组 */}

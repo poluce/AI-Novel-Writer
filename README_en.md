@@ -101,6 +101,7 @@ flowchart LR
 | Reference text and knowledge base | Imports common text formats as reference material. SQLite FTS remains available when no embedding model is configured. |
 | Batch writing task | A separate batch chapter task supports 1–10 chapters, pause, and cancel; downstream processing failure stops later chapters. |
 | Chinese and English UI | The first launch can follow the system locale; a manual choice is persisted. |
+| Writing assistant | The side panel offers two assistants. The **project assistant** works on the open project — it can read project material and start workflows, and keeps its conversations inside the project folder. The **app assistant** needs no project, is always available, and keeps its conversations in the app data folder (`~/.vela`). Opening a project switches to the project assistant automatically. |
 
 When generating a plot outline, you can enter an explicit chapter range in “Generate story architecture.” Projects longer than 20 chapters default to Chapters 1–20. After one batch finishes, continue from the next chapter; if generation stops with a valid checkpoint, resume from it. If you edit the existing outline or any source settings or guidance used for generation, the old checkpoint cannot continue directly into the new content; regenerate the affected range instead.
 

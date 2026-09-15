@@ -32,10 +32,17 @@ import { NodeExecutionEnv } from '@earendil-works/pi-agent-core/harness/env/node
 
 import { DIR_VELA_INTERNAL } from '../../src/shared/project-paths'
 import { logFailure, logInfo } from '../../src/shared/fail-log'
+import { VELA_HOME } from '../utils/config-utils'
 
 /** 单个分支：本期只有一条主线，多分支属多会话产品。 */
 const BRANCH_NAME = 'main'
 const SESSIONS_DIR = 'agent-sessions'
+
+/** 会话根与 cwd：Pi 用 cwd 决定子目录名与列表过滤。 */
+export interface AgentConversationStoreRoot {
+  sessionsRoot: string
+  cwd: string
+}
 
 export interface AgentConversationSnapshot {
   /** 可直接灌回 `agent.state.messages` 的上下文（已应用压缩）。 */
@@ -58,11 +65,30 @@ export class AgentConversationStore {
   private scanned = false
   private closed = false
 
-  constructor(readonly projectPath: string) {
-    this.fileSystem = new NodeExecutionEnv({ cwd: projectPath })
+  /** 项目助手：会话存档落在项目内，跟随书一起备份/删除。 */
+  static forProject(projectPath: string): AgentConversationStore {
+    return new AgentConversationStore({
+      sessionsRoot: path.join(projectPath, DIR_VELA_INTERNAL, SESSIONS_DIR),
+      cwd: projectPath,
+    })
+  }
+
+  /** 界面助手：会话存档落在应用数据目录，与项目无关。 */
+  static forGlobal(appDataRoot: string = VELA_HOME): AgentConversationStore {
+    return new AgentConversationStore({
+      sessionsRoot: path.join(appDataRoot, SESSIONS_DIR),
+      cwd: appDataRoot,
+    })
+  }
+
+  private readonly cwd: string
+
+  constructor(root: AgentConversationStoreRoot) {
+    this.cwd = root.cwd
+    this.fileSystem = new NodeExecutionEnv({ cwd: root.cwd })
     this.repo = new JsonlSessionRepo({
       fileSystem: this.fileSystem,
-      sessionsRoot: path.join(projectPath, DIR_VELA_INTERNAL, SESSIONS_DIR),
+      sessionsRoot: root.sessionsRoot,
     })
   }
 
@@ -183,7 +209,7 @@ export class AgentConversationStore {
       }
       if (!create) return null
       const session = await this.repo.create(
-        { id: conversationId, cwd: this.projectPath },
+        { id: conversationId, cwd: this.cwd },
         BACKGROUND_CONTEXT,
       )
       this.opened.set(conversationId, session)
@@ -201,7 +227,7 @@ export class AgentConversationStore {
 
   private async metadataFor(conversationId: string): Promise<JsonlSessionMetadata | undefined> {
     if (!this.scanned) {
-      const list = await this.repo.list({ cwd: this.projectPath }, BACKGROUND_CONTEXT)
+      const list = await this.repo.list({ cwd: this.cwd }, BACKGROUND_CONTEXT)
       for (const metadata of list) this.known.set(metadata.id, metadata)
       this.scanned = true
     }

@@ -11,6 +11,7 @@ import {
   AGENT_SKILL_DESCRIPTION_MAX_CHARS,
   type AgentSkillCatalogEntry,
 } from '../../src/shared/agent-skills'
+import type { AgentScope } from '../../src/shared/agent-scope'
 import { localizeNovelConfigFacts } from '../../src/shared/novel-config-localization'
 import { writingLanguageText, type WritingLanguage } from '../../src/shared/writing-language'
 import type { ProjectCoreData } from '../repositories/project-core-repository'
@@ -29,6 +30,7 @@ export function buildMainProcessAgentSystemPrompt(
   core: ProjectCoreData | null,
   identityTemplate?: PromptTemplate,
   skills?: readonly AgentSkillCatalogEntry[],
+  scope: AgentScope = 'project',
 ): string {
   const language: WritingLanguage = core?.writingLanguage ?? 'zh-CN'
   const template = identityTemplate
@@ -40,7 +42,7 @@ export function buildMainProcessAgentSystemPrompt(
     appShellModeInstruction(language),
   )
   const l0 = buildL0ProjectContext(core, language)
-  const skillCatalog = buildSkillCatalogBlock(skills, language)
+  const skillCatalog = buildSkillCatalogBlock(skills, language, scope)
   return [identity, l0, skillCatalog].filter((part): part is string => Boolean(part)).join('\n\n')
 }
 
@@ -52,11 +54,12 @@ export function buildMainProcessAgentSystemPrompt(
 function buildSkillCatalogBlock(
   skills: readonly AgentSkillCatalogEntry[] | undefined,
   language: WritingLanguage,
+  scope: AgentScope,
 ): string | null {
   if (!skills || skills.length === 0) return null
   const block = formatSkillsForSystemPrompt(skills.map(toPiSkill))
   if (!block) return null
-  return `${block}\n\n${skillInvocationNote(language)}`
+  return `${block}\n\n${skillInvocationNote(language, scope)}`
 }
 
 function toPiSkill(entry: AgentSkillCatalogEntry): Skill {
@@ -71,18 +74,24 @@ function toPiSkill(entry: AgentSkillCatalogEntry): Skill {
   }
 }
 
-function skillInvocationNote(language: WritingLanguage): string {
+function skillInvocationNote(language: WritingLanguage, scope: AgentScope): string {
+  // 没有项目时不存在工作流阶段绑定，说明里不能提它。
+  const projectOnly = scope === 'project'
   return writingLanguageText(
     language,
     [
       '本应用的技能由用户显式调用，助手不自行加载技能正文：',
-      '- 用户在输入框输入 `/技能名` 时，技能正文会注入到那一轮消息；写作工作流也可以在某个阶段绑定技能。',
+      projectOnly
+        ? '- 用户在输入框输入 `/技能名` 时，技能正文会注入到那一轮消息；写作工作流也可以在某个阶段绑定技能。'
+        : '- 用户在输入框输入 `/技能名` 时，技能正文会注入到那一轮消息。',
       '- 不要用 read_file 去读技能文件：用户级技能在项目目录之外，会被拒绝。',
       '- 当任务与某个技能的描述相符时，直接用 `/技能名` 建议用户启用它。',
     ].join('\n'),
     [
       'In this application skills are invoked by the user; the assistant never loads a skill body by itself:',
-      '- When the user types `/skill-name`, that skill body is injected into that turn; a writing workflow can also bind a skill to one of its stages.',
+      projectOnly
+        ? '- When the user types `/skill-name`, that skill body is injected into that turn; a writing workflow can also bind a skill to one of its stages.'
+        : '- When the user types `/skill-name`, that skill body is injected into that turn.',
       '- Do not open a skill file with read_file: user-level skills live outside the project boundary and the call will be rejected.',
       '- When a task matches a skill description, simply suggest that the user run `/skill-name`.',
     ].join('\n'),

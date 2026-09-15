@@ -23,6 +23,7 @@ import { useLocaleStore } from '../stores/locale-store'
 import { useAgentStore } from '../stores/agent-store'
 import {
   flushAgentConversations,
+  loadGlobalAgentConversations,
   loadProjectAgentConversations,
   rememberHydratedArchive,
   subscribeAgentConversationPersistence,
@@ -223,6 +224,7 @@ export function initProjectService(): void {
   )
 
   subscribeAgentConversationPersistence()
+  void hydrateGlobalAgentConversations()
   console.log('[ProjectService] 已初始化，事件监听已注册')
 }
 
@@ -256,7 +258,7 @@ export async function onProjectOpened(
     useDraftStore.getState().loadAllDrafts(projectSession.projectPath, projectSession),
     loadProjectAgentConversations(projectSession).then((archive) => {
       if (!isProjectSessionCurrent(projectSession)) return
-      rememberHydratedArchive(archive)
+      rememberHydratedArchive('project', archive)
       useAgentStore.getState().hydrateFromArchive(projectSession, archive)
     }),
   ])
@@ -302,6 +304,8 @@ export async function onProjectOpened(
  */
 export async function onProjectClosed(projectPath: string | null): Promise<void> {
   useAgentStore.getState().beginProjectLoad()
+  // 项目关掉之后没有项目助手可聊，自动回到界面助手。
+  useAgentStore.getState().setScope('global')
   const { useEditorStore } = await import('../stores/editor-store')
   if (projectPath) {
     // 正常关闭只清理对应项目，保留其他项目的未保存草稿。
@@ -354,6 +358,17 @@ function syncFinalizedDraftTab(payload: EventPayloadMap['FINALIZE_COMPLETE']): v
   useEditorStore.setState(state => ({
     tabs: state.tabs.map(tab => reconcileFinalizationCompletion(tab, snapshot, completion)),
   }))
+}
+
+/** 界面助手的会话与项目无关：应用启动时就灌一次，之后由存档服务维护。 */
+export async function hydrateGlobalAgentConversations(): Promise<void> {
+  try {
+    const archive = await loadGlobalAgentConversations()
+    rememberHydratedArchive('global', archive)
+    useAgentStore.getState().replaceConversations('global', archive)
+  } catch (error) {
+    console.error('[ProjectService] 界面助手会话读取失败:', error)
+  }
 }
 
 /**

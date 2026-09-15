@@ -38,18 +38,23 @@ const buildToolsMock = buildAgentTools as ReturnType<typeof vi.fn>
 function buildManager(store: AgentConversationStore | null = null) {
   const events: Array<{ conversationId: string; event: unknown }> = []
   const systemPromptSkills: Array<unknown> = []
+  const resolvedScopes: string[] = []
   const manager = new AgentSessionManager({
     resolveModel: () => ({ id: 'm1', name: 'M', provider: 'gemini', protocol: 'gemini', modelName: 'g', apiKey: 'k', baseUrl: 'https://x', temperature: 0.7, maxTokens: 100, purposes: ['generation'] }),
-    resolveSystemPrompt: (_conversationId, skills) => {
+    resolveSystemPrompt: (_conversationId, scope, skills) => {
+      resolvedScopes.push(scope)
       systemPromptSkills.push(skills)
       return 'sys'
     },
     resolveLanguage: () => 'zh-CN',
     emit: (conversationId, event) => events.push({ conversationId, event }),
     rendererAction: () => {},
-    resolveConversationStore: () => store,
+    resolveConversationStore: (scope) => {
+      resolvedScopes.push(scope)
+      return store
+    },
   })
-  return { manager, events, systemPromptSkills }
+  return { manager, events, systemPromptSkills, resolvedScopes }
 }
 
 function fakeStore(overrides: Partial<Record<keyof AgentConversationStore, unknown>> = {}) {
@@ -134,6 +139,24 @@ describe('AgentSessionManager', () => {
     expect(await manager.discard('conv-1')).toEqual({ success: true })
     expect(store.delete).toHaveBeenCalledWith('conv-1')
     expect(manager.abort('conv-1')).toEqual({ success: false })
+  })
+
+  it('resolves the app assistant store and tools for a global conversation', async () => {
+    const store = fakeStore()
+    const { manager, resolvedScopes } = buildManager(store)
+
+    await manager.prompt('conv-global', 'hi', undefined, undefined, undefined, undefined, 'global')
+
+    expect(resolvedScopes).toContain('global')
+    expect(store.load).toHaveBeenCalledWith('conv-global')
+  })
+
+  it('discards a conversation from the scope it belongs to', async () => {
+    const store = fakeStore()
+    const { manager } = buildManager(store)
+
+    await manager.discard('conv-global', 'global')
+    expect(store.delete).toHaveBeenCalledWith('conv-global')
   })
 
   it('delegates confirm and abort to the session', async () => {

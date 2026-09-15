@@ -15,6 +15,23 @@ vi.mock('../../database', () => ({ getCurrentProjectPath: vi.fn() }))
 import { buildAgentTools, confirmationToolNames } from '../tool-builder'
 
 describe('buildAgentTools', () => {
+  it('gives the app assistant only project-free tools', () => {
+    const names = buildAgentTools('zh-CN', () => {}, 'global').map(tool => tool.name)
+    // 没有项目时项目读写工具只会失败，一律不挂。
+    for (const projectTool of [
+      'read_architecture', 'read_characters', 'read_blueprint', 'read_drafts',
+      'read_project_state', 'search_knowledge', 'read_file', 'write_file',
+      'install_writing_skill', 'bind_writing_skill', 'open_editor',
+      'start_workflow', 'replace_draft_excerpt', 'propose_novel_config',
+      'propose_chapter_blueprint',
+    ]) {
+      expect(names).not.toContain(projectTool)
+    }
+    // 技能检查与 MCP 与项目无关，保留。
+    expect(names).toContain('inspect_writing_skill')
+    expect(names).toContain('mcp__docs__search')
+  })
+
   it('marks write and MCP tools sequential so reads can run in parallel', () => {
     const tools = buildAgentTools('zh-CN', () => {})
     const write = tools.find(tool => tool.name === 'write_file')

@@ -8,14 +8,23 @@ import {
 import { AGENT_CONVERSATIONS_FILE, DIR_VELA_INTERNAL } from '../../shared/project-paths'
 import { sameProjectSessionContext } from '../../shared/project-session-context'
 import { logFailure } from '../../shared/fail-log'
+import type { AgentScope } from '../../shared/agent-scope'
 import { ipc } from '../ipc-client'
 import { requireIpcSuccess } from '../ipc-result'
 import { useAgentStore, type AgentConversation } from '../../stores/agent-store'
 
 const SAVE_DEBOUNCE_MS = 400
 
-let saveTimer: ReturnType<typeof setTimeout> | null = null
-let lastSavedJson = ''
+/**
+ * 两个助手各存一份界面存档：
+ * - 项目助手：`<项目>/.vela/agent-conversations.json`，随项目走；
+ * - 界面助手：`~/.vela/agent-conversations.json`，由主进程读写（渲染层不碰 VELA_HOME）。
+ */
+const timers: Record<AgentScope, ReturnType<typeof setTimeout> | null> = {
+  project: null,
+  global: null,
+}
+const lastSavedJson: Record<AgentScope, string> = { project: '', global: '' }
 let persistSubscribed = false
 
 function archivePath(projectPath: string): string {
@@ -47,17 +56,18 @@ function toPersistedConversations(conversations: readonly AgentConversation[]): 
   }))
 }
 
-function snapshotArchive(): AgentConversationArchive {
+/** 只取某个助手的会话；活跃会话也按该作用域记忆。 */
+export function snapshotArchiveForScope(scope: AgentScope): AgentConversationArchive {
   const state = useAgentStore.getState()
-  const conversations = toPersistedConversations(state.conversations)
-  return {
-    version: 1,
-    activeConversationId: state.activeConversationId
-      && conversations.some(conversation => conversation.id === state.activeConversationId)
-      ? state.activeConversationId
-      : conversations[0]?.id ?? null,
-    conversations,
-  }
+  const conversations = toPersistedConversations(
+    state.conversations.filter(conversation => conversation.scope === scope),
+  )
+  const remembered = state.scopeActiveConversationIds[scope]
+  const activeConversationId = remembered
+    && conversations.some(conversation => conversation.id === remembered)
+    ? remembered
+    : conversations[0]?.id ?? null
+  return { version: 1, activeConversationId, conversations }
 }
 
 export async function loadProjectAgentConversations(
@@ -82,12 +92,19 @@ export async function loadProjectAgentConversations(
   return parseAgentConversationArchive(JSON.parse(result.content) as unknown)
 }
 
+/** 界面助手没有项目会话，存档由主进程写进应用数据目录。 */
+export async function loadGlobalAgentConversations(): Promise<AgentConversationArchive> {
+  const result = await ipc.invoke('agent:load-global-conversations')
+  if (!result.exists || !result.content.trim()) return parseAgentConversationArchive(null)
+  return parseAgentConversationArchive(JSON.parse(result.content) as unknown)
+}
+
 export async function saveProjectAgentConversations(
   projectSession: ProjectSessionContext,
   archive: AgentConversationArchive,
 ): Promise<void> {
   const json = serializeAgentConversationArchive(archive.conversations, archive.activeConversationId)
-  if (json === lastSavedJson) return
+  if (json === lastSavedJson.project) return
   const dirPath = velaDir(projectSession.projectPath)
   const dirExists = await ipc.invokeWithProjectSession(
     projectSession,
@@ -116,40 +133,75 @@ export async function saveProjectAgentConversations(
     ),
     '保存助手会话',
   )
-  lastSavedJson = json
+  lastSavedJson.project = json
 }
 
-export async function flushAgentConversations(
-  projectSession: ProjectSessionContext | null | undefined,
+export async function saveGlobalAgentConversations(
+  archive: AgentConversationArchive,
 ): Promise<void> {
-  if (saveTimer) {
-    clearTimeout(saveTimer)
-    saveTimer = null
+  const json = serializeAgentConversationArchive(archive.conversations, archive.activeConversationId)
+  if (json === lastSavedJson.global) return
+  const result = await ipc.invoke('agent:save-global-conversations', json)
+  if (!result.success) throw new Error(result.error ?? '保存界面助手会话失败')
+  lastSavedJson.global = json
+}
+
+async function flushScope(scope: AgentScope, projectSession: ProjectSessionContext | null): Promise<void> {
+  if (scope === 'global') {
+    await saveGlobalAgentConversations(snapshotArchiveForScope('global'))
+    return
   }
   if (!projectSession) return
   const state = useAgentStore.getState()
   if (!sameProjectSessionContext(state.dataProjectSession, projectSession)) return
-  try {
-    await saveProjectAgentConversations(projectSession, snapshotArchive())
-  } catch (error) {
-    logFailure('Agent', 'failed to persist conversations', error, {
-      projectPath: projectSession.projectPath,
-    })
+  await saveProjectAgentConversations(projectSession, snapshotArchiveForScope('project'))
+}
+
+/**
+ * 把两个助手待写的存档都刷盘。项目助手需要项目会话（无项目时跳过），
+ * 界面助手与项目无关，切书前也要落盘。
+ */
+export async function flushAgentConversations(
+  projectSession: ProjectSessionContext | null | undefined,
+): Promise<void> {
+  for (const scope of ['project', 'global'] as const) {
+    if (timers[scope]) {
+      clearTimeout(timers[scope])
+      timers[scope] = null
+    }
+  }
+  for (const scope of ['project', 'global'] as const) {
+    try {
+      await flushScope(scope, projectSession ?? null)
+    } catch (error) {
+      logFailure('Agent', 'failed to persist conversations', error, {
+        scope,
+        projectPath: projectSession?.projectPath,
+      })
+    }
   }
 }
 
-export function rememberHydratedArchive(archive: AgentConversationArchive): void {
-  lastSavedJson = serializeAgentConversationArchive(archive.conversations, archive.activeConversationId)
+export function rememberHydratedArchive(scope: AgentScope, archive: AgentConversationArchive): void {
+  lastSavedJson[scope] = serializeAgentConversationArchive(
+    archive.conversations,
+    archive.activeConversationId,
+  )
 }
 
 function schedulePersist(): void {
-  const session = useAgentStore.getState().dataProjectSession
-  if (!session) return
-  if (saveTimer) clearTimeout(saveTimer)
-  saveTimer = setTimeout(() => {
-    saveTimer = null
-    void flushAgentConversations(session)
-  }, SAVE_DEBOUNCE_MS)
+  const state = useAgentStore.getState()
+  const scopes: AgentScope[] = ['global']
+  if (state.dataProjectSession) scopes.push('project')
+  for (const scope of scopes) {
+    if (timers[scope]) clearTimeout(timers[scope])
+    timers[scope] = setTimeout(() => {
+      timers[scope] = null
+      void flushAgentConversations(
+        scope === 'project' ? useAgentStore.getState().dataProjectSession : null,
+      )
+    }, SAVE_DEBOUNCE_MS)
+  }
 }
 
 export function subscribeAgentConversationPersistence(): void {
@@ -159,6 +211,7 @@ export function subscribeAgentConversationPersistence(): void {
     if (
       state.conversations === previous.conversations
       && state.activeConversationId === previous.activeConversationId
+      && state.scopeActiveConversationIds === previous.scopeActiveConversationIds
     ) return
     schedulePersist()
   })

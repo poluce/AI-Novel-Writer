@@ -219,7 +219,9 @@ describe('ProjectService REFRESH_RESOURCE project identity', () => {
         finalizationPublication: 'published',
       })
     })
-    expect(mocks.invoke).not.toHaveBeenCalled()
+    // 启动阶段会读一次界面助手存档，与本次刷新无关；除此之外不应发生任何 IPC。
+    expect(mocks.invoke.mock.calls.filter(([channel]) => channel !== 'agent:load-global-conversations'))
+      .toHaveLength(0)
   })
 
   it('preserves a later editor revision and records a finalization conflict', async () => {

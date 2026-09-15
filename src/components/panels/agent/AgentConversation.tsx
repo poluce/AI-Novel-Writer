@@ -46,9 +46,11 @@ export default function AgentConversation() {
 
 function EmptyState() {
   const text = useLocaleStore(s => s.text)
-  const { conversations, selectConversation } = useAgentStore()
+  const { conversations, activeScope, selectConversation } = useAgentStore()
   // 取最近 3 条历史会话（不包含当前空会话）
-  const recentConvs = conversations
+  // 只显示当前助手的会话：切到界面助手时不该看到项目里的对话。
+  const scopedConversations = conversations.filter(conversation => conversation.scope === activeScope)
+  const recentConvs = scopedConversations
     .filter(c => c && c.messages.length > 0)
     .slice(0, 3)
 
@@ -77,7 +79,7 @@ function EmptyState() {
                 />
               ))}
             </div>
-            {conversations.filter(c => c.messages.length > 0).length > 3 && (
+            {scopedConversations.filter(c => c.messages.length > 0).length > 3 && (
               <button
                 onClick={() => useAgentStore.getState().setShowHistory(true)}
                 className="mt-4 text-left text-xs transition-all hover:underline"
@@ -259,6 +261,8 @@ function AgentToolbar() {
       const result = await ipc.invoke(
         'agent:system-prompt',
         buildAgentSkillCatalog(agentWritingLanguage(locale)),
+        // 预览的必须是当前这个助手的提示词：项目助手带项目事实，界面助手不带。
+        useAgentStore.getState().activeScope,
       )
       setInspect({
         kind: 'system',
@@ -362,10 +366,19 @@ function AgentToolbar() {
 
 function AgentHistoryPanel() {
   const text = useLocaleStore(s => s.text)
-  const { conversations, activeConversationId, selectConversation, deleteConversation, setShowHistory } = useAgentStore()
+  const {
+    conversations,
+    activeConversationId,
+    activeScope,
+    selectConversation,
+    deleteConversation,
+    setShowHistory,
+  } = useAgentStore()
 
   // 按更新时间倒序排列
-  const sorted = [...conversations].sort((a, b) => b.updatedAt - a.updatedAt)
+  const sorted = conversations
+    .filter(conversation => conversation.scope === activeScope)
+    .sort((a, b) => b.updatedAt - a.updatedAt)
 
   return (
     <div className="flex flex-col h-full">
