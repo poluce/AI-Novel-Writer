@@ -298,7 +298,7 @@
 
 - [x] 技能正文随目录经 IPC 下发但**不进提示词**；新增工具 `load_writing_skill` 按需取正文（两个作用域都挂）
 - [x] 系统提示词改写：从"助手不自行加载技能正文"改为"目录只有名字与描述，任务匹配时先 `load_writing_skill` 再执行"
-- [x] 技能作为 harness 资源（`resources.skills`）注册，`/技能名` 与工作流阶段绑定保持不变
+- [x] ~~技能作为 harness 资源（`resources.skills`）注册~~ → **已撤销**（ADR 0023）：`lane.skill()` 无人调用，`resources.skills` 只是同一份正文的第二份副本；技能目录仍进系统提示词，`/技能名` 与工作流阶段绑定保持不变
 - [x] 技能目录在**开项目与关项目时重扫**：注册表只在会话首次用到时加载一次，否则先跟界面助手聊过的会话会一直用着没有项目技能的旧目录（`project-service.ts`，含回归用例）
 
 ### P3 harness 执行工具 + 路径围栏
@@ -307,6 +307,7 @@
 - [x] `ConfinedExecutionEnv`：文件类操作钉在允许根内（词法 + canonical 双重检查），越界返回 `permission_denied`；`exec` 由确认卡逐条把关
 - [x] 作用域隔离：项目助手 = 项目根；界面助手 = `~/.vela/workspace`（另放行 `~/.vela/skills`）
 - [x] `write` / `edit` / `bash` 进确认白名单，确认卡显示命令原文与文件/改动预览
+- [x] `write` / `edit` 与领域工具 `write_file` 共用原子写与提交态语义（ADR 0023）：未知提交态同样终止本轮，`bash` 只受确认卡约束
 
 ### 验证
 

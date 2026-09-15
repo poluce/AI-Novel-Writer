@@ -4,6 +4,9 @@
 > 方法：符号级 grep + 逐个追调用者/生产者 + 抽样复核；本轮另派两个子代理分头扫
 > `src/services/workflows|services` 与 `src/components|stores|shared|repositories|controllers`，
 > 其结论已由本人抽样复核（发现并更正 2 处，见文末「更正」）。
+>
+> **处置状态（2026-09-16）**：五、建议动作 1/2/5/6 已执行，另附带 2.C 的其余可删项；
+> 逐条结果见文末「六、处置结果」。本文件记录的是审计当时的发现，未回改上文结论。
 
 ## 判定口径
 
@@ -212,3 +215,53 @@ reasoning effort / response_format，助手对话则完全用供应商默认值*
 
 7. A 档全部保留（数据库迁移、旧定稿/旧图谱/旧提示词/旧知识库读取路径）。
 8. 3.1 的有意双轨保留，只补一句边界说明（3.2-③ 的文档说法本身没错，需要补的是"内部三条读取路径各自的语义"）。
+
+---
+
+## 六、处置结果（2026-09-16）
+
+### 已删：2.C 里能证明零引用的实现
+
+| 位置 | 处置 |
+|---|---|
+| `draft-index.ts` `updateDraftStatus` / `toDraftMeta` | 删除（连同只有它用的 `requireIpcSuccess` 导入） |
+| `draft-index.ts` `RevisionEntry`/`ReviewEntry` 的 `fileName` / `baseDraft` | 删除伪造字段（全仓无读取方） |
+| `chapter-workflow.ts` `updateDraftStatus` | 删除 |
+| `draft-store.ts` `markDraftStatus` | 删除动作与接口声明 |
+| `chapter-workflow.ts:74,79`、`refine-from-review.command.ts` 的 `@deprecated` 入参 | 删除三个字段（确认快照已取代它们）；用例里两处随之失去意义的断言一并去掉，`reviewSourceId` / 确认快照的断言保持 |
+| `generate-draft.command.ts:705` 旧 pseudoPath 兜底 | 删除不可达分支 |
+| `chapter-materials.ts` `sourceStatus ?? 'legacy'` | `FinalizedMaterialSource.sourceStatus` 改为必填，兜底删除（生产者全部显式赋值） |
+| `ManuscriptGroup.tsx` `fs:read-file` 兜底、`_notes` 过滤 | 删除（节点由已定稿草稿合成，路径恒为 `vela://manuscript/{id}`，文件名恒为 `chapter_{n}.md`） |
+| `workflow-utils.ts:125-127` 过期注释 | 改为"持久化在项目库的 post_process 表中" |
+| `llm:generate` 通道 + `llm-store.generate` + `LLMResponse` 类型 | 删除；控制器用例改用 `llm:generate-stream` 断言同一套参数策略，流式路径继续在记账时带上 `finishReason` |
+
+**更正一条审计误判**：`chapter-workflow.ts:17` 的 `export type { DraftStatus, DraftMeta }` 与
+`directory-workflow.ts:29` 的 `ChapterBlueprint` 别名**不是**死代码——前者被 `DraftEditor.tsx:21-22`
+导入（审计时的 grep 漏掉了多行 import），后者被 `chapter-card-draft-ledger.ts` 使用。已保留。
+
+### 已改：3.2-④ 与 3.3-①②（ADR 0023）
+
+1. **技能两套注册** → 删掉 harness `resources.skills` 与 `AgentSession.setResources`：
+   技能目录仍进系统提示词，正文按需用 `load_writing_skill` 读，只剩一处注册。
+2. **采样参数只作用在一条轨道** → 助手会话接上同一条 `resolveGenerationParameters()` 策略：
+   OpenAI 兼容适配器走 `Model.samplingParams`，Gemini 走 `before_payload` 补请求体。
+   单发路径复用同一个 Gemini 补丁函数——顺带修掉 `gemini-thinking-budget` 写进
+   `samplingParams` 后被 Google 适配器丢弃、从未生效的静默缺陷。
+3. **写入两套语义** → harness 的 `write` / `edit` 经 `ConfinedExecutionEnv` 走与 `write_file`
+   相同的原子写；失败且提交态未知时 `after_tool` 补 `commitState: 'unknown'`，
+   ADR 0008 的终止保护因此覆盖它们。`bash` 无法逐条约束，边界写进 ADR 0023。
+
+### 明确保留（审计列为 C 档，但不删）
+
+| 位置 | 保留理由 |
+|---|---|
+| `DraftEditor.tsx:267-291` 非 `vela://` 的 `fs:write-file` 保存分支 | 是**写**路径。删除后若某条不可达路径真的可达，保存会变成一个报错；读路径的兜底删掉只会退回兜底显示名，写路径不是。收益为零、风险非零，故保留 |
+| 2.B 全部（旧审稿报告 markdown、旧 `draft_v{n}.md` 解析、`withSampleContent`、能力证据兜底等） | 分支可达，只是仓内暂时没有生产者；需要真实老库验证后再决定 |
+| 2.A 全部 | 没有回填迁移，删掉老项目读不出来 |
+
+### 未处理（留作后续）
+
+- 3.2-①②③：`vela://` 两套读取、草稿元数据两个解析器、角色三个读取 seam。都要设计
+  （前者要迁移 5 处调用，中者要保留 session 校验差异，后者牵涉审稿提示词的语义），
+  本轮不动。
+- 3.2-⑤⑥ 与 3.1 的边界说明：纯整理，收益最小，留待顺手时做。

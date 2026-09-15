@@ -1,6 +1,9 @@
 # 写作助手工具清单（主进程 Pi Agent）
 
-模型实际能调用的工具只有一份实现：`electron/pi/tools/*`，由 `electron/pi/tool-builder.ts:buildAgentTools()` 组装。
+模型实际能调用的工具只有一份实现：领域工具 `electron/pi/tools/*` 由
+`electron/pi/tool-builder.ts:buildAgentTools()` 组装；Pi harness 自带的执行工具
+（`read` / `write` / `edit` / `bash`，`electron/pi/execution-tools.ts:buildExecutionTools()`）
+由 `AgentSession.create` 在有执行环境时挂上（ADR 0023）。
 渲染层不再拥有第二份工具实现（历史遗留的 `src/services/agent/tools/*.tool.ts` 已删除）。
 
 ## 工具与数据来源
@@ -15,7 +18,10 @@
 | `read_file` | 项目目录里用户自己的文本文件 | 安全文件系统能力 | 否 |
 | `search_knowledge` | 知识库语义检索 | `knowledgeBaseLoader` + embedding 配置 | 否 |
 | `inspect_writing_skill` | 只读检查公开 GitHub 上的提示词型 Skill | 网络只读 | 否 |
-| `write_file` | 写项目内物理文件（保留语义文件名会被拒绝） | 安全文件系统能力 | 是 |
+| `write_file` | 写项目内物理文件（保留语义文件名会被拒绝） | 安全文件系统能力（原子写 + 提交态） | 是 |
+| `read`（harness） | 读执行环境内的文件 | `ConfinedExecutionEnv`（项目根 / 助手 workspace） | 否 |
+| `write` / `edit`（harness） | 覆盖写、按唯一原文精确替换 | 同上；与 `write_file` 同一条原子写与提交态语义 | 是 |
+| `bash`（harness） | 在固定 cwd 执行命令（默认 120s 超时） | 同上；写行为不在提交态保护内 | 是 |
 | `replace_draft_excerpt` | 按唯一原文精确替换草稿片段 | `DraftRepository` | 是 |
 | `open_editor` | 打开内置页面（config/blueprints/characters/architecture/synopsis）或只读查看项目文件 | 渲染层动作 | 是 |
 | `start_workflow` | 启动创作工作流 | 渲染层动作（等回执） | 是 |
@@ -39,11 +45,19 @@
    主进程用它校验并落库，确认卡片用同一份函数计算差异；不要再写第二套字段白名单。
 6. **确认语义按工具划分**：只读工具自动执行；写入与外部副作用工具必须列入
    `confirmationToolNames()`（`electron/pi/__tests__/tool-builder.test.ts` 会锁住这份名单）。
+7. **写入只有一套语义**（ADR 0023）：`write_file` 与 harness 的 `write` / `edit` 都走安全文件系统的
+   原子写；提交态未知时都终止本轮，避免模型自动重写。`bash` 只能靠确认卡把关。
+8. **配置与采样参数只有一个策略源**：`resolveGenerationParameters()` + `resolveReasoningPolicy()`。
+   两条轨道（助手对话 / 工作流单发）都必须从这里取参数，不要在调用点各写一份。
 
 ## 技能（Skill）与工具的关系
 
-Skill 不作为工具暴露给模型：`/技能名` 由 `src/stores/agent-store.ts` 把 Skill 正文注入该轮用户消息，
+Skill 不作为工具暴露给模型，也**不注册进 harness 的资源表**（ADR 0023：`resources.skills` 的
+唯一消费入口 `lane.skill()` 无人调用，同一份正文不再留第二份副本）。
+`/技能名` 由 `src/stores/agent-store.ts` 把 Skill 正文注入该轮用户消息，
 阶段绑定（`bind_writing_skill`）则把 Skill 正文写进对应工作流提示词。
+模型看到的技能清单来自系统提示词（Pi 的 `formatSkillsForSystemPrompt`，见
+`electron/pi/agent-system-prompt.ts`），正文按需用 `load_writing_skill` 直读磁盘。
 渲染层的 `toolRegistry` 只服务界面与 MCP 记账，模型工具表始终来自主进程
 `electron/pi/tool-builder.ts:buildAgentTools()`，两边不要互相假设。
 
