@@ -9,12 +9,14 @@ import {
 import { AgentSession } from './agent-session'
 import { abortAllPiInFlight, registerPiInFlight } from './in-flight'
 import { createPiModels } from './pi-models'
+import { toPiModelSamplingParams } from './pi-stream-options'
+import { resolveGenerationParameters } from '../llm/generation-parameter-policy'
 import { buildAgentTools, confirmationToolNames } from './tool-builder'
 import type { AgentConversationStore } from './agent-conversation-store'
 
+import type { CreativeStrategy } from '../../src/shared/reasoning-types'
 import type { AgentEditorSnapshot, PiAgentEvent, RendererActionSink } from '../../src/shared/agent-events'
 import type { AgentSkillCatalogEntry } from '../../src/shared/agent-skills'
-import type { Skill } from '@earendil-works/pi-agent-core'
 import type { AgentScope } from '../../src/shared/agent-scope'
 import type { AgentPromptHistoryTurn } from '../../src/shared/agent-conversation-archive'
 import type { ModelProfile } from '../../src/shared/ipc-channels'
@@ -39,6 +41,11 @@ export interface AgentSessionManagerOptions {
   resolveToolEnvironment?: (scope: AgentScope) => ExecutionEnv | null
   /** 允许直读正文的技能根（用户级 + 项目级）；不返回就只用目录快照。 */
   resolveSkillRoots?: () => readonly string[]
+  /**
+   * 助手对话的创作策略；工作流路径按各自的阶段解析，助手固定用 `general`。
+   * 不返回就按 `auto` 处理。
+   */
+  resolveCreativeStrategy?: (scope: AgentScope) => CreativeStrategy | undefined
 }
 
 /**
@@ -84,8 +91,6 @@ export class AgentSessionManager {
         skills,
         this.options.resolveSkillRoots?.() ?? [],
       ))
-      const resources = AgentSessionManager.resourcesFor(skills)
-      if (resources) await session.setResources(resources)
       await session.prompt(input)
       logInfo('Agent', 'prompt finished', { conversationId, modelId })
       return { success: true }
@@ -159,7 +164,14 @@ export class AgentSessionManager {
     const profile = this.options.resolveModel(modelId)
     if (!profile) throw new Error('模型未找到')
 
-    const { models, model } = createPiModels(profile)
+    // 与工作流同一条生成参数策略：助手对话固定走 general 阶段。
+    const sampling = resolveGenerationParameters(profile, {
+      creativeStrategy: this.options.resolveCreativeStrategy?.(scope),
+      reasoningStage: 'general',
+    })
+    const { models, model } = createPiModels(profile, {
+      modelSamplingParams: toPiModelSamplingParams(sampling),
+    })
     const language = this.options.resolveLanguage(conversationId)
     const store = this.options.resolveConversationStore?.(scope) ?? null
     const harnessSession = store
@@ -167,7 +179,6 @@ export class AgentSessionManager {
       : await this.openMemorySession(conversationId)
     if (!harnessSession) throw new Error('会话存档不可用')
 
-    const resources = AgentSessionManager.resourcesFor(skills)
     const executionEnv = this.options.resolveToolEnvironment?.(scope) ?? null
     const session = await AgentSession.create({
       models,
@@ -185,8 +196,8 @@ export class AgentSessionManager {
         this.options.resolveSkillRoots?.() ?? [],
       ),
       confirmationToolNames: confirmationToolNames(),
-      ...(resources ? { resources } : {}),
       ...(executionEnv ? { executionEnv } : {}),
+      sampling,
       language,
       emit: (event) => this.options.emit(conversationId, event),
       session: harnessSession,
@@ -209,22 +220,6 @@ export class AgentSessionManager {
     this.stores.set(conversationId, store)
     registerPiInFlight(`agent:${conversationId}`, session)
     return session
-  }
-
-  /** 目录条目 → Pi 的技能资源：同一份正文，harness 侧按名字查找。 */
-  private static resourcesFor(skills?: readonly AgentSkillCatalogEntry[]): { skills: Skill[] } | undefined {
-    if (!skills || skills.length === 0) return undefined
-    return {
-      skills: skills.map(skill => ({
-        name: skill.name,
-        description: skill.description,
-        content: skill.content ?? '',
-        filePath: skill.location,
-        ...(skill.disableModelInvocation === undefined
-          ? {}
-          : { disableModelInvocation: skill.disableModelInvocation }),
-      })),
-    }
   }
 
   /** 没有可用 store（理论上只有异常路径）时退回内存会话，保持可用而不是报错。 */

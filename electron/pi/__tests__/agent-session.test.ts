@@ -1,4 +1,6 @@
+import fs from 'node:fs'
 import os from 'node:os'
+import path from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
@@ -6,6 +8,7 @@ import {
   BACKGROUND_CONTEXT,
   MemorySessionRepo,
   type AgentTool,
+  type ExecutionEnv,
   type Session,
   type SessionMetadata,
 } from '@earendil-works/pi-agent-core'
@@ -21,6 +24,7 @@ import {
 import { fauxChatModel } from './faux-model'
 
 import { AgentSession, AGENT_LANE_NAME } from '../agent-session'
+import { ConfinedExecutionEnv } from '../confined-execution-env'
 import type { PiAgentEvent } from '../agent-session'
 
 const capturedContexts: Context[] = []
@@ -54,6 +58,7 @@ async function buildSession(options: {
   compactionSettings?: { enabled: boolean; reserveTokens: number; keepRecentTokens: number }
   contextWindow?: number
   withExecutionEnv?: boolean
+  executionEnv?: ExecutionEnv
 } = {}): Promise<Harness> {
   const faux = fauxProvider()
   const models = createModels()
@@ -95,9 +100,11 @@ async function buildSession(options: {
     ...(options.confirmationToolNames ? { confirmationToolNames: options.confirmationToolNames } : {}),
     ...(options.compactionSettings ? { compactionSettings: options.compactionSettings } : {}),
     language: 'zh-CN',
-    ...(options.withExecutionEnv
-      ? { executionEnv: new NodeExecutionEnv({ cwd: os.tmpdir() }) }
-      : {}),
+    ...(options.executionEnv
+      ? { executionEnv: options.executionEnv }
+      : options.withExecutionEnv
+        ? { executionEnv: new NodeExecutionEnv({ cwd: os.tmpdir() }) }
+        : {}),
     emit: (event) => {
       events.push(event)
       if (event.type === 'tool_call_confirm') {
@@ -266,5 +273,39 @@ describe('AgentSession', () => {
     if (confirm?.type === 'tool_call_confirm') expect(confirm.call.toolName).toBe('bash')
     const complete = events.find((e) => e.type === 'tool_call_complete')
     expect(complete?.type === 'tool_call_complete' && complete.call.status).toBe('failed')
+  })
+
+  it('terminates the turn when a harness write leaves an unknown commit state', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vela-unknown-commit-'))
+    try {
+      const env = new ConfinedExecutionEnv(new NodeExecutionEnv({ cwd: root }), [root], {
+        writeTextAtomically: async () => {
+          throw Object.assign(new Error('安全助手崩了'), { commitState: 'unknown' })
+        },
+      })
+      const { session, events } = await buildSession({
+        tools: [],
+        executionEnv: env,
+        confirmationToolNames: new Set(['write']),
+        responses: [
+          fauxAssistantMessage([fauxToolCall('write', { path: 'note.md', content: '正文' })]),
+          fauxAssistantMessage('第二回合不该被请求'),
+        ],
+      })
+
+      await session.prompt('写个文件')
+      await session.close()
+
+      const complete = events.find((e) => e.type === 'tool_call_complete')
+      expect(complete?.type === 'tool_call_complete' && complete.call.status).toBe('failed')
+      if (complete?.type === 'tool_call_complete') {
+        expect(complete.call.error).toContain('提交态未知')
+        expect(complete.call.result).toEqual({ commitState: 'unknown' })
+      }
+      // 终止本轮：模型没有机会自动重写一遍。
+      expect(capturedContexts).toHaveLength(1)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })
+    }
   })
 })

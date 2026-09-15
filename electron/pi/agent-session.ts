@@ -7,8 +7,6 @@ import {
   type CompactionSettings,
   type Session,
   type SessionMetadata,
-  type Skill,
-  type PromptTemplate,
 } from '@earendil-works/pi-agent-core'
 import type { Models } from '@earendil-works/pi-ai'
 import type { ExecutionEnv } from '@earendil-works/pi-agent-core'
@@ -23,9 +21,13 @@ import {
   type HarnessToolContext,
 } from './tool-types'
 import { buildExecutionTools } from './execution-tools'
+import { ConfinedExecutionEnv } from './confined-execution-env'
+import { patchGoogleSamplingPayload } from './pi-stream-options'
+import type { ResolvedGenerationParameters } from '../llm/generation-parameter-policy'
 import { logFailure, logInfo } from '../../src/shared/fail-log'
 import { buildL1AgentContext } from './agent-l1-context'
 import type { AgentEditorSnapshot, PiAgentEvent, PiToolCallInfo } from '../../src/shared/agent-events'
+import type { FileWriteCommitState } from '../../src/shared/ipc-channels'
 import type { AgentPromptHistoryTurn } from '../../src/shared/agent-conversation-archive'
 import type { WritingLanguage } from '../../src/shared/writing-language'
 import type { AgentScope } from '../../src/shared/agent-scope'
@@ -48,8 +50,6 @@ export interface AgentSessionOptions {
   confirmationToolNames?: ReadonlySet<string>
   /** 有它才挂 Pi harness 的执行工具（read / write / edit / bash）。 */
   executionEnv?: ExecutionEnv | null
-  /** 技能与提示词模板：交给 harness 的资源表（`lane.skill()` 的查找来源）。 */
-  resources?: { skills?: Skill[]; promptTemplates?: PromptTemplate[] }
   language: WritingLanguage
   /** Emit a normalized event toward the renderer (IPC send in production). */
   emit: (event: PiAgentEvent) => void
@@ -60,6 +60,11 @@ export interface AgentSessionOptions {
   scope?: AgentScope
   /** Pi 的压缩阈值；默认与库一致。 */
   compactionSettings?: CompactionSettings
+  /**
+   * 这次会话解析出的采样参数。harness 自己拥有请求选项，所以 OpenAI 兼容
+   * 适配器走 `model.samplingParams`，Gemini 走 `before_payload` 补请求体。
+   */
+  sampling?: ResolvedGenerationParameters
 }
 
 interface PendingConfirmation {
@@ -87,6 +92,8 @@ export class AgentSession {
   private readonly modelIdentity: { modelId: string; modelName: string }
   /** 只为旧存档播种时补全 `AssistantMessage` 的元数据。 */
   private readonly model: PiModelRuntime['model']
+  /** 执行工具的提交态记录；没有执行环境时为 null。 */
+  private readonly commitTracker: ConfinedExecutionEnv | null
   private readonly unsubscribes: Array<() => void> = []
 
   private editorSnapshot: AgentEditorSnapshot | null = null
@@ -117,7 +124,10 @@ export class AgentSession {
     this.systemPrompt = options.systemPrompt
     this.modelIdentity = options.modelIdentity
     this.model = options.model
-    this.registerHooks()
+    this.commitTracker = options.executionEnv instanceof ConfinedExecutionEnv
+      ? options.executionEnv
+      : null
+    this.registerHooks(options.sampling ?? null)
     this.registerEvents()
   }
 
@@ -141,7 +151,6 @@ export class AgentSession {
       // 读工具并行；写工具与 MCP 由各自 `executionMode: 'sequential'` 钉住。
       toolExecution: 'parallel',
       compaction: options.compactionSettings ?? DEFAULT_COMPACTION_SETTINGS,
-      ...(options.resources ? { resources: options.resources } : {}),
     } as AgentHarnessOptions<HarnessToolContext>, BACKGROUND_CONTEXT)
     const lane = await harness.lane(AGENT_LANE_NAME, BACKGROUND_CONTEXT)
     return new AgentSession(options, harness, lane)
@@ -149,12 +158,19 @@ export class AgentSession {
 
   // ===== 钩子：领域语义都挂在这里 =====
 
-  private registerHooks(): void {
+  private registerHooks(sampling: ResolvedGenerationParameters | null): void {
     // 系统提示词每轮重取（技能目录与项目事实会变），L1 界面快照每轮注入。
     this.unsubscribes.push(this.harness.hooks.on('transform_context', (event) => ({
       messages: this.injectL1(event.messages),
       systemPrompt: this.systemPrompt,
     })))
+
+    // Gemini 适配器不读 samplingParams，温度与思考预算只能补进请求体。
+    if (sampling && this.model.api === 'google-generative-ai') {
+      this.unsubscribes.push(this.harness.hooks.on('before_payload', (event) => ({
+        payload: patchGoogleSamplingPayload(event.payload, sampling),
+      })))
+    }
 
     // 写工具确认：harness 的钩子先于 tool_start 事件，卡片要在这里补发。
     this.unsubscribes.push(this.harness.hooks.on('before_tool', async (event) => {
@@ -167,14 +183,41 @@ export class AgentSession {
     }))
 
     // 工具结果统一截断；「写入了但提交态未知」时终止本轮，避免自动重写。
+    // harness 自带的 write / edit 不报提交态，这里按执行环境记录的结果补上，
+    // 让它们与领域工具 write_file 走同一条 ADR 0008 保护。
     this.unsubscribes.push(this.harness.hooks.on('after_tool', (event) => {
-      const commitOverride = afterUnknownCommit({ details: event.details })
+      const commitState = this.harnessWriteCommitState(event)
+      const previousDetails = event.details
+      const details = commitState === undefined
+        ? previousDetails
+        : {
+            ...(previousDetails && typeof previousDetails === 'object' && !Array.isArray(previousDetails)
+              ? previousDetails
+              : {}),
+            commitState,
+          }
+      const commitOverride = afterUnknownCommit({ details })
       return {
         content: truncateToolResultContent(event.content),
+        ...(commitState === undefined ? {} : { details }),
         ...(commitOverride?.terminate === undefined ? {} : { terminate: commitOverride.terminate }),
         ...(commitOverride?.isError === undefined ? {} : { isError: commitOverride.isError }),
       }
     }))
+  }
+
+  /**
+   * harness 执行工具的提交态：只有「写入失败且无法证明没落地」才回报，
+   * 成功与普通失败都不额外标注（成功时模型不需要这行噪音）。
+   */
+  private harnessWriteCommitState(
+    event: { toolName: string; args: Record<string, unknown> },
+  ): FileWriteCommitState | undefined {
+    if (!this.commitTracker) return undefined
+    if (event.toolName !== 'write' && event.toolName !== 'edit') return undefined
+    const target = event.args.path
+    if (typeof target !== 'string' || !target) return undefined
+    return this.commitTracker.consumeUnknownCommit(target) ? 'unknown' : undefined
   }
 
   private requestConfirmation(
@@ -306,10 +349,6 @@ export class AgentSession {
 
   async setTools(tools: AnyAgentTool[]): Promise<void> {
     await this.harness.setTools(tools.map(toHarnessTool), BACKGROUND_CONTEXT)
-  }
-
-  async setResources(resources: { skills?: Skill[]; promptTemplates?: PromptTemplate[] }): Promise<void> {
-    await this.harness.setResources(resources, BACKGROUND_CONTEXT)
   }
 
   /** 存档里已有的条目条数；0 表示这是一段全新的会话。 */

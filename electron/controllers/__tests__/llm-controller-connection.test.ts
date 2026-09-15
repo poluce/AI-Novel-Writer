@@ -194,22 +194,15 @@ describe('llm connection test', () => {
 })
 
 describe('llm generation parameter policy controller integration', () => {
-  function handler(channel: 'llm:generate' | 'llm:generate-stream' | 'llm:cancel'): IpcHandler {
+  function handler(channel: 'llm:generate-stream' | 'llm:cancel'): IpcHandler {
     const registered = mocks.handlers.get(channel)
     if (!registered) throw new Error(`Missing ${channel} handler`)
     return registered
   }
 
-  it('uses one verified reasoning policy for normal, streaming, and connection-test requests', async () => {
+  it('uses one verified reasoning policy for streaming and connection-test requests', async () => {
     mocks.models = [xaiReasoningModel]
 
-    await handler('llm:generate')({}, {
-      modelId: xaiReasoningModel.id,
-      messages: [{ role: 'user', content: 'write' }],
-      purpose: 'chapter-draft',
-      creativeStrategy: 'fluent-drafting',
-      reasoningStage: 'drafting',
-    })
     await handler('llm:generate-stream')({ sender: {} }, 'xai-stream', {
       modelId: xaiReasoningModel.id,
       messages: [{ role: 'user', content: 'write' }],
@@ -219,7 +212,7 @@ describe('llm generation parameter policy controller integration', () => {
     })
     await connectionHandler()({}, xaiReasoningModel, 'deep-planning')
 
-    expect(mocks.streamSingleShot).toHaveBeenCalledTimes(3)
+    expect(mocks.streamSingleShot).toHaveBeenCalledTimes(2)
     for (const call of mocks.streamSingleShot.mock.calls) {
       expect(call[4]).toMatchObject({
         samplingParams: { reasoning_effort: 'medium' },
@@ -228,15 +221,9 @@ describe('llm generation parameter policy controller integration', () => {
     await handler('llm:cancel')({}, 'xai-stream')
   })
 
-  it('uses the verified DeepSeek V4 policy for normal, streaming, and connection-test requests', async () => {
+  it('uses the verified DeepSeek V4 policy for streaming and connection-test requests', async () => {
     mocks.models = [legacyDeepSeekV4Model]
 
-    await handler('llm:generate')({}, {
-      modelId: legacyDeepSeekV4Model.id,
-      messages: [{ role: 'user', content: 'write fluently' }],
-      creativeStrategy: 'fluent-drafting',
-      reasoningStage: 'drafting',
-    })
     await handler('llm:generate-stream')({ sender: {} }, 'deepseek-v4-stream', {
       modelId: legacyDeepSeekV4Model.id,
       messages: [{ role: 'user', content: 'write automatically' }],
@@ -246,41 +233,18 @@ describe('llm generation parameter policy controller integration', () => {
     await connectionHandler()({}, legacyDeepSeekV4Model, 'auto')
 
     expect(mocks.streamSingleShot.mock.calls[0]?.[4]).toMatchObject({
-      samplingParams: { thinking: { type: 'disabled' } },
-    })
-    expect(mocks.streamSingleShot.mock.calls[1]?.[4]).toMatchObject({
       samplingParams: { thinking: { type: 'enabled' }, reasoning_effort: 'low' },
     })
-    expect(mocks.streamSingleShot.mock.calls[2]?.[4]).toMatchObject({
+    expect(mocks.streamSingleShot.mock.calls[1]?.[4]).toMatchObject({
       samplingParams: { thinking: { type: 'enabled' }, reasoning_effort: 'low' },
     })
     await handler('llm:cancel')({}, 'deepseek-v4-stream')
   })
 
-  it('uses the profile temperature for regular generation and each initial/continuation stream request', async () => {
+  it('uses the profile temperature for each initial/continuation stream request', async () => {
     const genericModel = { ...deepSeekModel, temperature: 1 }
     mocks.models = [genericModel]
 
-    await handler('llm:generate')({}, {
-      modelId: genericModel.id,
-      messages: [{ role: 'user', content: 'write' }],
-      maxTokens: 512,
-      responseFormat: { type: 'json_object' },
-    })
-
-    expect(mocks.streamSingleShot).toHaveBeenCalledWith(
-      genericModel,
-      '',
-      'write',
-      expect.objectContaining({ name: 'submit_text' }),
-      expect.objectContaining({
-        temperature: 1,
-        maxTokens: 512,
-        samplingParams: { response_format: { type: 'json_object' } },
-      }),
-    )
-
-    mocks.streamSingleShot.mockClear()
     await handler('llm:generate-stream')({ sender: {} }, 'generic-stream', {
       modelId: genericModel.id,
       messages: [{ role: 'user', content: 'write' }],
@@ -314,24 +278,9 @@ describe('llm generation parameter policy controller integration', () => {
     await handler('llm:cancel')({}, 'generic-continuation')
   })
 
-  it('uses the same fixed-Kimi policy for regular, connection, and each initial/continuation stream request', async () => {
+  it('uses the same fixed-Kimi policy for connection and each initial/continuation stream request', async () => {
     mocks.models = [fixedTemperatureKimiModel]
 
-    await handler('llm:generate')({}, {
-      modelId: fixedTemperatureKimiModel.id,
-      messages: [{ role: 'user', content: 'write' }],
-      maxTokens: 512,
-    })
-    expect(mocks.streamSingleShot).toHaveBeenLastCalledWith(
-      fixedTemperatureKimiModel,
-      '',
-      'write',
-      expect.objectContaining({ name: 'submit_text' }),
-      expect.objectContaining({ temperature: undefined, maxTokens: 512 }),
-    )
-    expect(mocks.streamSingleShot.mock.calls.at(-1)?.[4]).not.toHaveProperty('thinking')
-
-    mocks.streamSingleShot.mockClear()
     await handler('llm:generate-stream')({ sender: {} }, 'kimi-stream', {
       modelId: fixedTemperatureKimiModel.id,
       messages: [{ role: 'user', content: 'write' }],
@@ -394,7 +343,6 @@ describe('llm model execution lease controller integration', () => {
   function handler(channel:
     | 'llm:begin-execution-lease'
     | 'llm:close-execution-lease'
-    | 'llm:generate'
     | 'llm:generate-stream'
   ): IpcHandler {
     const registered = mocks.handlers.get(channel)
@@ -425,7 +373,7 @@ describe('llm model execution lease controller integration', () => {
       baseUrl: 'https://edited.invalid/v1',
       temperature: 1,
     }]
-    await handler('llm:generate')({}, {
+    await handler('llm:generate-stream')({ sender: {} }, 'leased-frozen-snapshot', {
       modelId: original.id,
       modelExecutionLeaseId: beginResult.lease?.leaseId,
       messages: [{ role: 'user', content: 'write' }],
@@ -498,13 +446,13 @@ describe('llm model execution lease controller integration', () => {
 
     await expect(handler('llm:close-execution-lease')({}, leaseId)).resolves.toEqual({ success: true })
     mocks.streamSingleShot.mockClear()
-    await expect(handler('llm:generate')({}, {
+    await expect(handler('llm:generate-stream')({ sender: {} }, 'closed-lease-stream', {
       modelId: deepSeekModel.id,
       modelExecutionLeaseId: leaseId,
       messages: [{ role: 'user', content: 'write' }],
-    })).resolves.toMatchObject({
-      success: false,
-      content: '',
+    })).resolves.toEqual({
+      requestId: 'closed-lease-stream',
+      started: false,
       error: expect.stringContaining('模型执行租约无效'),
     })
     expect(mocks.streamSingleShot).not.toHaveBeenCalled()
@@ -540,21 +488,33 @@ describe('llm project statistics', () => {
     leaseId: 'lease-A',
   }
 
-  it('records a non-stream provider call once with its frozen project lease', async () => {
-    const handler = mocks.handlers.get('llm:generate')
-    if (!handler) throw new Error('Missing llm:generate handler')
+  function streamHandler(): IpcHandler {
+    const handler = mocks.handlers.get('llm:generate-stream')
+    if (!handler) throw new Error('Missing llm:generate-stream handler')
+    return handler
+  }
+
+  /** 流式路径在浮动 promise 里记账；这里等它落定再断言。 */
+  async function settleStream(): Promise<void> {
+    await Promise.allSettled(mocks.streamSingleShot.mock.results.map(result => result.value))
+    await Promise.resolve()
+  }
+
+  it('records a provider call once with its frozen project lease', async () => {
+    const handler = streamHandler()
     mocks.streamSingleShot.mockResolvedValueOnce({
       artifact: undefined,
       text: 'done',
       finishReason: 'stop',
     })
 
-    await handler({}, {
+    await handler({ sender: {} }, 'stats-stream', {
       modelId: deepSeekModel.id,
       messages: [{ role: 'user', content: 'write' }],
       purpose: 'draft',
       projectSession,
     })
+    await settleStream()
 
     expect(mocks.assertCurrentProjectContext).toHaveBeenCalledWith(projectSession, 'C:/projects/A')
     expect(mocks.logCall).toHaveBeenCalledTimes(1)
@@ -567,26 +527,27 @@ describe('llm project statistics', () => {
     }))
   })
 
-  it('records a non-stream terminal reason as the repository structured finish code', async () => {
-    const handler = mocks.handlers.get('llm:generate')
-    if (!handler) throw new Error('Missing llm:generate handler')
+  it('records a terminal reason as the repository structured finish code', async () => {
+    const handler = streamHandler()
     mocks.streamSingleShot.mockResolvedValueOnce({
       artifact: undefined,
       text: '',
       finishReason: 'content_filter',
     })
 
-    await expect(handler({}, {
+    await handler({ sender: {} }, 'filtered-stream', {
       modelId: deepSeekModel.id,
       messages: [{ role: 'user', content: 'write' }],
       purpose: 'draft',
       projectSession,
-    })).resolves.toMatchObject({
-      success: false,
-      finishReason: 'content_filter',
-      error: 'finish:content_filter',
     })
+    await settleStream()
 
+    expect(mocks.send).toHaveBeenCalledWith('llm:stream-done', {
+      requestId: 'filtered-stream',
+      fullText: '',
+      finishReason: 'content_filter',
+    })
     expect(mocks.logCall).toHaveBeenCalledWith(expect.objectContaining({
       success: false,
       errorMessage: 'finish:content_filter',
@@ -594,12 +555,12 @@ describe('llm project statistics', () => {
   })
 
   it('does not write project statistics without a project lease', async () => {
-    const handler = mocks.handlers.get('llm:generate')
-    if (!handler) throw new Error('Missing llm:generate handler')
-    await handler({}, {
+    const handler = streamHandler()
+    await handler({ sender: {} }, 'unleased-stream', {
       modelId: deepSeekModel.id,
       messages: [{ role: 'user', content: 'write' }],
     })
+    await settleStream()
     expect(mocks.logCall).not.toHaveBeenCalled()
   })
 

@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { BACKGROUND_CONTEXT } from '@earendil-works/pi-agent-core'
 import { NodeExecutionEnv } from '@earendil-works/pi-agent-core/harness/env/nodejs'
 
-import { ConfinedExecutionEnv } from '../confined-execution-env'
+import { ConfinedExecutionEnv, type AtomicTextWrite } from '../confined-execution-env'
 
 const roots: string[] = []
 
@@ -113,5 +113,76 @@ describe('ConfinedExecutionEnv', () => {
 
     const result = await env.exec('echo hi', { cwd: root }, BACKGROUND_CONTEXT)
     expect(result.ok).toBe(true)
+  })
+})
+
+describe('ConfinedExecutionEnv atomic writes', () => {
+  function buildAtomicEnv(allowed: string, writeTextAtomically: AtomicTextWrite) {
+    return new ConfinedExecutionEnv(new NodeExecutionEnv({ cwd: allowed }), [allowed], {
+      writeTextAtomically,
+    })
+  }
+
+  it('routes text writes through the shared atomic writer', async () => {
+    const root = temporaryDir('vela-atomic-')
+    const written: Array<{ path: string; content: string }> = []
+    const env = buildAtomicEnv(root, async (fullPath, content) => {
+      written.push({ path: fullPath, content })
+    })
+
+    const result = await env.writeFile('draft.md', '正文', BACKGROUND_CONTEXT)
+
+    expect(result.ok).toBe(true)
+    expect(written).toEqual([{ path: path.join(root, 'draft.md'), content: '正文' }])
+  })
+
+  it('reports a failed atomic write without a commit state as a plain failure', async () => {
+    const root = temporaryDir('vela-atomic-')
+    const env = buildAtomicEnv(root, async () => {
+      throw new Error('磁盘满了')
+    })
+
+    const result = await env.writeFile('draft.md', '正文', BACKGROUND_CONTEXT)
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error.message).toContain('写入失败')
+      expect(result.error.message).not.toContain('提交态未知')
+    }
+    expect(env.consumeUnknownCommit('draft.md')).toBe(false)
+  })
+
+  it('tracks an unknown commit once and clears it on the next successful write', async () => {
+    const root = temporaryDir('vela-atomic-')
+    let fail = true
+    const env = buildAtomicEnv(root, async () => {
+      if (fail) throw Object.assign(new Error('助手崩了'), { commitState: 'unknown' })
+    })
+
+    const failed = await env.writeFile('draft.md', '正文', BACKGROUND_CONTEXT)
+    expect(failed.ok).toBe(false)
+    if (!failed.ok) expect(failed.error.message).toContain('提交态未知')
+    expect(env.consumeUnknownCommit(path.join(root, 'draft.md'))).toBe(true)
+    expect(env.consumeUnknownCommit(path.join(root, 'draft.md'))).toBe(false)
+
+    await env.writeFile('draft.md', '正文', BACKGROUND_CONTEXT)
+    fail = false
+    const succeeded = await env.writeFile('draft.md', '正文', BACKGROUND_CONTEXT)
+    expect(succeeded.ok).toBe(true)
+    expect(env.consumeUnknownCommit('draft.md')).toBe(false)
+  })
+
+  it('leaves binary writes on the inner environment', async () => {
+    const root = temporaryDir('vela-atomic-')
+    let atomicCalls = 0
+    const env = buildAtomicEnv(root, async () => {
+      atomicCalls += 1
+    })
+
+    const result = await env.writeFile('blob.bin', new Uint8Array([1, 2, 3]), BACKGROUND_CONTEXT)
+
+    expect(result.ok).toBe(true)
+    expect(atomicCalls).toBe(0)
+    expect(fs.readFileSync(path.join(root, 'blob.bin'))).toEqual(Buffer.from([1, 2, 3]))
   })
 })

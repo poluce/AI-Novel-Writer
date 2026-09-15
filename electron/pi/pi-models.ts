@@ -42,8 +42,16 @@ export interface PiModelRuntime {
  *
  * The API key is supplied through the provider's `apiKey.resolve()` so the
  * renderer never touches it; the profile stays the sole key source.
+ *
+ * `modelSamplingParams` are the model-level defaults from the product
+ * generation-parameter policy. The one-shot track passes its parameters per
+ * request instead; the harness track carries them here because the harness
+ * owns the request options it sends.
  */
-export function createPiModels(profile: ModelProfile): PiModelRuntime {
+export function createPiModels(
+  profile: ModelProfile,
+  options: { modelSamplingParams?: Record<string, unknown> } = {},
+): PiModelRuntime {
   assertGenerationModelSupportsTools(profile)
   const isGemini = profile.protocol === 'gemini'
   const baseUrl = isGemini ? resolveGeminiBaseUrl(profile.baseUrl) : profile.baseUrl
@@ -72,6 +80,7 @@ export function createPiModels(profile: ModelProfile): PiModelRuntime {
     cost: ZERO_COST,
     contextWindow: profile.capabilities?.contextWindowTokens ?? 1_000_000,
     maxTokens: profile.capabilities?.maxOutputTokens ?? profile.maxTokens,
+    ...(options.modelSamplingParams ? { samplingParams: options.modelSamplingParams } : {}),
   }
 
   const provider = createProvider({

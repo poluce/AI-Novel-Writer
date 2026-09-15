@@ -197,6 +197,10 @@ export function registerAgentController(): void {
       if (projectPath) roots.push(projectSkillsRoot(projectPath))
       return roots
     },
+    // 助手对话与工作流共用同一条采样参数策略：策略取自项目创作策略。
+    resolveCreativeStrategy: (scope) => (
+      scope === 'project' ? ProjectCoreRepository.get()?.creativeStrategy : undefined
+    ),
   })
   setPiProjectCloseHook(() => {
     dispatcher.abortAll()

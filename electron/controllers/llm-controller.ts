@@ -22,7 +22,7 @@ import { isSubmitToolName } from '../../src/shared/submit-contract'
 import { assertGenerationModelSupportsTools } from '../../src/shared/tool-calling-gate'
 import { logFailure } from '../../src/shared/fail-log'
 import { SingleShotAbortedError, streamSingleShot, type StreamSingleShotOptions } from '../pi/pi-single-shot'
-import { toPiSamplingParams } from '../pi/pi-stream-options'
+import { patchGoogleSamplingPayload, toPiSamplingParams } from '../pi/pi-stream-options'
 import { createSubmitTool, visibleTextFromSubmitArtifact } from '../pi/submit-tools'
 
 interface ActiveStream {
@@ -76,6 +76,7 @@ function resolveSubmitToolName(request: Pick<LLMRequest, 'submitTool'>) {
 }
 
 function toStreamSingleShotOptions(
+  model: ModelProfile,
   params: ResolvedGenerationParameters,
   extra: Pick<StreamSingleShotOptions, 'signal' | 'inFlightId'> = {},
 ): StreamSingleShotOptions {
@@ -84,6 +85,10 @@ function toStreamSingleShotOptions(
     maxTokens: params.maxTokens,
     temperature: params.temperature,
     samplingParams: toPiSamplingParams(params),
+    // Gemini 适配器不读 samplingParams，温度与思考预算只能打进请求体。
+    ...(model.protocol === 'gemini'
+      ? { payloadPatch: (payload: unknown) => patchGoogleSamplingPayload(payload, params) }
+      : {}),
   }
 }
 
@@ -101,7 +106,7 @@ async function completeSingleShot(
     systemPrompt,
     userPrompt,
     createSubmitTool(submitTool),
-    toStreamSingleShotOptions(params, extra),
+    toStreamSingleShotOptions(model, params, extra),
   )
   const content = visibleTextFromSubmitArtifact(submitTool, result.artifact, result.text)
   const finishReason = result.finishReason
@@ -213,29 +218,6 @@ export function registerLLMController() {
     return { success: false, error: '模型执行租约无效或已关闭' }
   })
 
-  ipcMain.handle('llm:generate', async (_event, request: LLMRequest) => {
-    const startedAt = Date.now()
-    let model: ModelProfile | null = null
-    try {
-      applyProxyConfig()
-      model = request.modelExecutionLeaseId
-        ? modelExecutionLeases.resolve(request.modelExecutionLeaseId)
-        : getModelConfig(request.modelId)
-      if (!model) return { success: false, content: '', finishReason: 'error', error: '未找到模型配置' }
-
-      const result = await completeSingleShot(
-        model,
-        request,
-        resolveGenerationParameters(model, request),
-      )
-      recordProviderOutcome(request, model, startedAt, result)
-      return result
-    } catch (error) {
-      if (model) recordProviderOutcome(request, model, startedAt, { success: false, error: String(error) })
-      return { success: false, content: '', finishReason: 'error', error: String(error) }
-    }
-  })
-
   ipcMain.handle('llm:generate-stream', async (event, requestId: string, request: LLMRequest) => {
     applyProxyConfig()
     let model: ModelProfile | null
@@ -252,7 +234,7 @@ export function registerLLMController() {
     const abortController = new AbortController()
     const startedAt = Date.now()
     let recorded = false
-    const recordOnce = (outcome: { success: boolean; usage?: TokenUsage; error?: string }) => {
+    const recordOnce = (outcome: { success: boolean; usage?: TokenUsage; error?: string; finishReason?: LLMFinishReason }) => {
       if (recorded) return
       recorded = true
       recordProviderOutcome(request, model, startedAt, outcome)
@@ -272,7 +254,7 @@ export function registerLLMController() {
         inFlightId: `llm:${requestId}`,
       },
     ).then(result => {
-      recordOnce({ success: result.success, error: result.error })
+      recordOnce({ success: result.success, error: result.error, finishReason: result.finishReason })
       win?.webContents.send('llm:stream-done', {
         requestId,
         fullText: result.content,

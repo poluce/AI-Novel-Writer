@@ -112,4 +112,16 @@ describe('createPiModels', () => {
       },
     }))).toThrow(/原生工具调用/)
   })
+
+  it('carries product sampling parameters on the model for the harness track', () => {
+    const { model } = createPiModels(profile(), {
+      modelSamplingParams: { temperature: 0.4, reasoning_effort: 'medium' },
+    })
+
+    expect(model.samplingParams).toEqual({ temperature: 0.4, reasoning_effort: 'medium' })
+  })
+
+  it('leaves the model sampling parameters unset without a product policy', () => {
+    expect(createPiModels(profile()).model.samplingParams).toBeUndefined()
+  })
 })

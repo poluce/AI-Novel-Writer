@@ -25,6 +25,8 @@ export interface StreamSingleShotOptions {
   temperature?: number
   /** Extra OpenAI-compatible body fields (reasoning, response_format). */
   samplingParams?: Record<string, unknown>
+  /** Adapter-level payload patch for providers that ignore samplingParams (Gemini). */
+  payloadPatch?: (payload: unknown) => unknown
 }
 
 export class SingleShotAbortedError extends Error {
@@ -91,6 +93,9 @@ export async function streamSingleShot(
       ...(options.maxTokens !== undefined ? { maxTokens: options.maxTokens } : {}),
       ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
       ...(options.samplingParams ? { samplingParams: options.samplingParams } : {}),
+      ...(options.payloadPatch
+        ? { onPayload: (payload: unknown) => options.payloadPatch?.(payload) }
+        : {}),
     })
 
     let text = ''
