@@ -30,6 +30,10 @@ describe('buildAgentTools', () => {
     // 技能检查与 MCP 与项目无关，保留。
     expect(names).toContain('inspect_writing_skill')
     expect(names).toContain('mcp__docs__search')
+    // 渐进式披露的读取端两个作用域都有。
+    expect(names).toContain('load_writing_skill')
+    expect(buildAgentTools('zh-CN', () => {}, 'project').map(tool => tool.name))
+      .toContain('load_writing_skill')
   })
 
   it('marks write and MCP tools sequential so reads can run in parallel', () => {
@@ -69,13 +73,17 @@ describe('buildAgentTools', () => {
 
   it('keeps only the intended tools behind user confirmation', () => {
     expect([...confirmationToolNames()].sort()).toEqual([
+      // harness 自带的执行工具同样逐次确认。
+      'bash',
       'bind_writing_skill',
+      'edit',
       'install_writing_skill',
       'open_editor',
       'propose_chapter_blueprint',
       'propose_novel_config',
       'replace_draft_excerpt',
       'start_workflow',
+      'write',
       'write_file',
     ])
   })

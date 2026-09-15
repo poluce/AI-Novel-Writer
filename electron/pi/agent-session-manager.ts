@@ -1,3 +1,11 @@
+import {
+  BACKGROUND_CONTEXT,
+  MemorySessionRepo,
+  type ExecutionEnv,
+  type Session,
+  type SessionMetadata,
+} from '@earendil-works/pi-agent-core'
+
 import { AgentSession } from './agent-session'
 import { abortAllPiInFlight, registerPiInFlight } from './in-flight'
 import { createPiModels } from './pi-models'
@@ -6,6 +14,7 @@ import type { AgentConversationStore } from './agent-conversation-store'
 
 import type { AgentEditorSnapshot, PiAgentEvent, RendererActionSink } from '../../src/shared/agent-events'
 import type { AgentSkillCatalogEntry } from '../../src/shared/agent-skills'
+import type { Skill } from '@earendil-works/pi-agent-core'
 import type { AgentScope } from '../../src/shared/agent-scope'
 import type { AgentPromptHistoryTurn } from '../../src/shared/agent-conversation-archive'
 import type { ModelProfile } from '../../src/shared/ipc-channels'
@@ -26,15 +35,20 @@ export interface AgentSessionManagerOptions {
   rendererAction: RendererActionSink
   /** Durable Pi session for one scope; absent means memory-only. */
   resolveConversationStore?: (scope: AgentScope) => AgentConversationStore | null
+  /** Pi harness 执行工具的沙箱环境；不返回就不挂这些工具。 */
+  resolveToolEnvironment?: (scope: AgentScope) => ExecutionEnv | null
 }
 
 /**
- * Owns one long-lived Pi Agent session per conversation. The IPC handler
+ * Owns one long-lived Pi Agent harness per conversation. The IPC handler
  * delegates prompt/confirm/abort here; sessions stay warm for context-cache
  * reuse and are aborted on book switch.
  */
 export class AgentSessionManager {
   private readonly sessions = new Map<string, AgentSession>()
+  /** 每个会话由哪个 store 提供存档，关会话时要让它忘掉这个已关闭的 session。 */
+  private readonly stores = new Map<string, AgentConversationStore | null>()
+  private memoryRepo: MemorySessionRepo | null = null
 
   constructor(private readonly options: AgentSessionManagerOptions) {}
 
@@ -58,9 +72,12 @@ export class AgentSessionManager {
         chars: input.length,
       })
       const session = await this.getOrCreate(conversationId, modelId, history, skills, scope)
+      const language = this.options.resolveLanguage(conversationId)
       session.setEditorSnapshot(editorSnapshot)
       session.setSystemPrompt(this.options.resolveSystemPrompt(conversationId, scope, skills))
-      session.setTools(buildAgentTools(this.options.resolveLanguage(conversationId), this.options.rendererAction))
+      await session.setTools(buildAgentTools(language, this.options.rendererAction, scope, skills))
+      const resources = AgentSessionManager.resourcesFor(skills)
+      if (resources) await session.setResources(resources)
       await session.prompt(input)
       logInfo('Agent', 'prompt finished', { conversationId, modelId })
       return { success: true }
@@ -89,11 +106,7 @@ export class AgentSessionManager {
    * 切书走 `abortAll`（保留存档，下次打开还在）。
    */
   async discard(conversationId: string, scope: AgentScope = 'project'): Promise<{ success: boolean }> {
-    const session = this.sessions.get(conversationId)
-    if (session) {
-      session.abort()
-      this.sessions.delete(conversationId)
-    }
+    await this.closeSession(conversationId)
     const store = this.options.resolveConversationStore?.(scope) ?? null
     if (store) {
       try {
@@ -107,9 +120,22 @@ export class AgentSessionManager {
 
   /** Abort every Agent session and every one-shot stream. Sessions are dropped. */
   abortAll(): void {
-    for (const session of this.sessions.values()) session.abort()
-    this.sessions.clear()
+    for (const [conversationId, session] of [...this.sessions]) {
+      session.abort()
+      void this.closeSession(conversationId)
+    }
     abortAllPiInFlight()
+  }
+
+  /** 关掉内存里的 harness，并让 store 忘掉这个已关闭的会话。 */
+  private async closeSession(conversationId: string): Promise<void> {
+    const session = this.sessions.get(conversationId)
+    const store = this.stores.get(conversationId) ?? null
+    this.sessions.delete(conversationId)
+    this.stores.delete(conversationId)
+    if (!session) return
+    await session.close()
+    store?.forget(conversationId)
   }
 
   private async getOrCreate(
@@ -127,19 +153,30 @@ export class AgentSessionManager {
 
     const { models, model } = createPiModels(profile)
     const language = this.options.resolveLanguage(conversationId)
-    const tools = buildAgentTools(language, this.options.rendererAction, scope)
     const store = this.options.resolveConversationStore?.(scope) ?? null
+    const harnessSession = store
+      ? await store.open(conversationId, { create: true })
+      : await this.openMemorySession(conversationId)
+    if (!harnessSession) throw new Error('会话存档不可用')
 
-    const session = new AgentSession({
-      model,
+    const resources = AgentSessionManager.resourcesFor(skills)
+    const executionEnv = this.options.resolveToolEnvironment?.(scope) ?? null
+    const session = await AgentSession.create({
       models,
-      streamFn: models.streamSimple.bind(models),
+      model,
+      modelIdentity: {
+        modelId: profile.id,
+        modelName: profile.modelName,
+      },
       systemPrompt: this.options.resolveSystemPrompt(conversationId, scope, skills),
-      tools,
+      tools: buildAgentTools(language, this.options.rendererAction, scope, skills),
       confirmationToolNames: confirmationToolNames(),
+      ...(resources ? { resources } : {}),
+      ...(executionEnv ? { executionEnv } : {}),
       language,
       emit: (event) => this.options.emit(conversationId, event),
-      ...(store ? { store, conversationId } : {}),
+      session: harnessSession,
+      conversationId,
       scope,
     })
     logInfo('Agent', 'agent session opened', {
@@ -148,35 +185,43 @@ export class AgentSessionManager {
       durable: !!store,
       modelName: profile.modelName,
     })
-    const restored = await this.restoreFromStore(session, store, conversationId)
-    if (!restored && history && history.length > 0) session.restoreHistory(history)
+
+    // Pi 会话为空（首次运行、旧数据、文件被删）才用渲染层发来的纯文本历史播种。
+    if (history && history.length > 0 && await session.transcriptLength() === 0) {
+      await session.seedHistory(history)
+    }
+
     this.sessions.set(conversationId, session)
+    this.stores.set(conversationId, store)
     registerPiInFlight(`agent:${conversationId}`, session)
     return session
   }
 
-  /**
-   * 先认 Pi 会话存档：它保住了工具回合的原始结构。存档缺失（首次运行、
-   * 旧数据、文件被删）才退回渲染层发来的纯文本历史。
-   */
-  private async restoreFromStore(
-    session: AgentSession,
-    store: AgentConversationStore | null,
-    conversationId: string,
-  ): Promise<boolean> {
-    if (!store) return false
+  /** 目录条目 → Pi 的技能资源：同一份正文，harness 侧按名字查找。 */
+  private static resourcesFor(skills?: readonly AgentSkillCatalogEntry[]): { skills: Skill[] } | undefined {
+    if (!skills || skills.length === 0) return undefined
+    return {
+      skills: skills.map(skill => ({
+        name: skill.name,
+        description: skill.description,
+        content: skill.content ?? '',
+        filePath: skill.location,
+        ...(skill.disableModelInvocation === undefined
+          ? {}
+          : { disableModelInvocation: skill.disableModelInvocation }),
+      })),
+    }
+  }
+
+  /** 没有可用 store（理论上只有异常路径）时退回内存会话，保持可用而不是报错。 */
+  private async openMemorySession(conversationId: string): Promise<Session<SessionMetadata>> {
+    this.memoryRepo ??= new MemorySessionRepo()
     try {
-      const snapshot = await store.load(conversationId)
-      if (!snapshot) return false
-      if (!session.restoreSnapshot(snapshot)) return false
-      logInfo('Agent', 'restored conversation from Pi session', {
-        conversationId,
-        messages: snapshot.messages.length,
-      })
-      return true
-    } catch (error) {
-      logFailure('Agent', 'failed to restore conversation session', error, { conversationId })
-      return false
+      return await this.memoryRepo.create({ id: conversationId }, BACKGROUND_CONTEXT)
+    } catch {
+      // 内存仓库把 id 留给了已关闭的旧会话，换一个仓库重新开始。
+      this.memoryRepo = new MemorySessionRepo()
+      return this.memoryRepo.create({ id: conversationId }, BACKGROUND_CONTEXT)
     }
   }
 }

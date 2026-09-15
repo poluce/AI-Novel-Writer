@@ -1,18 +1,29 @@
-import { describe, expect, it, vi } from 'vitest'
+import os from 'node:os'
 
-import type { AgentMessage, AgentTool } from '@earendil-works/pi-agent-core'
-import { createModels, Type } from '@earendil-works/pi-ai'
+import { describe, expect, it } from 'vitest'
+
+import {
+  BACKGROUND_CONTEXT,
+  MemorySessionRepo,
+  type AgentTool,
+  type Session,
+  type SessionMetadata,
+} from '@earendil-works/pi-agent-core'
+import { createModels, Type, type Context } from '@earendil-works/pi-ai'
+import { NodeExecutionEnv } from '@earendil-works/pi-agent-core/harness/env/nodejs'
 import {
   fauxAssistantMessage,
   fauxProvider,
   fauxToolCall,
+  type FauxResponseStep,
 } from '@earendil-works/pi-ai/providers/faux'
 
 import { fauxChatModel } from './faux-model'
 
-import { AgentSession } from '../agent-session'
+import { AgentSession, AGENT_LANE_NAME } from '../agent-session'
 import type { PiAgentEvent } from '../agent-session'
-import type { AgentConversationStore } from '../agent-conversation-store'
+
+const capturedContexts: Context[] = []
 
 const AddSchema = Type.Object({ a: Type.Number(), b: Type.Number() })
 
@@ -27,40 +38,86 @@ const addTool: AgentTool<typeof AddSchema, { sum: number }> = {
   }),
 }
 
-function buildSession(decision: (callId: string) => boolean, events: PiAgentEvent[]) {
+interface Harness {
+  session: AgentSession
+  events: PiAgentEvent[]
+  harnessSession: Session<SessionMetadata>
+}
+
+async function buildSession(options: {
+  decision?: (callId: string) => boolean
+  tools?: AgentTool<never, unknown>[]
+  confirmationToolNames?: ReadonlySet<string>
+  systemPrompt?: string
+  harnessSession?: Session<SessionMetadata>
+  responses?: FauxResponseStep[]
+  compactionSettings?: { enabled: boolean; reserveTokens: number; keepRecentTokens: number }
+  contextWindow?: number
+  withExecutionEnv?: boolean
+} = {}): Promise<Harness> {
   const faux = fauxProvider()
   const models = createModels()
   models.setProvider(faux.provider)
-  faux.setResponses([
+  const model = fauxChatModel(faux)
+  if (options.contextWindow !== undefined) model.contextWindow = options.contextWindow
+  capturedContexts.length = 0
+
+  const scripted = options.responses ?? [
     fauxAssistantMessage([fauxToolCall('add_numbers', { a: 12, b: 7 })]),
     fauxAssistantMessage('The sum is 19.'),
-  ])
+  ]
+  faux.setResponses(scripted.map(step => (context: Context) => {
+    capturedContexts.push(context)
+    if (typeof step !== 'function') return step
+    return step(
+      context,
+      undefined,
+      { callCount: 0, deferredFetchCount: 0, cancelledDeferred: [] },
+      undefined as never,
+    )
+  }))
 
-  const session = new AgentSession({
-    model: fauxChatModel(faux),
+  const repo = new MemorySessionRepo()
+  const harnessSession = options.harnessSession ?? await repo.create({ id: 'conv-1' }, BACKGROUND_CONTEXT)
+
+  const events: PiAgentEvent[] = []
+  const harness: Harness = {
+    session: undefined as unknown as AgentSession,
+    events,
+    harnessSession,
+  }
+  harness.session = await AgentSession.create({
     models,
-    streamFn: models.streamSimple.bind(models),
-    systemPrompt: 'You are a calculator.',
-    tools: [addTool],
-    confirmationToolNames: new Set(['add_numbers']),
+    model,
+    modelIdentity: { modelId: 'faux-model', modelName: 'faux-model' },
+    systemPrompt: options.systemPrompt ?? 'You are a calculator.',
+    tools: (options.tools ?? [addTool]) as never,
+    ...(options.confirmationToolNames ? { confirmationToolNames: options.confirmationToolNames } : {}),
+    ...(options.compactionSettings ? { compactionSettings: options.compactionSettings } : {}),
     language: 'zh-CN',
+    ...(options.withExecutionEnv
+      ? { executionEnv: new NodeExecutionEnv({ cwd: os.tmpdir() }) }
+      : {}),
     emit: (event) => {
       events.push(event)
       if (event.type === 'tool_call_confirm') {
-        session.confirm(event.call.id, decision(event.call.id))
+        harness.session.confirm(event.call.id, (options.decision ?? (() => true))(event.call.id))
       }
     },
+    session: harnessSession,
+    conversationId: 'conv-1',
   })
-
-  return session
+  return harness
 }
 
 describe('AgentSession', () => {
   it('emits the full event sequence and executes a confirmed tool', async () => {
-    const events: PiAgentEvent[] = []
-    const session = buildSession(() => true, events)
+    const { session, events } = await buildSession({
+      confirmationToolNames: new Set(['add_numbers']),
+    })
 
     await session.prompt('What is 12 + 7?')
+    await session.close()
 
     const types = events.map((e) => e.type)
     expect(types).toContain('text_delta')
@@ -75,124 +132,139 @@ describe('AgentSession', () => {
       expect(complete.call.status).toBe('completed')
       expect(complete.call.result).toEqual({ sum: 19 })
     }
+    // 卡片先于确认请求到达渲染层（harness 的钩子先于 tool_start 事件）。
+    expect(types.indexOf('tool_call_start')).toBeLessThan(types.indexOf('tool_call_confirm'))
   })
 
   it('blocks a declined tool and reports it as failed', async () => {
-    const events: PiAgentEvent[] = []
-    const session = buildSession(() => false, events)
+    const { session, events } = await buildSession({
+      confirmationToolNames: new Set(['add_numbers']),
+      decision: () => false,
+    })
 
     await session.prompt('What is 12 + 7?')
+    await session.close()
 
     const complete = events.find((e) => e.type === 'tool_call_complete')
     expect(complete).toBeDefined()
     if (complete?.type === 'tool_call_complete') {
       expect(complete.call.status).toBe('failed')
+      expect(complete.call.error).toContain('用户拒绝执行')
     }
   })
 
-  it('restores a snapshot from the Pi session and persists what follows', async () => {
-    const faux = fauxProvider()
-    const models = createModels()
-    models.setProvider(faux.provider)
-    faux.setResponses([fauxAssistantMessage('接着聊。')])
-    const appendMessages = vi.fn(async () => {})
-    const store = { appendMessages } as unknown as AgentConversationStore
-
-    const session = new AgentSession({
-      model: fauxChatModel(faux),
-      models,
-      streamFn: models.streamSimple.bind(models),
-      systemPrompt: 'You are a calculator.',
+  it('lets the harness persist every turn as session entries', async () => {
+    const { session, harnessSession } = await buildSession({
       tools: [],
-      language: 'zh-CN',
-      emit: () => {},
-      store,
-      conversationId: 'conv-1',
+      responses: [fauxAssistantMessage('你好呀')],
     })
 
-    expect(session.restoreSnapshot({
-      // 只需最小字段：这是"从存档恢复出来的消息"，不是刚生成的助手回合。
-      messages: [
-        { role: 'user', content: '上一轮的问题', timestamp: 1 },
-        { role: 'assistant', content: [{ type: 'text', text: '上一轮的回答' }], timestamp: 2 },
-      ] as unknown as AgentMessage[],
-    })).toBe(true)
-    expect(session.messages).toHaveLength(2)
+    await session.prompt('你好')
 
-    await session.prompt('继续')
-
-    const persisted = appendMessages.mock.calls[0] as unknown as [string, AgentMessage[]]
-    expect(persisted[0]).toBe('conv-1')
-    expect(persisted[1].map(message => message.role)).toEqual(['user', 'assistant'])
-    expect(JSON.stringify(persisted[1][0])).toContain('继续')
+    const branch = await harnessSession.branch(AGENT_LANE_NAME, BACKGROUND_CONTEXT)
+    const entries = await branch?.findEntries({ order: 'oldestFirst' }, BACKGROUND_CONTEXT) ?? []
+    expect(entries.map(entry => entry.type)).toEqual(['message', 'message'])
+    expect(entries.map(entry => (entry.type === 'message' ? entry.message.role : '')))
+      .toEqual(['user', 'assistant'])
+    await session.close()
   })
 
-  it('compacts an over-long context through Pi before the next turn', async () => {
-    const faux = fauxProvider()
-    const models = createModels()
-    models.setProvider(faux.provider)
-    // 压缩本身会打模型（摘要 + 被切开的回合前缀），先给它两次响应，再给本轮回答。
-    faux.setResponses([
-      fauxAssistantMessage('摘要：用户一直在核对第三章。'),
-      fauxAssistantMessage('回合前缀摘要。'),
-      fauxAssistantMessage('好的。'),
-    ])
-    const recordCompaction = vi.fn(async () => ({
-      id: 'stored-compaction',
-      parentId: null,
-      seq: 42,
-      timestamp: 1,
-      type: 'compaction' as const,
-      summary: '摘要：用户一直在核对第三章。',
-      retainedTail: [],
-      tokensBefore: 66,
-      fromHook: false,
-    }))
-    const store = { recordCompaction, appendMessages: vi.fn(async () => {}) } as unknown as AgentConversationStore
-    const model = fauxChatModel(faux)
-    model.contextWindow = 60
+  it('counts existing entries and seeds legacy text history only once', async () => {
+    const { session, harnessSession } = await buildSession({ tools: [], systemPrompt: 's' })
 
-    const session = new AgentSession({
-      model,
-      models,
-      streamFn: models.streamSimple.bind(models),
-      systemPrompt: 'You are a calculator.',
-      tools: [],
-      language: 'zh-CN',
-      emit: () => {},
-      store,
-      conversationId: 'conv-1',
-      compactionSettings: { enabled: true, reserveTokens: 8, keepRecentTokens: 4 },
-    })
-    session.restoreSnapshot({
-      messages: Array.from({ length: 12 }, (_, index) => ({
-        role: index % 2 === 0 ? 'user' as const : 'assistant' as const,
-        content: index % 2 === 0
-          ? `第 ${index} 轮的问题，内容足够长以便触发压缩判断。`
-          : [{ type: 'text' as const, text: `第 ${index} 轮的回答，同样写得长一些。` }],
-        timestamp: index,
-      })) as unknown as AgentMessage[],
-    })
-
-    await session.prompt('继续')
-
-    expect(session.messages[0]).toMatchObject({ role: 'compactionSummary' })
-    expect(JSON.stringify(session.messages[0])).toContain('摘要：用户一直在核对第三章。')
-    expect(session.messages.length).toBeLessThan(13)
-    expect(recordCompaction).toHaveBeenCalledWith('conv-1', expect.objectContaining({
-      summary: expect.stringContaining('摘要：用户一直在核对第三章。'),
-      tokensBefore: expect.any(Number),
-      retainedTail: expect.any(Array),
-    }))
-  })
-
-  it('restores prior user/assistant turns onto a new session', () => {
-    const session = buildSession(() => true, [])
-    session.restoreHistory([
+    expect(await session.transcriptLength()).toBe(0)
+    await session.seedHistory([
       { role: 'user', content: '上一本的问题' },
       { role: 'assistant', content: '上一本的回答' },
     ])
-    expect(session.messages).toHaveLength(2)
-    expect(session.messages[0]).toMatchObject({ role: 'user', content: '上一本的问题' })
+    expect(await session.transcriptLength()).toBe(2)
+    await session.close()
+    expect(harnessSession.metadata.id).toBe('conv-1')
+  })
+
+  it('restores context from the session and injects the L1 snapshot per turn', async () => {
+    const faux = fauxProvider()
+    const models = createModels()
+    models.setProvider(faux.provider)
+    const captured: Context[] = []
+    faux.setResponses([
+      (context) => {
+        captured.push(context)
+        return fauxAssistantMessage('第一轮')
+      },
+      (context) => {
+        captured.push(context)
+        return fauxAssistantMessage('第二轮')
+      },
+    ])
+
+    const repo = new MemorySessionRepo()
+    const harnessSession = await repo.create({ id: 'conv-1' }, BACKGROUND_CONTEXT)
+    const session = await AgentSession.create({
+      models,
+      model: fauxChatModel(faux),
+      modelIdentity: { modelId: 'faux-model', modelName: 'faux-model' },
+      systemPrompt: 'You are a calculator.',
+      tools: [],
+      language: 'zh-CN',
+      emit: () => {},
+      session: harnessSession,
+      conversationId: 'conv-1',
+    })
+
+    session.setEditorSnapshot({
+      tabs: [],
+      project: { open: true, name: '测试书', path: '/tmp/book' },
+    })
+    await session.prompt('第一问')
+    await session.prompt('第二问')
+    await session.close()
+
+    expect(captured).toHaveLength(2)
+    expect(captured[0].systemPrompt).toBe('You are a calculator.')
+    // 第二轮能看到第一轮的历史（由 harness 从会话条目恢复）。
+    expect(captured[1].messages.length).toBeGreaterThan(captured[0].messages.length)
+    const l1Text = JSON.stringify(captured[0].messages)
+    expect(l1Text).toContain('测试书')
+  })
+
+  it('mounts the Pi harness execution tools only when an environment is given', async () => {
+    const withoutEnv = await buildSession({ tools: [] })
+    await withoutEnv.session.prompt('你好')
+    await withoutEnv.session.close()
+    const firstContext = capturedContexts.at(-1)
+    expect(firstContext?.tools?.map(tool => tool.name)).not.toContain('bash')
+
+    const withEnv = await buildSession({ tools: [], withExecutionEnv: true })
+    await withEnv.session.prompt('你好')
+    await withEnv.session.close()
+    const secondContext = capturedContexts.at(-1)
+    const names = secondContext?.tools?.map(tool => tool.name) ?? []
+    expect(names).toContain('read')
+    expect(names).toContain('write')
+    expect(names).toContain('edit')
+    expect(names).toContain('bash')
+  })
+
+  it('confirms harness write tools like the domain write tools', async () => {
+    const { session, events } = await buildSession({
+      tools: [],
+      withExecutionEnv: true,
+      confirmationToolNames: new Set(['bash']),
+      decision: () => false,
+      responses: [
+        fauxAssistantMessage([fauxToolCall('bash', { command: 'echo hi' })]),
+        fauxAssistantMessage('好，不跑了。'),
+      ],
+    })
+
+    await session.prompt('帮我看看目录')
+    await session.close()
+
+    const confirm = events.find((e) => e.type === 'tool_call_confirm')
+    expect(confirm).toBeDefined()
+    if (confirm?.type === 'tool_call_confirm') expect(confirm.call.toolName).toBe('bash')
+    const complete = events.find((e) => e.type === 'tool_call_complete')
+    expect(complete?.type === 'tool_call_complete' && complete.call.status).toBe('failed')
   })
 })

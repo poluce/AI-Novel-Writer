@@ -1,10 +1,10 @@
 /**
  * 助手 system prompt 里的 Skill 目录（渲染层 → 主进程 Pi Agent）。
  *
- * Skill 不是模型工具：正文只在用户输入 `/技能名` 或工作流阶段绑定时生效。
- * 这里只传递「有哪些技能、各自适合什么任务」，主进程用 Pi 的
- * `formatSkillsForSystemPrompt` 渲染成模型可见清单，让助手能建议用户
- * 使用哪个技能，而不是自己偷偷加载技能正文。
+ * 系统提示词里只放「有哪些技能、各自适合什么任务」（Pi 的
+ * `formatSkillsForSystemPrompt`），正文随目录一起送到主进程但不进提示词：
+ * 助手需要时用 `load_writing_skill` 按名字取正文——这就是 Pi 的渐进式披露，
+ * 用户输入 `/技能名` 时仍照旧把正文注入那一轮。
  */
 
 /** Skill 来源，与 `skillRegistry` 的 `SkillSource` 同值。 */
@@ -21,6 +21,11 @@ export interface AgentSkillCatalogEntry {
   source: AgentSkillSource
   /** 与 Pi `Skill.disableModelInvocation` 对齐：为真时不出现在模型可见清单里。 */
   disableModelInvocation?: boolean
+  /**
+   * 技能正文（按项目写作语言取好本地化文案）。只随 IPC 送到主进程，
+   * 等模型调用 `load_writing_skill` 才进入上下文。
+   */
+  content?: string
 }
 
 /** 单条描述上限：SKILL.md 的 description 由用户提供，不能无限撑大 system prompt。 */
@@ -28,6 +33,9 @@ export const AGENT_SKILL_DESCRIPTION_MAX_CHARS = 300
 
 /** 目录条数上限，避免异常目录结构把 system prompt 顶爆。 */
 export const AGENT_SKILL_CATALOG_MAX_ENTRIES = 200
+
+/** 单条技能正文上限：正文不进提示词，但也不该让一次 IPC 无限膨胀。 */
+export const AGENT_SKILL_CONTENT_MAX_CHARS = 200_000
 
 /** 主进程侧校验渲染层传入的目录，形状不符时按「没有技能」处理。 */
 export function isAgentSkillCatalog(value: unknown): value is AgentSkillCatalogEntry[] {
@@ -41,5 +49,7 @@ export function isAgentSkillCatalog(value: unknown): value is AgentSkillCatalogE
       && typeof record.location === 'string'
       && (record.source === 'builtin' || record.source === 'user' || record.source === 'project')
       && (record.disableModelInvocation === undefined || typeof record.disableModelInvocation === 'boolean')
+      && (record.content === undefined
+        || (typeof record.content === 'string' && record.content.length <= AGENT_SKILL_CONTENT_MAX_CHARS))
   })
 }

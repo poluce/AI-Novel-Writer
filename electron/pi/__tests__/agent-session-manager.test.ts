@@ -4,21 +4,28 @@ import { abortPiInFlight, resetPiInFlightForTests } from '../in-flight'
 import { AgentSessionManager } from '../agent-session-manager'
 import type { AgentConversationStore } from '../agent-conversation-store'
 
-const h = vi.hoisted(() => ({ sessions: [] as Array<Record<string, ReturnType<typeof vi.fn>>> }))
+const h = vi.hoisted(() => {
+  const makeSession = () => ({
+    prompt: vi.fn(async () => {}),
+    setEditorSnapshot: vi.fn(),
+    setTools: vi.fn(async () => {}),
+    setSystemPrompt: vi.fn(),
+    confirm: vi.fn(),
+    abort: vi.fn(),
+    close: vi.fn(async () => {}),
+    transcriptLength: vi.fn(async () => h.transcriptLength),
+    seedHistory: vi.fn(async () => {}),
+  })
+  return { sessions: [] as Array<Record<string, ReturnType<typeof vi.fn>>>, transcriptLength: 0, makeSession }
+})
 
 vi.mock('../agent-session', () => ({
   AgentSession: class {
-    prompt = vi.fn(async () => {})
-    setEditorSnapshot = vi.fn()
-    setTools = vi.fn()
-    setSystemPrompt = vi.fn()
-    confirm = vi.fn()
-    abort = vi.fn()
-    restoreSnapshot = vi.fn(() => true)
-    restoreHistory = vi.fn()
-    constructor() {
-      h.sessions.push(this as unknown as Record<string, ReturnType<typeof vi.fn>>)
-    }
+    static create = vi.fn(async () => {
+      const session = h.makeSession()
+      h.sessions.push(session as unknown as Record<string, ReturnType<typeof vi.fn>>)
+      return session
+    })
   },
 }))
 vi.mock('../pi-models', () => ({
@@ -41,8 +48,7 @@ function buildManager(store: AgentConversationStore | null = null) {
   const resolvedScopes: string[] = []
   const manager = new AgentSessionManager({
     resolveModel: () => ({ id: 'm1', name: 'M', provider: 'gemini', protocol: 'gemini', modelName: 'g', apiKey: 'k', baseUrl: 'https://x', temperature: 0.7, maxTokens: 100, purposes: ['generation'] }),
-    resolveSystemPrompt: (_conversationId, scope, skills) => {
-      resolvedScopes.push(scope)
+    resolveSystemPrompt: (_conversationId, _scope, skills) => {
       systemPromptSkills.push(skills)
       return 'sys'
     },
@@ -59,9 +65,8 @@ function buildManager(store: AgentConversationStore | null = null) {
 
 function fakeStore(overrides: Partial<Record<keyof AgentConversationStore, unknown>> = {}) {
   const store = {
-    load: vi.fn(async () => null),
-    appendMessages: vi.fn(async () => {}),
-    recordCompaction: vi.fn(async () => {}),
+    open: vi.fn(async () => ({ metadata: { id: 'conv-1' } })),
+    forget: vi.fn(),
     delete: vi.fn(async () => {}),
     close: vi.fn(async () => {}),
     ...overrides,
@@ -73,6 +78,7 @@ beforeEach(() => {
   createPiModelsMock.mockClear()
   buildToolsMock.mockClear()
   h.sessions.length = 0
+  h.transcriptLength = 0
 })
 
 afterEach(() => {
@@ -100,35 +106,33 @@ describe('AgentSessionManager', () => {
     expect(systemPromptSkills).toEqual([undefined, undefined, skills])
   })
 
-  it('restores the model context from the Pi session instead of the renderer history', async () => {
-    const snapshot = { messages: [{ role: 'user' as const, content: '存档里的问题', timestamp: 1 }] }
-    const store = fakeStore({ load: vi.fn(async () => snapshot) })
-    const { manager } = buildManager(store)
-
-    await manager.prompt('conv-1', 'hi', undefined, undefined, [{ role: 'user', content: '渲染层的历史' }])
-
-    expect(store.load).toHaveBeenCalledWith('conv-1')
-    expect(h.sessions[0].restoreSnapshot).toHaveBeenCalledWith(snapshot)
-    expect(h.sessions[0].restoreHistory).not.toHaveBeenCalled()
-  })
-
-  it('falls back to the renderer history when the Pi session has nothing stored', async () => {
+  it('opens the scope session and seeds renderer history only for an empty session', async () => {
     const store = fakeStore()
     const { manager } = buildManager(store)
 
     await manager.prompt('conv-1', 'hi', undefined, undefined, [{ role: 'user', content: '旧存档的问题' }])
 
-    expect(h.sessions[0].restoreSnapshot).not.toHaveBeenCalled()
-    expect(h.sessions[0].restoreHistory).toHaveBeenCalledWith([{ role: 'user', content: '旧存档的问题' }])
+    expect(store.open).toHaveBeenCalledWith('conv-1', { create: true })
+    expect(h.sessions[0].transcriptLength).toHaveBeenCalled()
+    expect(h.sessions[0].seedHistory).toHaveBeenCalledWith([{ role: 'user', content: '旧存档的问题' }])
   })
 
-  it('survives a Pi session that cannot be read', async () => {
-    const store = fakeStore({ load: vi.fn(async () => { throw new Error('disk on fire') }) })
+  it('leaves a session with stored entries alone', async () => {
+    h.transcriptLength = 4
+    const store = fakeStore()
     const { manager } = buildManager(store)
 
-    await manager.prompt('conv-1', 'hi', undefined, undefined, [{ role: 'user', content: '旧存档的问题' }])
+    await manager.prompt('conv-1', 'hi', undefined, undefined, [{ role: 'user', content: '渲染层的历史' }])
 
-    expect(h.sessions[0].restoreHistory).toHaveBeenCalled()
+    expect(h.sessions[0].seedHistory).not.toHaveBeenCalled()
+  })
+
+  it('reports a prompt failure when the session store cannot be opened', async () => {
+    const store = fakeStore({ open: vi.fn(async () => null) })
+    const { manager } = buildManager(store)
+
+    const result = await manager.prompt('conv-1', 'hi')
+    expect(result.success).toBe(false)
   })
 
   it('discards the stored session together with the conversation', async () => {
@@ -138,6 +142,9 @@ describe('AgentSessionManager', () => {
 
     expect(await manager.discard('conv-1')).toEqual({ success: true })
     expect(store.delete).toHaveBeenCalledWith('conv-1')
+    expect(h.sessions[0].close).toHaveBeenCalled()
+    // harness 关会话时也关掉了 Pi 会话，store 必须松手，下一次才打得到盘。
+    expect(store.forget).toHaveBeenCalledWith('conv-1')
     expect(manager.abort('conv-1')).toEqual({ success: false })
   })
 
@@ -148,7 +155,8 @@ describe('AgentSessionManager', () => {
     await manager.prompt('conv-global', 'hi', undefined, undefined, undefined, undefined, 'global')
 
     expect(resolvedScopes).toContain('global')
-    expect(store.load).toHaveBeenCalledWith('conv-global')
+    expect(store.open).toHaveBeenCalledWith('conv-global', { create: true })
+    expect(buildToolsMock).toHaveBeenCalledWith('zh-CN', expect.anything(), 'global', undefined)
   })
 
   it('discards a conversation from the scope it belongs to', async () => {
@@ -180,12 +188,14 @@ describe('AgentSessionManager', () => {
     expect(abortPiInFlight('agent:conv-1')).toBe(true)
   })
 
-  it('aborts every session from abortAll', async () => {
+  it('aborts and closes every session from abortAll', async () => {
     const { manager } = buildManager()
     await manager.prompt('conv-1', 'hi')
     await manager.prompt('conv-2', 'hi')
 
     manager.abortAll()
+    expect(h.sessions[0].abort).toHaveBeenCalled()
+    expect(h.sessions[1].abort).toHaveBeenCalled()
     expect(manager.abort('conv-1')).toEqual({ success: false })
   })
 
@@ -193,8 +203,10 @@ describe('AgentSessionManager', () => {
     const { manager } = buildManager()
     await manager.prompt('conv-1', 'hi')
     manager.abortAll()
-    await manager.prompt('conv-1', 'again')
+    // 没有 store 时走内存会话：关掉之后必须还能重新开一个，而不是撞上旧 id。
+    expect(await manager.prompt('conv-1', 'again')).toEqual({ success: true })
 
     expect(createPiModelsMock).toHaveBeenCalledTimes(2)
+    expect(h.sessions).toHaveLength(2)
   })
 })

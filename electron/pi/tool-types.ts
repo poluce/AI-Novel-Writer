@@ -9,7 +9,41 @@
  * 不再出现 `any`。
  */
 
-import type { AgentTool } from '@earendil-works/pi-agent-core'
+import type { AgentHarnessTool, AgentTool, ExecutionEnv } from '@earendil-works/pi-agent-core'
 import type { TSchema } from '@earendil-works/pi-ai'
 
+/**
+ * harness 自带执行工具要求的上下文。
+ *
+ * 与 Pi 的 `ExecutionToolContext` 同构；那条子路径没有从包里导出，
+ * 所以按结构重新声明一次。
+ */
+export interface HarnessToolContext {
+  env: ExecutionEnv
+}
+
 export type AnyAgentTool = AgentTool<TSchema, unknown>
+
+/**
+ * harness 侧的同一种「任意工具」容器。
+ *
+ * 取 harness 自带执行工具使用的 `ExecutionToolContext`：领域工具通过
+ * `toHarnessTool()` 挂上去之后并不读 toolContext，所以它们在那里做一次
+ * 显式断言，换来执行工具与领域工具能放进同一个数组。
+ */
+export type AnyHarnessTool = AgentHarnessTool<HarnessToolContext, TSchema, unknown>
+
+/**
+ * 把领域工具挂到 AgentHarness 上。
+ *
+ * harness 的 `execute` 多出 onUpdate / toolContext / invocation / context 四个
+ * 参数（给需要进度上报与持久化重放的 harness 原生工具用），我们的领域工具
+ * 用不上这些：进度可以经 harness 的 `tool_update` 事件透传。适配层只保留
+ * `toolCallId` 与 `params`，15 个领域工具因此一行都不用改。
+ */
+export function toHarnessTool(tool: AnyAgentTool): AnyHarnessTool {
+  return {
+    ...tool,
+    execute: (toolCallId: string, params: unknown) => tool.execute(toolCallId, params as never),
+  } as unknown as AnyHarnessTool
+}

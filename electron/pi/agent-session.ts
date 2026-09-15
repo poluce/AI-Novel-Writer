@@ -1,171 +1,414 @@
 import {
+  AgentHarness,
   BACKGROUND_CONTEXT,
   DEFAULT_COMPACTION_SETTINGS,
-  compact,
-  createCompactionSummaryMessage,
-  estimateContextTokens,
-  prepareCompaction,
-  shouldCompact,
+  type AgentHarnessOptions,
   type AgentMessage,
-  type CompactionEntry,
   type CompactionSettings,
-  type Entry,
-  type MessageEntry,
-  type StreamFn,
+  type Session,
+  type SessionMetadata,
+  type Skill,
+  type PromptTemplate,
 } from '@earendil-works/pi-agent-core'
 import type { Models } from '@earendil-works/pi-ai'
+import type { ExecutionEnv } from '@earendil-works/pi-agent-core'
 
+import { recordAgentCall, recordAgentFailure } from './llm-call-accounting'
+import { afterUnknownCommit } from './commit-state'
+import { truncateToolResultContent } from './tool-result'
 import {
-  createPiAgent,
-  type PiAgentHandle,
-} from './pi-agent'
-import { withCompactionCallAccounting } from './llm-call-accounting'
-import type { AgentConversationStore } from './agent-conversation-store'
+  toHarnessTool,
+  type AnyAgentTool,
+  type AnyHarnessTool,
+  type HarnessToolContext,
+} from './tool-types'
+import { buildExecutionTools } from './execution-tools'
 import { logFailure, logInfo } from '../../src/shared/fail-log'
 import { buildL1AgentContext } from './agent-l1-context'
-import type { AgentEditorSnapshot, PiAgentEvent } from '../../src/shared/agent-events'
+import type { AgentEditorSnapshot, PiAgentEvent, PiToolCallInfo } from '../../src/shared/agent-events'
 import type { AgentPromptHistoryTurn } from '../../src/shared/agent-conversation-archive'
 import type { WritingLanguage } from '../../src/shared/writing-language'
 import type { AgentScope } from '../../src/shared/agent-scope'
-import type { AnyAgentTool } from './tool-types'
 import type { PiModelRuntime } from './pi-models'
 
 export type { PiAgentEvent } from '../../src/shared/agent-events'
 
+/** 一个会话文件里的唯一 lane；分支/导航能力留给后续产品。 */
+export const AGENT_LANE_NAME = 'main'
+
 export interface AgentSessionOptions {
-  /** Pre-built pi-ai runtime (see `createPiModels`). */
-  model: PiModelRuntime['model']
-  /** Same runtime's model collection; Pi's compaction calls it directly. */
+  /** 这次会话的 pi-ai 运行时；harness 直接用它发请求。 */
   models: Models
-  streamFn: StreamFn
+  model: PiModelRuntime['model']
+  /** `llm_calls` 记账用的模型身份。 */
+  modelIdentity: { modelId: string; modelName: string }
   systemPrompt: string
   tools: AnyAgentTool[]
+  /** 执行前必须用户确认的工具名。 */
   confirmationToolNames?: ReadonlySet<string>
+  /** 有它才挂 Pi harness 的执行工具（read / write / edit / bash）。 */
+  executionEnv?: ExecutionEnv | null
+  /** 技能与提示词模板：交给 harness 的资源表（`lane.skill()` 的查找来源）。 */
+  resources?: { skills?: Skill[]; promptTemplates?: PromptTemplate[] }
   language: WritingLanguage
   /** Emit a normalized event toward the renderer (IPC send in production). */
   emit: (event: PiAgentEvent) => void
-  /** Durable Pi session for this conversation; absent means memory-only. */
-  store?: AgentConversationStore
+  /** Durable harness session for this conversation. */
+  session: Session<SessionMetadata>
   conversationId?: string
   /** 项目助手 / 界面助手；只影响日志与后续扩展。 */
   scope?: AgentScope
-  /** Pi's own compaction thresholds. Defaults to `DEFAULT_COMPACTION_SETTINGS`. */
+  /** Pi 的压缩阈值；默认与库一致。 */
   compactionSettings?: CompactionSettings
 }
 
+interface PendingConfirmation {
+  resolve: (confirmed: boolean) => void
+  call: PiToolCallInfo
+}
+
 /**
- * One long-lived Pi Agent session (main process). Bridges the Agent's
- * normalized callbacks to renderer events and turns tool confirmation into a
- * request/response round-trip: `confirm()` resolves the pending `beforeToolCall`.
+ * 一个长期存活的 Pi Agent 会话（主进程）。
+ *
+ * 编排（会话条目、上下文投影、压缩、工具执行与确认钩子、usage 记账、
+ * 中断）全部由 `AgentHarness` 承担；这一层只做两件事：
+ * 1. 把 harness 的事件流翻译成渲染层的 `PiAgentEvent` 协议；
+ * 2. 挂上本应用的领域语义——L1 界面快照注入、写工具确认往返、
+ *    工具结果截断与「未知提交态不重试」。
  */
 export class AgentSession {
-  private readonly agent: PiAgentHandle
-  private readonly pendingConfirmations = new Map<string, (confirmed: boolean) => void>()
-  private editorSnapshot: AgentEditorSnapshot | null = null
-  private systemPrompt: string
+  private readonly harness: AgentHarness<HarnessToolContext>
+  private readonly lane: Awaited<ReturnType<AgentHarness<undefined>['lane']>>
+  private readonly emit: (event: PiAgentEvent) => void
   private readonly language: WritingLanguage
-  private readonly model: PiModelRuntime['model']
-  private readonly models: Models
-  private readonly store: AgentConversationStore | null
-  private readonly conversationId: string | null
-  private readonly compactionSettings: CompactionSettings
   private readonly scope: AgentScope
-  /** 已写进 Pi 会话的消息条数，避免重复追加。 */
-  private persistedCount = 0
-  /** 最近一次压缩条目；下一次压缩据此增量更新摘要。 */
-  private previousCompaction: CompactionEntry | null = null
+  private readonly conversationId: string | null
+  private readonly confirmationNames: ReadonlySet<string>
+  private readonly modelIdentity: { modelId: string; modelName: string }
+  /** 只为旧存档播种时补全 `AssistantMessage` 的元数据。 */
+  private readonly model: PiModelRuntime['model']
+  private readonly unsubscribes: Array<() => void> = []
 
-  constructor(options: AgentSessionOptions) {
+  private editorSnapshot: AgentEditorSnapshot | null = null
+  /** 最近一次模型请求的开始时间，用于 `llm_calls` 的耗时统计。 */
+  private requestStartedAt: number | null = null
+  private systemPrompt: string
+  private readonly pendingConfirmations = new Map<string, PendingConfirmation>()
+  /** 工具卡状态：确认与结束事件都要回填同一张卡。 */
+  private readonly toolCalls = new Map<string, PiToolCallInfo>()
+  /** before_tool 已经替 tool_start 发过卡片的调用，避免重复发。 */
+  private readonly announcedToolCalls = new Set<string>()
+  /** 当前这一轮累积的可见文本；工具回合之间的正文按顺序拼接。 */
+  private fullText = ''
+  private closed = false
+
+  private constructor(
+    options: AgentSessionOptions,
+    harness: AgentHarness<HarnessToolContext>,
+    lane: Awaited<ReturnType<AgentHarness<HarnessToolContext>['lane']>>,
+  ) {
+    this.harness = harness
+    this.lane = lane
+    this.emit = options.emit
     this.language = options.language
-    this.systemPrompt = options.systemPrompt
-    this.model = options.model
-    this.models = options.models
-    this.store = options.store ?? null
-    this.conversationId = options.conversationId ?? null
-    this.compactionSettings = options.compactionSettings ?? DEFAULT_COMPACTION_SETTINGS
     this.scope = options.scope ?? 'project'
-    this.agent = createPiAgent({
+    this.conversationId = options.conversationId ?? null
+    this.confirmationNames = options.confirmationToolNames ?? new Set<string>()
+    this.systemPrompt = options.systemPrompt
+    this.modelIdentity = options.modelIdentity
+    this.model = options.model
+    this.registerHooks()
+    this.registerEvents()
+  }
+
+  /**
+   * 建 harness、挂钩子、取 lane。会话存档由调用方准备好：
+   * 项目助手/界面助手各自一个 store，缺失时用内存会话。
+   */
+  static async create(options: AgentSessionOptions): Promise<AgentSession> {
+    const executionEnv = options.executionEnv ?? null
+    const tools: AnyHarnessTool[] = [
+      ...options.tools.map(toHarnessTool),
+      ...(executionEnv ? buildExecutionTools() : []),
+    ]
+    const { harness } = await AgentHarness.create({
+      session: options.session,
+      models: options.models,
       model: options.model,
-      streamFn: options.streamFn,
       systemPrompt: options.systemPrompt,
-      tools: options.tools,
-      confirmationToolNames: options.confirmationToolNames,
-      transformContext: async (messages) => this.injectL1(messages),
-      callbacks: {
-        onTextChunk: (chunk) => options.emit({ type: 'text_delta', delta: chunk }),
-        onToolCallStart: (call) => options.emit({ type: 'tool_call_start', call }),
-        onToolCallConfirmRequired: (call) => new Promise<boolean>((resolve) => {
-          this.pendingConfirmations.set(call.id, resolve)
-          options.emit({ type: 'tool_call_confirm', call })
-        }),
-        onToolCallComplete: (call) => options.emit({ type: 'tool_call_complete', call }),
-        onDone: (fullText) => options.emit({ type: 'done', fullText }),
-        onError: (message) => options.emit({ type: 'error', message }),
-      },
+      tools,
+      ...(executionEnv ? { toolContext: { env: executionEnv } } : {}),
+      // 读工具并行；写工具与 MCP 由各自 `executionMode: 'sequential'` 钉住。
+      toolExecution: 'parallel',
+      compaction: options.compactionSettings ?? DEFAULT_COMPACTION_SETTINGS,
+      ...(options.resources ? { resources: options.resources } : {}),
+    } as AgentHarnessOptions<HarnessToolContext>, BACKGROUND_CONTEXT)
+    const lane = await harness.lane(AGENT_LANE_NAME, BACKGROUND_CONTEXT)
+    return new AgentSession(options, harness, lane)
+  }
+
+  // ===== 钩子：领域语义都挂在这里 =====
+
+  private registerHooks(): void {
+    // 系统提示词每轮重取（技能目录与项目事实会变），L1 界面快照每轮注入。
+    this.unsubscribes.push(this.harness.hooks.on('transform_context', (event) => ({
+      messages: this.injectL1(event.messages),
+      systemPrompt: this.systemPrompt,
+    })))
+
+    // 写工具确认：harness 的钩子先于 tool_start 事件，卡片要在这里补发。
+    this.unsubscribes.push(this.harness.hooks.on('before_tool', async (event) => {
+      const needsConfirm = this.confirmationNames.has(event.toolName)
+        || event.toolName.startsWith('mcp__')
+      if (!needsConfirm) return undefined
+      const confirmed = await this.requestConfirmation(event.toolCallId, event.toolName, event.args)
+      if (confirmed) return undefined
+      return { block: { reason: '用户拒绝执行' } }
+    }))
+
+    // 工具结果统一截断；「写入了但提交态未知」时终止本轮，避免自动重写。
+    this.unsubscribes.push(this.harness.hooks.on('after_tool', (event) => {
+      const commitOverride = afterUnknownCommit({ details: event.details })
+      return {
+        content: truncateToolResultContent(event.content),
+        ...(commitOverride?.terminate === undefined ? {} : { terminate: commitOverride.terminate }),
+        ...(commitOverride?.isError === undefined ? {} : { isError: commitOverride.isError }),
+      }
+    }))
+  }
+
+  private requestConfirmation(
+    toolCallId: string,
+    toolName: string,
+    args: Record<string, unknown>,
+  ): Promise<boolean> {
+    const call = this.toolCalls.get(toolCallId) ?? {
+      id: toolCallId,
+      toolName,
+      arguments: args,
+      status: 'running' as const,
+    }
+    call.status = 'waiting_confirm'
+    this.toolCalls.set(toolCallId, call)
+    // harness 的 before_tool 先于 tool_start：卡片必须先于确认请求到达渲染层。
+    if (!this.announcedToolCalls.has(toolCallId)) {
+      this.announcedToolCalls.add(toolCallId)
+      this.emit({ type: 'tool_call_start', call })
+    }
+    return new Promise<boolean>((resolve) => {
+      this.pendingConfirmations.set(toolCallId, { resolve, call })
+      this.emit({ type: 'tool_call_confirm', call })
     })
   }
+
+  // ===== 事件：harness → 渲染层协议 =====
+
+  private registerEvents(): void {
+    const events = this.harness.events
+    this.unsubscribes.push(events.on('message_update', (event) => {
+      const update = event.event
+      if (update.type === 'text_delta') {
+        this.fullText += update.delta
+        this.emit({ type: 'text_delta', delta: update.delta })
+        return
+      }
+      if (update.type === 'error') {
+        logFailure('Agent', 'stream error event', undefined, {
+          conversationId: this.conversationId,
+          scope: this.scope,
+          errorMessage: update.error.errorMessage,
+          stopReason: update.error.stopReason,
+        })
+        this.emit({ type: 'error', message: update.error.errorMessage ?? '生成失败' })
+      }
+    }))
+
+    this.unsubscribes.push(events.on('tool_start', (event) => {
+      const call: PiToolCallInfo = {
+        id: event.toolCallId,
+        toolName: event.toolName,
+        arguments: event.args,
+        status: 'running',
+      }
+      this.toolCalls.set(event.toolCallId, call)
+      logInfo('AgentTool', 'start', { toolName: event.toolName, toolCallId: event.toolCallId })
+      if (this.announcedToolCalls.has(event.toolCallId)) return
+      this.announcedToolCalls.add(event.toolCallId)
+      this.emit({ type: 'tool_call_start', call })
+    }))
+
+    this.unsubscribes.push(events.on('tool_end', (event) => {
+      const call = this.toolCalls.get(event.toolCallId)
+      if (!call) return
+      call.status = event.isError ? 'failed' : 'completed'
+      call.result = event.result?.details
+      if (event.isError) {
+        call.error = toolResultErrorText(event.result)
+        logFailure('AgentTool', 'failed', undefined, {
+          toolName: event.toolName,
+          toolCallId: event.toolCallId,
+          error: call.error,
+        })
+      } else {
+        logInfo('AgentTool', 'completed', { toolName: event.toolName, toolCallId: event.toolCallId })
+      }
+      this.emit({ type: 'tool_call_complete', call })
+    }))
+
+    this.unsubscribes.push(this.harness.hooks.on('before_request', () => {
+      this.requestStartedAt = Date.now()
+      return undefined
+    }))
+
+    // 每次请求一行 llm_calls；压缩与结构化摘要这类嵌套请求同样会发 usage 事件。
+    this.unsubscribes.push(events.on('usage', (event) => {
+      const startedAt = this.requestStartedAt ?? Date.now()
+      this.requestStartedAt = null
+      recordAgentCall(this.modelIdentity, event.row.usage, startedAt, true)
+    }))
+
+    this.unsubscribes.push(events.on('run_end', (event) => {
+      if (event.status === 'failed') {
+        const message = event.error?.message ?? '生成失败'
+        recordAgentFailure(this.modelIdentity, message)
+        logFailure('Agent', 'run failed', undefined, {
+          conversationId: this.conversationId,
+          scope: this.scope,
+          error: message,
+        })
+        this.emit({ type: 'error', message })
+        return
+      }
+      if (event.status === 'aborted') {
+        recordAgentFailure(this.modelIdentity, 'aborted')
+        this.emit({ type: 'error', message: '生成已中断' })
+        return
+      }
+      logInfo('Agent', 'run completed', {
+        conversationId: this.conversationId,
+        scope: this.scope,
+        fullTextChars: this.fullText.length,
+      })
+      this.emit({ type: 'done', fullText: this.fullText })
+    }))
+  }
+
+  // ===== 对外接口 =====
 
   setEditorSnapshot(snapshot: AgentEditorSnapshot | null | undefined): void {
     this.editorSnapshot = snapshot ?? null
   }
 
-  async prompt(input: string): Promise<void> {
-    await this.compactIfNeeded()
-    await this.agent.prompt(input)
-    await this.persistNewMessages()
+  /** 技能目录与项目事实每轮重建，下一次请求就会拿到新的系统提示词。 */
+  setSystemPrompt(systemPrompt: string): void {
+    this.systemPrompt = systemPrompt
+  }
+
+  async setTools(tools: AnyAgentTool[]): Promise<void> {
+    await this.harness.setTools(tools.map(toHarnessTool), BACKGROUND_CONTEXT)
+  }
+
+  async setResources(resources: { skills?: Skill[]; promptTemplates?: PromptTemplate[] }): Promise<void> {
+    await this.harness.setResources(resources, BACKGROUND_CONTEXT)
+  }
+
+  /** 存档里已有的条目条数；0 表示这是一段全新的会话。 */
+  async transcriptLength(): Promise<number> {
+    const entries = await this.lane.findEntries({ order: 'oldestFirst' }, BACKGROUND_CONTEXT)
+    return entries.length
   }
 
   /**
-   * 从 Pi 会话存档恢复模型上下文（含工具回合与压缩条目）。
-   * 返回是否真的恢复出了内容，让调用方决定要不要退回旧的历史。
+   * 旧存档（渲染层纯文本历史）灌进空会话：有 Pi 会话文件时以文件为准，
+   * 只有文件缺失才走这里。
    */
-  restoreSnapshot(snapshot: { messages: AgentMessage[]; previousCompaction?: CompactionEntry }): boolean {
-    if (snapshot.messages.length === 0) return false
-    this.agent.restoreMessages([...snapshot.messages])
-    this.persistedCount = snapshot.messages.length
-    this.previousCompaction = snapshot.previousCompaction ?? null
-    return true
+  async seedHistory(history: readonly AgentPromptHistoryTurn[]): Promise<void> {
+    if (history.length === 0) return
+    try {
+      for (const turn of history) {
+        await this.lane.appendMessage(this.historyMessage(turn), BACKGROUND_CONTEXT)
+      }
+      logInfo('Agent', 'seeded conversation from renderer history', {
+        conversationId: this.conversationId,
+        scope: this.scope,
+        turns: history.length,
+      })
+    } catch (error) {
+      logFailure('Agent', 'failed to seed conversation session', error, {
+        conversationId: this.conversationId,
+        scope: this.scope,
+      })
+    }
   }
 
-  restoreHistory(history: readonly AgentPromptHistoryTurn[]): void {
-    if (history.length === 0) return
-    const messages = history.map((turn) => (
-      turn.role === 'assistant'
-        ? {
-          role: 'assistant' as const,
-          content: [{ type: 'text' as const, text: turn.content }],
-          timestamp: Date.now(),
-        }
-        : {
-          role: 'user' as const,
-          content: turn.content,
-          timestamp: Date.now(),
-        }
-    )) as AgentMessage[]
-    this.agent.restoreMessages(messages)
-    this.persistedCount = messages.length
-    // 旧存档是丢结构的历史：当作已入档，避免把种子再写一遍。
-    const store = this.store
-    const conversationId = this.conversationId
-    if (!store || !conversationId) return
-    void store.appendMessages(conversationId, messages).catch((error) => {
-      logFailure('Agent', 'failed to seed conversation session', error, { conversationId, scope: this.scope })
+  /**
+   * 旧存档只有纯文本：助手回合也要补成完整的 `AssistantMessage`，
+   * 否则 Pi 的上下文投影会把它当成非法消息。它是历史种子，不参与记账。
+   */
+  private historyMessage(turn: AgentPromptHistoryTurn): AgentMessage {
+    if (turn.role !== 'assistant') {
+      return { role: 'user', content: turn.content, timestamp: Date.now() }
+    }
+    return {
+      role: 'assistant',
+      content: [{ type: 'text', text: turn.content }],
+      api: this.model.api,
+      provider: this.model.provider,
+      model: this.model.id,
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+      stopReason: 'stop',
+      timestamp: Date.now(),
+    }
+  }
+
+  async prompt(input: string): Promise<void> {
+    this.fullText = ''
+    const result = await this.lane.prompt(input, undefined, BACKGROUND_CONTEXT)
+    if (!result.ok) {
+      const message = result.error.message || String(result.error)
+      recordAgentFailure(this.modelIdentity, message)
+      logFailure('Agent', 'prompt rejected', undefined, {
+        conversationId: this.conversationId,
+        scope: this.scope,
+        error: message,
+      })
+      this.emit({ type: 'error', message })
+    }
+  }
+
+  /** Resolve a pending tool confirmation from the renderer. */
+  confirm(toolCallId: string, confirmed: boolean): void {
+    const pending = this.pendingConfirmations.get(toolCallId)
+    if (!pending) return
+    this.pendingConfirmations.delete(toolCallId)
+    pending.resolve(confirmed)
+  }
+
+  abort(): void {
+    for (const pending of this.pendingConfirmations.values()) pending.resolve(false)
+    this.pendingConfirmations.clear()
+    void this.lane.abort(BACKGROUND_CONTEXT).catch((error) => {
+      logFailure('Agent', 'failed to abort agent run', error, {
+        conversationId: this.conversationId,
+        scope: this.scope,
+      })
     })
   }
 
-  setTools(tools: AnyAgentTool[]): void {
-    this.agent.setTools(tools)
-  }
-
-  /**
-   * Refresh the system prompt on the live session. The skill catalog and L0
-   * project facts are rebuilt per turn, so the next request picks up a newly
-   * installed skill without restarting the conversation.
-   */
-  setSystemPrompt(systemPrompt: string): void {
-    if (systemPrompt === this.systemPrompt) return
-    this.systemPrompt = systemPrompt
-    this.agent.setSystemPrompt(systemPrompt)
+  async close(): Promise<void> {
+    if (this.closed) return
+    this.closed = true
+    for (const pending of this.pendingConfirmations.values()) pending.resolve(false)
+    this.pendingConfirmations.clear()
+    for (const unsubscribe of this.unsubscribes) unsubscribe()
+    try {
+      await this.harness.close(BACKGROUND_CONTEXT)
+    } catch (error) {
+      logFailure('Agent', 'failed to close agent harness', error, {
+        conversationId: this.conversationId,
+        scope: this.scope,
+      })
+    }
   }
 
   private injectL1(messages: AgentMessage[]): AgentMessage[] {
@@ -175,153 +418,20 @@ export class AgentSession {
     if (messages.length === 0) return [injected]
     return [...messages.slice(0, -1), injected, messages[messages.length - 1]]
   }
+}
 
-  /**
-   * 上下文压缩：用 Pi 的阈值判断 + Pi 的摘要提示词，把超窗口的历史收成
-   * 一条 compactionSummary（加保留的尾部）。在每轮开始前判断，绝不在一轮
-   * 中间改上下文。压缩失败只记日志——宁可带着长上下文再试一次。
-   */
-  private async compactIfNeeded(): Promise<void> {
-    if (!this.compactionSettings.enabled) return
-    const messages = this.agent.messages
-    if (messages.length === 0) return
-    const contextWindow = Number((this.model as { contextWindow?: number }).contextWindow ?? 0)
-    if (!Number.isFinite(contextWindow) || contextWindow <= 0) return
-    const { tokens } = estimateContextTokens(messages)
-    if (!shouldCompact(tokens, contextWindow, this.compactionSettings)) return
-
-    const preparation = prepareCompaction(
-      this.compactionEntries(messages),
-      this.compactionSettings,
-    )
-    if (!preparation.ok) {
-      logFailure('Agent', 'compaction preparation failed', undefined, {
-        conversationId: this.conversationId,
-        scope: this.scope,
-        error: String(preparation.error),
-      })
-      return
-    }
-    if (!preparation.value) return
-
-    const result = await compact(
-      preparation.value,
-      withCompactionCallAccounting(this.models),
-      this.model,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      // 压缩是后台上下文维护，不跟随某一次用户请求的取消。
-      BACKGROUND_CONTEXT,
-    )
-    if (!result.ok) {
-      logFailure('Agent', 'compaction failed', undefined, {
-        conversationId: this.conversationId,
-        scope: this.scope,
-        error: String(result.error),
-      })
-      return
-    }
-
-    const { summary, tokensBefore, retainedTail } = result.value
-    const timestamp = Date.now()
-    this.agent.restoreMessages([
-      createCompactionSummaryMessage(summary, tokensBefore, timestamp),
-      ...retainedTail,
-    ])
-    logInfo('Agent', 'compacted conversation context', {
-      conversationId: this.conversationId,
-      scope: this.scope,
-      tokensBefore,
-      tokensAfter: estimateContextTokens(this.agent.messages).tokens,
-      keptMessages: retainedTail.length,
-    })
-    // 存档里 compaction 条目代表整个前缀，计数器从摘要 + 尾部重新起算。
-    this.persistedCount = this.agent.messages.length
-    this.previousCompaction = null
-    if (!this.store || !this.conversationId) return
-    try {
-      this.previousCompaction = await this.store.recordCompaction(this.conversationId, {
-        summary,
-        tokensBefore,
-        retainedTail,
-      })
-    } catch (error) {
-      // 没落盘就不知道条目 id/seq，下一次压缩当普通历史重新摘要，结果仍正确。
-      logFailure('Agent', 'failed to persist compaction', error, {
-        conversationId: this.conversationId,
-        scope: this.scope,
-      })
-    }
+/** 工具失败时给渲染层的原因文本。 */
+function toolResultErrorText(result: unknown): string {
+  if (!result || typeof result !== 'object') return '工具执行失败'
+  const record = result as {
+    details?: unknown
+    content?: Array<{ type?: string; text?: string }>
   }
-
-  /**
-   * 把在内存消息折成 Pi 的条目序列喂给 `prepareCompaction`：它按回合切分，
-   * 需要 `Entry` 形态；上一次的 compaction 条目也带上，好做增量摘要。
-   */
-  private compactionEntries(messages: readonly AgentMessage[]): Entry[] {
-    const entries: Entry[] = []
-    let parentId: string | null = null
-    let seq = 0
-    let window = messages
-    const previous = this.previousCompaction
-    if (previous && messages[0]?.role === 'compactionSummary') {
-      // 上一次的摘要与保留尾部已经在这个条目里（它就是内存里的前 N 条），
-      // 再当普通消息加一遍会重复；Pi 拿到这个条目后做增量摘要。
-      entries.push(previous)
-      parentId = previous.id
-      seq = previous.seq + 1
-      window = messages.slice(1 + previous.retainedTail.length)
-    }
-    for (const message of window) {
-      const entry: MessageEntry = {
-        id: `memory-${seq}`,
-        parentId,
-        seq,
-        timestamp: (message as { timestamp?: number }).timestamp ?? Date.now(),
-        type: 'message',
-        message,
-      }
-      entries.push(entry)
-      parentId = entry.id
-      seq += 1
-    }
-    return entries
-  }
-
-  /** 把这一轮新增的消息追加进 Pi 会话存档（尽力而为）。 */
-  private async persistNewMessages(): Promise<void> {
-    if (!this.store || !this.conversationId) return
-    const messages = this.agent.messages
-    if (messages.length <= this.persistedCount) return
-    const fresh = messages.slice(this.persistedCount)
-    this.persistedCount = messages.length
-    try {
-      await this.store.appendMessages(this.conversationId, fresh)
-    } catch (error) {
-      // 存档失败不回滚计数器以外的任何东西：下一轮会补齐后续消息。
-      logFailure('Agent', 'failed to persist conversation messages', error, {
-        conversationId: this.conversationId,
-        scope: this.scope,
-      })
-    }
-  }
-
-  /** Resolve a pending tool confirmation from the renderer. */
-  confirm(toolCallId: string, confirmed: boolean): void {
-    const resolve = this.pendingConfirmations.get(toolCallId)
-    if (resolve) {
-      this.pendingConfirmations.delete(toolCallId)
-      resolve(confirmed)
-    }
-  }
-
-  abort(): void {
-    this.agent.abort()
-  }
-
-  get messages(): AgentMessage[] {
-    return this.agent.messages
-  }
+  if (typeof record.details === 'string' && record.details.trim()) return record.details
+  const text = (record.content ?? [])
+    .filter(block => block.type === 'text' && typeof block.text === 'string')
+    .map(block => block.text)
+    .join('\n')
+    .trim()
+  return text || '工具执行失败'
 }

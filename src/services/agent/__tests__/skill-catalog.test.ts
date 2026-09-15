@@ -40,6 +40,8 @@ describe('agent skill catalog', () => {
         location: 'managed://skills/scene-craft/SKILL.md',
         source: 'user',
         disableModelInvocation: undefined,
+        // 正文随目录下发但不进提示词：模型要靠 load_writing_skill 按需取。
+        content: 'Use concrete action.',
       },
     ])
     expect(toAgentSkillCatalog(skillRegistry.listAll(), 'en-US')[0].description)

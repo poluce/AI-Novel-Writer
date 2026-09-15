@@ -1,11 +1,14 @@
-import type { StreamFn } from '@earendil-works/pi-agent-core'
-import type { AssistantMessageEvent, Models, Usage } from '@earendil-works/pi-ai'
+import type { Usage } from '@earendil-works/pi-ai'
 
 import { LLMHistoryRepository } from '../repositories/llm-repository'
 
-interface AgentCallRecord {
+/** `llm_calls` 记账用的模型身份。 */
+export interface AgentCallIdentity {
   modelId: string
   modelName: string
+}
+
+interface AgentCallRecord extends AgentCallIdentity {
   usage: Usage | undefined
   errorMessage?: string
 }
@@ -28,84 +31,22 @@ function logAgentCall(record: AgentCallRecord, startedAt: number, success: boole
   }
 }
 
-function recordStreamCall(
-  modelId: string,
-  modelName: string,
-  startedAt: number,
-  event: Extract<AssistantMessageEvent, { type: 'done' } | { type: 'error' }>,
-): void {
-  const message = event.type === 'done' ? event.message : event.error
-  logAgentCall({
-    modelId,
-    modelName,
-    usage: message.usage,
-    errorMessage: event.type === 'error'
-      ? (message.errorMessage || event.reason)
-      : (event.reason === 'stop' || event.reason === 'toolUse'
-        ? undefined
-        : `finish:${event.reason}`),
-  }, startedAt, event.type === 'done')
-}
-
 /**
- * Wrap a pi-ai streamFn so every inner LLM request writes one `llm_calls` row,
- * matching one-shot generation accounting.
- */
-export function withLlmCallAccounting(streamFn: StreamFn): StreamFn {
-  return async (model, context, options) => {
-    const startedAt = Date.now()
-    const stream = await streamFn(model, context, options)
-    const original = stream[Symbol.asyncIterator].bind(stream)
-    stream[Symbol.asyncIterator] = function () {
-      const iterator = original()
-      return {
-        async next() {
-          const result = await iterator.next()
-          const event = result.value
-          if (event && (event.type === 'done' || event.type === 'error')) {
-            recordStreamCall(model.id, model.name, startedAt, event)
-          }
-          return result
-        },
-        return: iterator.return?.bind(iterator),
-        throw: iterator.throw?.bind(iterator),
-      }
-    }
-    return stream
-  }
-}
-
-/**
- * 让 Pi 的上下文压缩也记账。
+ * 记一次成功的模型请求。
  *
- * `compact()` 自己调 `models.completeSimple()` 生成摘要，不走 Agent 的 streamFn，
- * 不包一层就会白掉一条 `llm_calls`。其余方法原样透传。
+ * harness 每完成一次请求（含压缩、结构化摘要这类嵌套请求）都会发一条
+ * `usage` 事件，事件里带着这次请求的用量，因此不再需要包 streamFn。
  */
-export function withCompactionCallAccounting(models: Models): Models {
-  return new Proxy(models, {
-    get(target, property, receiver) {
-      if (property !== 'completeSimple') return Reflect.get(target, property, receiver)
-      return async (...args: Parameters<Models['completeSimple']>) => {
-        const startedAt = Date.now()
-        const [model] = args
-        try {
-          const message = await target.completeSimple(...args)
-          logAgentCall({
-            modelId: model.id,
-            modelName: model.name,
-            usage: message.usage,
-          }, startedAt, true)
-          return message
-        } catch (error) {
-          logAgentCall({
-            modelId: model.id,
-            modelName: model.name,
-            usage: undefined,
-            errorMessage: error instanceof Error ? error.message : String(error),
-          }, startedAt, false)
-          throw error
-        }
-      }
-    },
-  })
+export function recordAgentCall(
+  identity: AgentCallIdentity,
+  usage: Usage | undefined,
+  startedAt: number,
+  success: boolean,
+): void {
+  logAgentCall({ ...identity, usage }, startedAt, success)
+}
+
+/** 记一次失败的模型请求：harness 的 `run_end(status: 'failed' | 'aborted')`。 */
+export function recordAgentFailure(identity: AgentCallIdentity, errorMessage: string): void {
+  logAgentCall({ ...identity, usage: undefined, errorMessage }, Date.now(), false)
 }

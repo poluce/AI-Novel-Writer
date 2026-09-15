@@ -12,6 +12,7 @@ import { createSearchKnowledgeTool } from './tools/search-knowledge.tool'
 import { createReadFileTool } from './tools/read-file.tool'
 import { createWriteFileTool } from './tools/write-file.tool'
 import { createInspectWritingSkillTool } from './tools/inspect-writing-skill.tool'
+import { createLoadWritingSkillTool } from './tools/load-writing-skill.tool'
 import { createInstallWritingSkillTool } from './tools/install-writing-skill.tool'
 import { createBindWritingSkillTool } from './tools/bind-writing-skill.tool'
 import { createOpenEditorTool } from './tools/open-editor.tool'
@@ -21,6 +22,7 @@ import { createProposeNovelConfigTool } from './tools/propose-novel-config.tool'
 import { createProposeChapterBlueprintTool } from './tools/propose-chapter-blueprint.tool'
 import { buildMcpAgentTools } from './tools/mcp.tool'
 import type { AnyAgentTool } from './tool-types'
+import type { AgentSkillCatalogEntry } from '../../src/shared/agent-skills'
 
 /**
  * Agent 级执行是并行的，这里只把写入类与 MCP 工具钉成 sequential，
@@ -42,6 +44,7 @@ export function buildAgentTools(
   language: WritingLanguage,
   rendererAction: RendererActionSink,
   scope: AgentScope = 'project',
+  skills: readonly AgentSkillCatalogEntry[] = [],
 ): AnyAgentTool[] {
   const projectTools: AnyAgentTool[] = scope === 'project'
     ? [
@@ -65,13 +68,23 @@ export function buildAgentTools(
   return [
     ...projectTools,
     createInspectWritingSkillTool(language),
+    // 渐进式披露：目录进提示词，正文由模型按需取（两个作用域都有）。
+    createLoadWritingSkillTool(language, skills),
     ...buildMcpAgentTools(language),
   ].map(withExecutionMode)
 }
 
-/** Write tools that must be confirmed by the user before execution. */
+/**
+ * Write tools that must be confirmed by the user before execution.
+ *
+ * `write` / `edit` / `bash` 是 Pi harness 自带的执行工具：它们能改文件、
+ * 能跑命令，所以和领域写工具一样逐次确认。
+ */
 export function confirmationToolNames(): ReadonlySet<string> {
   return new Set([
+    'write',
+    'edit',
+    'bash',
     'write_file',
     'open_editor',
     'start_workflow',

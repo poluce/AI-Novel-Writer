@@ -271,6 +271,49 @@
 - [x] 存档尽力而为：读写失败只记日志；`agent:discard-session` 在用户删会话/清空时删掉对应存档
 - [x] 测试：`electron/pi/__tests__/agent-conversation-store.test.ts`（落盘往返、压缩投影、删除、写失败不炸）、`agent-session.test.ts`（真实 Pi 压缩：66 → 20 tokens）、`agent-session-manager.test.ts`（存档优先、旧历史兜底、读档失败兜底、丢弃）
 
+## 阶段 9：编排交给 Pi AgentHarness（2026-09-15）
+
+> 前八阶段只搬了 Pi 的**零件**（`Agent` 循环、`JsonlSessionRepo`、`compact()` 系列），
+> 中间层仍是自己写的：落盘水位、每轮手工压缩、手抄的上下文投影、手工确认往返。
+> 这一阶段把**编排**交给 `AgentHarness`。决策见
+> [`0021-agent-runs-on-pi-harness.md`](../adr/0021-agent-runs-on-pi-harness.md)。
+
+### P0 兼容性 spike（先钉死唯一的不确定点）
+
+- [x] 用 `AgentHarness.create()` 打开现存会话文件：`main` 分支即 lane `main`，条目与投影一致——**存档不需要迁移**
+- [x] 用假 provider 离线跑通一整轮，记录钩子/事件顺序：`before_request → turn_start → transform_context → message_* → before_tool → tool_start → after_tool → tool_end → turn_end → … → before_run_end → run_end`
+- [x] 确认 `before_tool` **先于** `tool_start`，被拒绝的工具同样产出 `isError` 的工具结果（文案即 block reason）
+- [x] 确认 harness 要求完整的 `Usage`（含 `totalTokens` 与 `cost`）
+
+### P1 换驱动器
+
+- [x] `AgentSession` 改为 `AgentHarness.create({ session, models, model, tools, systemPrompt, compaction, toolExecution })` + `lane.prompt()`
+- [x] 领域语义改挂 harness 钩子：`transform_context`（L1 + 每轮系统提示词）、`before_tool`（确认往返；卡片在钩子里补发 `tool_call_start`）、`after_tool`（结果截断 + 未知提交态终止）
+- [x] 删掉自写的落盘/压缩/投影：`persistNewMessages`、`persistedCount`、`compactIfNeeded`、`compactionEntries`、`recordCompaction`、`projectContext`、`pi-agent.ts`（221 行事件映射）
+- [x] `AgentConversationStore` 收成"打开/创建/删除会话"，并新增 `forget()`：harness 关会话时会连 Pi 会话一起关，仓库拒绝重复打开仍登记在册的会话
+- [x] `llm_calls` 记账改由 `usage` 事件驱动（含压缩这类嵌套请求），删除 `withLlmCallAccounting` / `withCompactionCallAccounting`
+- [x] 旧存档兜底：Pi 会话为空时才用渲染层纯文本历史播种（`seedHistory`，助手回合补全为合法 `AssistantMessage`）
+
+### P2 渐进式披露（恢复 Pi 的原生语义）
+
+- [x] 技能正文随目录经 IPC 下发但**不进提示词**；新增工具 `load_writing_skill` 按需取正文（两个作用域都挂）
+- [x] 系统提示词改写：从"助手不自行加载技能正文"改为"目录只有名字与描述，任务匹配时先 `load_writing_skill` 再执行"
+- [x] 技能作为 harness 资源（`resources.skills`）注册，`/技能名` 与工作流阶段绑定保持不变
+- [x] 技能目录在**开项目与关项目时重扫**：注册表只在会话首次用到时加载一次，否则先跟界面助手聊过的会话会一直用着没有项目技能的旧目录（`project-service.ts`，含回归用例）
+
+### P3 harness 执行工具 + 路径围栏
+
+- [x] 挂载 Pi 自带 `read` / `write` / `edit` / `bash`（`electron/pi/execution-tools.ts`）
+- [x] `ConfinedExecutionEnv`：文件类操作钉在允许根内（词法 + canonical 双重检查），越界返回 `permission_denied`；`exec` 由确认卡逐条把关
+- [x] 作用域隔离：项目助手 = 项目根；界面助手 = `~/.vela/workspace`（另放行 `~/.vela/skills`）
+- [x] `write` / `edit` / `bash` 进确认白名单，确认卡显示命令原文与文件/改动预览
+
+### 验证
+
+- [x] `pnpm typecheck`、`pnpm run lint`、`pnpm run check:i18n`、`pnpm run build`
+- [x] Node 套件与浏览器套件全绿（见提交说明中的计数）
+- [ ] 手动点验：真实模型下确认卡、技能按需读取、项目/界面助手各自的文件边界（作者待勾）
+
 ## 附加任务：DSH 插件移除（独立于 Pi 迁移）— ✅ 已完成
 
 > 决定：**彻底删除 DSH 插件，仓库内不保留任何插件内容**（原计划"确认不受影响"作废）。

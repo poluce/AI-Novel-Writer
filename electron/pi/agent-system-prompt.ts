@@ -80,20 +80,22 @@ function skillInvocationNote(language: WritingLanguage, scope: AgentScope): stri
   return writingLanguageText(
     language,
     [
-      '本应用的技能由用户显式调用，助手不自行加载技能正文：',
+      '技能说明按需读取，不要凭描述猜内容：',
+      '- 目录里只有技能名与描述。当任务与某个技能的描述相符时，先用 load_writing_skill 读出正文，再按正文执行。',
       projectOnly
-        ? '- 用户在输入框输入 `/技能名` 时，技能正文会注入到那一轮消息；写作工作流也可以在某个阶段绑定技能。'
-        : '- 用户在输入框输入 `/技能名` 时，技能正文会注入到那一轮消息。',
+        ? '- 用户在输入框输入 `/技能名` 时，正文已经注入到那一轮消息，不需要再读；写作工作流也可以在某个阶段绑定技能。'
+        : '- 用户在输入框输入 `/技能名` 时，正文已经注入到那一轮消息，不需要再读。',
       '- 不要用 read_file 去读技能文件：用户级技能在项目目录之外，会被拒绝。',
-      '- 当任务与某个技能的描述相符时，直接用 `/技能名` 建议用户启用它。',
+      '- 当任务与某个技能的描述相符时，也可以直接用 `/技能名` 建议用户启用它。',
     ].join('\n'),
     [
-      'In this application skills are invoked by the user; the assistant never loads a skill body by itself:',
+      'Read skill instructions on demand instead of guessing from a description:',
+      '- The listing carries only names and descriptions. When a task matches a skill description, load its body with load_writing_skill first and then follow it.',
       projectOnly
-        ? '- When the user types `/skill-name`, that skill body is injected into that turn; a writing workflow can also bind a skill to one of its stages.'
-        : '- When the user types `/skill-name`, that skill body is injected into that turn.',
-      '- Do not open a skill file with read_file: user-level skills live outside the project boundary and the call will be rejected.',
-      '- When a task matches a skill description, simply suggest that the user run `/skill-name`.',
+        ? '- When the user types `/skill-name`, that skill body is already injected into that turn and does not need loading; a writing workflow can also bind a skill to one of its stages.'
+        : '- When the user types `/skill-name`, that skill body is already injected into that turn and does not need loading.',
+      '- Do not read skill files with read_file: user-level skills live outside the project directory and such reads are rejected.',
+      '- When a task matches a skill description, you may also suggest the user enable it with `/skill-name`.',
     ].join('\n'),
   )
 }

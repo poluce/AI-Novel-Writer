@@ -21,6 +21,7 @@ import { useEditorStore } from '../stores/editor-store'
 import { useWorkflowStore } from '../stores/workflow-store'
 import { useLocaleStore } from '../stores/locale-store'
 import { useAgentStore } from '../stores/agent-store'
+import { skillRegistry } from './agent/skill-registry'
 import {
   flushAgentConversations,
   loadGlobalAgentConversations,
@@ -242,6 +243,15 @@ export async function onProjectOpening(projectSession: ProjectSessionContext): P
   useAgentStore.getState().beginProjectLoad()
 }
 
+/** 重扫技能注册表；失败只记日志，不影响项目打开。 */
+async function reloadSkills(): Promise<void> {
+  try {
+    await skillRegistry.loadAll()
+  } catch (error) {
+    console.error('[ProjectService] 技能目录重载失败:', error)
+  }
+}
+
 /**
  * 项目打开后的初始化 — 并行加载所有 Layer 2 数据
  * 由 project-store.openProject 成功后调用
@@ -251,6 +261,11 @@ export async function onProjectOpened(
 ): Promise<{ warnings: string[] }> {
   const text = useLocaleStore.getState().text
   if (!isProjectSessionCurrent(projectSession)) return { warnings: [] }
+
+  // 技能目录按项目变（`<项目>/.vela/skills` 只在这个项目下有），开项目必须重扫：
+  // 注册表只在会话第一次用到时加载一次，否则先跟界面助手聊过的会话会一直用着
+  // 没有项目技能的旧目录。这里已经在 currentProject 发布之后。
+  void reloadSkills()
 
   // 并行加载角色卡和草稿列表
   const results = await Promise.allSettled([
@@ -306,6 +321,8 @@ export async function onProjectClosed(projectPath: string | null): Promise<void>
   useAgentStore.getState().beginProjectLoad()
   // 项目关掉之后没有项目助手可聊，自动回到界面助手。
   useAgentStore.getState().setScope('global')
+  // 项目技能随项目一起消失，界面助手不该再看到它们。
+  void reloadSkills()
   const { useEditorStore } = await import('../stores/editor-store')
   if (projectPath) {
     // 正常关闭只清理对应项目，保留其他项目的未保存草稿。

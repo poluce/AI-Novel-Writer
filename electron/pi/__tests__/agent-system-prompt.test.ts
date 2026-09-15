@@ -111,8 +111,9 @@ describe('buildMainProcessAgentSystemPrompt', () => {
       source: 'user' as const,
     }
     const english = buildMainProcessAgentSystemPrompt(core({ writingLanguage: 'en-US' }), undefined, [skill])
-    expect(english).toContain('In this application skills are invoked by the user')
-    expect(english).toContain('suggest that the user run `/skill-name`')
+    expect(english).toContain('Read skill instructions on demand')
+    expect(english).toContain('load_writing_skill')
+    expect(english).toContain('suggest the user enable it with `/skill-name`')
     expect(english).not.toContain('/技能名')
 
     const noSkills = buildMainProcessAgentSystemPrompt(core())
@@ -130,6 +131,7 @@ describe('buildMainProcessAgentSystemPrompt', () => {
     }
     const projectPrompt = buildMainProcessAgentSystemPrompt(core(), undefined, [skill], 'project')
     expect(projectPrompt).toContain('写作工作流也可以在某个阶段绑定技能')
+    expect(projectPrompt).toContain('先用 load_writing_skill 读出正文')
 
     const globalPrompt = buildMainProcessAgentSystemPrompt(null, undefined, [skill], 'global')
     expect(globalPrompt).toContain('<available_skills>')

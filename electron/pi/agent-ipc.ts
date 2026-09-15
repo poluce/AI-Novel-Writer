@@ -6,6 +6,7 @@ import { ipcMain, BrowserWindow } from 'electron'
 import { AgentSessionManager } from './agent-session-manager'
 import { AgentConversationStore } from './agent-conversation-store'
 import { setPiProjectCloseHook } from './in-flight'
+import { globalExecutionEnv, projectExecutionEnv } from './execution-tools'
 import { createRendererActionDispatcher } from './renderer-action-dispatch'
 import type { AgentEditorSnapshot, RendererActionResult } from '../../src/shared/agent-events'
 import { isAgentSkillCatalog, type AgentSkillCatalogEntry } from '../../src/shared/agent-skills'
@@ -180,6 +181,12 @@ export function registerAgentController(): void {
     },
     rendererAction: (action) => dispatcher.rendererAction(action),
     resolveConversationStore: (scope) => resolveConversationStore(scope),
+    // 执行工具的沙箱：项目助手钉在项目根，界面助手用自己的 workspace。
+    resolveToolEnvironment: (scope) => {
+      if (scope === 'global') return globalExecutionEnv()
+      const projectPath = getCurrentProjectPath()
+      return projectPath ? projectExecutionEnv(projectPath) : null
+    },
   })
   setPiProjectCloseHook(() => {
     dispatcher.abortAll()

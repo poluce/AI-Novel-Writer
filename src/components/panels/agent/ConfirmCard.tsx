@@ -111,6 +111,11 @@ export default function ConfirmCard({ toolCall }: Props) {
   )
 }
 
+/** 长文本预览：确认卡要让人一眼看清将要发生什么，而不是把整段正文塞进来。 */
+function preview(value: string, max = 80): string {
+  return value.length > max ? `${value.slice(0, max)}…` : value
+}
+
 /** 根据 Tool 名称生成人类可读的操作描述 */
 function generateDescription(
   toolName: string,
@@ -133,10 +138,38 @@ function generateDescription(
         `将启动工作流：${args.workflow ?? '未知工作流'}${args.chapter_number ? `（第 ${args.chapter_number} 章）` : ''}`,
         `Will start workflow: ${args.workflow ?? 'Unknown workflow'}${args.chapter_number ? ` (Chapter ${args.chapter_number})` : ''}`,
       )
+    case 'bash':
+      // Pi harness 的执行工具：命令原文必须出现在确认卡上。
+      return text(
+        `将执行命令：\n${preview(String(args.command ?? ''), 300)}`,
+        `Will run command:\n${preview(String(args.command ?? ''), 300)}`,
+      )
+    case 'write':
+      return text(
+        `将写入文件：${args.path ?? '未知路径'}（${String(args.content ?? '').length} 字符）`,
+        `Will write file: ${args.path ?? 'Unknown path'} (${String(args.content ?? '').length} chars)`,
+      )
+    case 'edit': {
+      const edits = Array.isArray(args.edits) ? args.edits as Array<Record<string, unknown>> : []
+      const first = edits[0] ?? {}
+      return text(
+        `将修改文件：${args.path ?? '未知路径'}（${edits.length} 处）\n「${preview(String(first.oldText ?? ''))}」\n→「${preview(String(first.newText ?? ''))}」`,
+        `Will edit file: ${args.path ?? 'Unknown path'} (${edits.length} change(s))\n"${preview(String(first.oldText ?? ''))}"\n→ "${preview(String(first.newText ?? ''))}"`,
+      )
+    }
+    case 'install_writing_skill':
+      return text(
+        `将安装写作技能：${args.source_url ?? '未知来源'}`,
+        `Will install writing skill: ${args.source_url ?? 'Unknown source'}`,
+      )
+    case 'bind_writing_skill':
+      return text(
+        `将把技能绑定到工作流阶段：${args.skill_id ?? '未知技能'} → ${args.stage ?? '未知阶段'}`,
+        `Will bind a skill to a workflow stage: ${args.skill_id ?? 'Unknown skill'} → ${args.stage ?? 'Unknown stage'}`,
+      )
     case 'replace_draft_excerpt': {
       const oldText = String(args.old_text ?? '')
       const newText = String(args.new_text ?? '')
-      const preview = (value: string) => value.length > 80 ? `${value.slice(0, 80)}…` : value
       return text(
         `将替换第 ${args.chapter_number ?? '？'} 章草稿中的一段原文：\n「${preview(oldText)}」\n→「${preview(newText)}」`,
         `Will replace one excerpt in chapter ${args.chapter_number ?? '?'} :\n"${preview(oldText)}"\n→ "${preview(newText)}"`,

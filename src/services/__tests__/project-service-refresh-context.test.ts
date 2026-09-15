@@ -15,10 +15,14 @@ import {
 
 const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
+  reloadSkills: vi.fn(async () => {}),
 }))
 
 vi.mock('../ipc-client', () => ({
   ipc: { invoke: mocks.invoke },
+}))
+vi.mock('../agent/skill-registry', () => ({
+  skillRegistry: { loadAll: mocks.reloadSkills },
 }))
 
 const projectAPath = 'C:\\novels\\A'
@@ -26,6 +30,7 @@ const projectBPath = 'C:\\novels\\B'
 
 beforeEach(() => {
   mocks.invoke.mockReset()
+  mocks.reloadSkills.mockClear()
   useProjectStore.setState({
     currentProject: {
       id: 'B',
@@ -277,5 +282,20 @@ describe('ProjectService REFRESH_RESOURCE project identity', () => {
         },
       })
     })
+  })
+})
+
+describe('ProjectService skill catalog lifecycle', () => {
+  it('rescans skills after a project opens and after it closes', async () => {
+    // 注册表只在会话第一次用到时加载一次；项目技能只在项目打开后才存在，
+    // 所以开/关项目都必须重扫，否则界面助手会一直用着旧目录。
+    const session = { projectId: 'B', leaseId: 'lease-B', projectPath: projectBPath }
+    await onProjectOpened(session)
+    expect(mocks.reloadSkills).toHaveBeenCalled()
+
+    mocks.reloadSkills.mockClear()
+    useProjectStore.setState({ currentProject: null })
+    await onProjectClosed(projectBPath)
+    expect(mocks.reloadSkills).toHaveBeenCalled()
   })
 })

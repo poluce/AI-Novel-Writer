@@ -44,6 +44,10 @@ export function toAgentSkillCatalog(
     description: clampDescription(skillDescription(skill, locale)) || skill.metadata.name,
     location: skill.filePath,
     source: skill.source,
+    // 正文随目录下发但只留在主进程内存里：模型调用 `load_writing_skill` 才看得到。
+    ...(skill.localizedContent?.[locale] ?? skill.content
+      ? { content: skill.localizedContent?.[locale] ?? skill.content }
+      : {}),
     // 与 `getAllSlashCommands` 同一门控：`userInvocable === false` 的技能
     // 仍然存在，但不进入模型可见清单。
     disableModelInvocation: skill.metadata.userInvocable === false ? true : undefined,

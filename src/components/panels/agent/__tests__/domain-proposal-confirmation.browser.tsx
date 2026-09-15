@@ -83,6 +83,29 @@ describe('Agent domain proposal confirmation', () => {
     expect(container.textContent).not.toMatch(/将写入文件|新建文件/u)
   })
 
+  it('shows the harness command and file targets before approving', async () => {
+    useLocaleStore.setState({ locale: 'en-US', initialized: true })
+    await act(async () => root.render(<>
+      <ConfirmCard toolCall={{
+        id: 'bash-1', toolName: 'bash', arguments: { command: 'rm -rf build' },
+        status: 'waiting_confirm', source: 'builtin', projectSession: session,
+      }} />
+      <ConfirmCard toolCall={{
+        id: 'edit-1', toolName: 'edit',
+        arguments: { path: 'drafts/ch1.md', edits: [{ oldText: '旧句子', newText: '新句子' }] },
+        status: 'waiting_confirm', source: 'builtin', projectSession: session,
+      }} />
+    </>))
+
+    // 确认卡必须把命令原文与改动目标摆出来，用户才可能做出判断。
+    await expect.element(page.getByText(/Will run command:/)).toBeVisible()
+    await expect.element(page.getByText(/Will edit file:/)).toBeVisible()
+    const body = container.textContent ?? ''
+    expect(body).toContain('rm -rf build')
+    expect(body).toContain('drafts/ch1.md')
+    expect(body).toContain('旧句子')
+  })
+
   it('shows an English field diff instead of raw tool JSON and approves the existing gate', async () => {
     useLocaleStore.setState({ locale: 'en-US', initialized: true })
     await act(async () => root.render(<ConfirmCard toolCall={{
