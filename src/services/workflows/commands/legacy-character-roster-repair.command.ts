@@ -18,6 +18,7 @@ import {
   type CharacterRosterSnapshot,
 } from '../../../shared/character-roster'
 import { globalEventBus } from '../../../shared/event-bus'
+import { parseModelJson } from '../workflow-utils'
 import {
   CHARACTER_ROSTER_JSON_CONTRACT,
   CHARACTER_ROSTER_JSON_REPAIR_SYSTEM,
@@ -121,7 +122,7 @@ export class RepairLegacyCharacterRosterCommand extends BaseWorkflowCommand<stri
     context: CommandExecuteParams['context'],
   ): Promise<{ schemaVersion: unknown; entries: unknown }> {
     return parseCharacterRosterJsonResponse(rawText, {
-      parseJson: text => this.parseJSON<unknown>(text),
+      parseJson: text => parseModelJson<unknown>(text),
       assertNotCancelled: () => this.assertNotCancelled(context),
       log: message => callbacks.log(message),
       repair: ({ prompt, systemPrompt, purpose }) => this.callLLMWithBoundedCompletion(

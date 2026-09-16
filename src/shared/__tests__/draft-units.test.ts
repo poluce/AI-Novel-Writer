@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest'
 import {
   DRAFT_UNIT_ALGORITHM_VERSION,
   countDraftUnits,
-  countLegacyDraftUnitsV1,
 } from '../draft-units'
 
 describe('draft unit counting', () => {
@@ -32,8 +31,7 @@ describe('draft unit counting', () => {
     expect(countDraftUnits('... ！😀 🚀')).toBe(0)
   })
 
-  it('retains the v0.9.0 algorithm only for durable replay compatibility', () => {
-    expect(countLegacyDraftUnitsV1('Café')).toBe(2)
+  it('counts Unicode words with accented characters as single units', () => {
     expect(countDraftUnits('Café')).toBe(1)
   })
 })

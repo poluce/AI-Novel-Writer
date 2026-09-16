@@ -69,11 +69,6 @@ export interface FinalizePostProcessGeneration {
   ): Promise<string>
 }
 
-/** 标准结构化 JSON 解析（剥离 Markdown 围栏，废除首尾括号截取） */
-function parseJSON<T>(text: string): T {
-  return parseModelJson<T>(text)
-}
-
 const CONTINUITY_FACT_LIMIT = 12
 const CONTINUITY_STATEMENT_LIMIT = 280
 const CONTINUITY_EVIDENCE_LIMIT = 240
@@ -93,7 +88,7 @@ function parseCharacterStateUpdates(
   roster: readonly CharacterRosterEntry[],
   chapterNumber: number,
 ): Map<string, CharacterStatePatch> {
-  const parsed = parseJSON<unknown>(content)
+  const parsed = parseModelJson<unknown>(content)
   if (!isRecord(parsed)) throw new Error('角色状态响应必须是 JSON 对象')
   if (!Object.hasOwn(parsed, 'updates')) throw new Error('角色状态响应缺少 updates 列表')
   if (!Array.isArray(parsed.updates)) throw new Error('角色状态响应的 updates 必须是列表')

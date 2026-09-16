@@ -127,7 +127,7 @@ function extractJSON(text: string): string | null {
   return null
 }
 
-/** 解析审稿报告（优先 JSON，回退到旧版文本解析） */
+/** 解析审稿报告（标准结构化 JSON 格式） */
 function parseReport(text: string, fallbackCategory: string): { issues: ReviewIssue[]; summary: string; goalReview?: ChapterGoalReview } {
   const jsonStr = extractJSON(text)
   if (jsonStr) {
@@ -148,63 +148,11 @@ function parseReport(text: string, fallbackCategory: string): { issues: ReviewIs
         return { issues, summary: data.summary || '', goalReview: parseChapterGoalReview(data.goalReview) ?? undefined }
       }
     } catch {
-      // JSON 解析失败，回退到文本解析
+      // JSON 解析失败
     }
   }
 
-  // 回退：旧版 markdown 文本解析（兼容历史数据）
-  return parseLegacyReport(text, fallbackCategory)
-}
-
-/** 旧版文本解析器（兼容历史审稿报告） */
-function parseLegacyReport(text: string, fallbackCategory: string): { issues: ReviewIssue[]; summary: string } {
-  const issues: ReviewIssue[] = []
-  const lines = text.split('\n')
-  let currentCategory = fallbackCategory
-  const summaryLines: string[] = []
-  let inSummary = false
-
-  for (const line of lines) {
-    const trimmed = line.trim()
-    if (!trimmed) continue
-
-    // 匹配标题行
-    const headingMatch = trimmed.match(/^#{2,3}\s+(.+)/)
-    if (headingMatch) {
-      const heading = headingMatch[1].replace(/[*_]/g, '')
-      if (/总体评价|总结|总评/.test(heading)) {
-        inSummary = true
-      } else {
-        inSummary = false
-        currentCategory = heading
-      }
-      continue
-    }
-
-    if (inSummary) {
-      summaryLines.push(trimmed.replace(/^[-*]\s*/, ''))
-      continue
-    }
-
-    // 检测 emoji 严重级别
-    let severity: ReviewIssue['severity'] = 'pass'
-    if (trimmed.includes('🔴')) severity = 'error'
-    else if (trimmed.includes('🟡')) severity = 'warning'
-    else if (trimmed.includes('🟢') || trimmed.includes('✅')) severity = 'pass'
-    else if (trimmed.startsWith('-') || trimmed.startsWith('*')) severity = 'warning'
-    else continue
-
-    const cleanDesc = trimmed
-      .replace(/^[-*]\s*/, '')
-      .replace(/[🔴🟡🟢✅]\s*/u, '')
-      .replace(/\*\*/g, '')
-
-    if (cleanDesc) {
-      issues.push({ category: currentCategory, severity, description: cleanDesc })
-    }
-  }
-
-  return { issues, summary: summaryLines.join(' ') }
+  return { issues: [], summary: text.trim() }
 }
 
 // ===== 视觉配置 =====

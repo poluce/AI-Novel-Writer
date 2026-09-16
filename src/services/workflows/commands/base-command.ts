@@ -23,7 +23,6 @@ import {
   type BoundedCompletionMode,
 } from '../bounded-completion'
 import { workflowUiText, workflowWritingLanguage } from '../workflow-project-session'
-import { parseModelJson } from '../workflow-utils'
 import type { WritingSkillStage } from '../../../shared/writing-skills'
 import type { SubmitToolName } from '../../../shared/submit-contract'
 
@@ -274,7 +273,7 @@ export abstract class BaseWorkflowCommand<TResult = string> {
       preserveCompleteStructuredPrompt: continuation.mode === 'replace-structured-output'
         && options?.promptBudget !== undefined,
       isCancelled: () => context.cancelled,
-      redactVisibleText: textToRedact => this.stripThinkingTags(textToRedact),
+      redactVisibleText: textToRedact => redactVisibleCompletionText(textToRedact),
       requestContinuation: async continuationPrompt => {
         continuationCount += 1
         callbacks.log(text(
@@ -383,7 +382,7 @@ export abstract class BaseWorkflowCommand<TResult = string> {
             systemPromptChars: options.systemPrompt.length,
           },
       isCancelled: () => options.context.cancelled,
-      redactVisibleText: redactedText => this.stripThinkingTags(redactedText),
+      redactVisibleText: redactedText => redactVisibleCompletionText(redactedText),
       requestContinuation: async continuationPrompt => {
         continuationCount += 1
         options.callbacks.log(uiText(
@@ -519,24 +518,6 @@ export abstract class BaseWorkflowCommand<TResult = string> {
   protected assertNotCancelled(context?: WorkflowContext): void {
     if (context?.cancelled) {
       throw new Error(workflowUiText(context, '工作流已取消', 'Workflow was cancelled.'))
-    }
-  }
-
-  /**
-   * 去除 DeepSeek 等模型的 <think> 标签，用于旧版 bounded-completion 延续上下文
-   */
-  protected stripThinkingTags(text: string): string {
-    return redactVisibleCompletionText(text)
-  }
-
-  /**
-   * @deprecated 废弃手写括号截断。统一使用 parseModelJson，优先推荐 Submit Tool。
-   */
-  protected parseJSON<T>(text: string): T {
-    try {
-      return parseModelJson<T>(text)
-    } catch {
-      throw new Error(`AI 返回的数据格式乱码，无法解析为有效层级结构。尝试解析内容末端: ${text.slice(-100)}`)
     }
   }
 

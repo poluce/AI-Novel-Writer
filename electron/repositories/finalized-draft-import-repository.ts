@@ -13,7 +13,6 @@ import type {
 import { getProjectDb } from '../database'
 import {
   countDraftUnits,
-  countLegacyDraftUnitsV1,
 } from '../../src/shared/draft-units'
 import { resolveManuscriptTarget } from '../services/manuscript-publisher'
 
@@ -115,18 +114,7 @@ function requestPayloadHashCandidates(
   request: FinalizedDraftImportRequest,
   chapters: FinalizedDraftImportChapter[],
 ): ReadonlySet<string> {
-  const candidates = new Set<string>([requestPayloadHash(request, chapters)])
-  const legacyCounters = [
-    countLegacyDraftUnitsV1,
-    (content: string) => content.length,
-  ] as const
-  for (const count of legacyCounters) {
-    candidates.add(requestPayloadHash(request, chapters.map(chapter => ({
-      ...chapter,
-      wordCount: count(chapter.content),
-    }))))
-  }
-  return candidates
+  return new Set<string>([requestPayloadHash(request, chapters)])
 }
 
 function manifestFingerprint(chapters: FinalizedDraftImportChapter[]): string {

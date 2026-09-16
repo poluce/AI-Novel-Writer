@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 
 import {
   patchGoogleSamplingPayload,
-  rejectsMinimalThinkingLevel,
   toPiModelSamplingParams,
   toPiSamplingParams,
 } from '../pi-stream-options'
@@ -134,14 +133,5 @@ describe('patchGoogleSamplingPayload', () => {
     )
     // 温度照旧补进去，思考留给 harness 下发的等级。
     expect(payload.config).toEqual({ temperature: 0.5 })
-  })
-})
-
-describe('rejectsMinimalThinkingLevel', () => {
-  it('universally rejects MINIMAL without brittle regex sniffing', () => {
-    expect(rejectsMinimalThinkingLevel('gemini-3.8-flash')).toBe(true)
-    expect(rejectsMinimalThinkingLevel('gemini-3.7-flash')).toBe(true)
-    expect(rejectsMinimalThinkingLevel('gemini-3-flash')).toBe(true)
-    expect(rejectsMinimalThinkingLevel('gemini-flash-latest')).toBe(true)
   })
 })

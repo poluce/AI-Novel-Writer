@@ -61,17 +61,6 @@ export function toPiModelSamplingParams(
   return Object.keys(sampling).length > 0 ? sampling : undefined
 }
 
-/**
- * Whether the upstream behind this model id rejects `thinkingLevel: MINIMAL`.
- *
- * Google's GenAI API rejects `MINIMAL` ("Thinking level MINIMAL is not supported").
- * All Gemini models normalize `MINIMAL` to `LOW` globally without regex sniffing.
- */
-export function rejectsMinimalThinkingLevel(..._args: unknown[]): boolean {
-  void _args
-  return true
-}
-
 export interface GooglePayloadPatchOptions {
   /**
    * 是否允许用产品侧解析出的思考预算改写 `thinkingConfig`。
