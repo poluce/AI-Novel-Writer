@@ -156,7 +156,7 @@ describe('advanced model settings', () => {
     })
 
     await expect.element(page.getByRole('status')).toHaveTextContent(
-      'Max output tokens leave no safe room for the prompt',
+      'Max output approaches or exceeds the context window',
     )
 
     await act(async () => page.getByRole('button', { name: 'Save configuration', exact: true }).click())

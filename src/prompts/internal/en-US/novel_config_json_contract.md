@@ -5,4 +5,4 @@
 - totalChapters and wordsPerChapter are authoritative author settings and may be omitted. If present, they must equal {{total_chapters}} and {{words_per_chapter}} respectively.
 - globalGuidance must contain 4–8 short, stable cross-chapter rules within {{max_chars}} characters. Do not enumerate chapters or allocate chapter ranges.
 - referenceWorks may be omitted; if present, it must be a string.
-- Output one complete JSON object only. Do not emit aliases, explanatory prose, Markdown, code fences, or reasoning.
+- Submit the configuration object through the submit tool using the exact enum keys.

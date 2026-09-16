@@ -51,8 +51,31 @@ describe('MCP Agent tools', () => {
     const capped = truncateToolResultContent(result.content)
     const cappedFirst = capped[0]
     if (cappedFirst.type === 'text') {
-      expect(cappedFirst.text.length).toBe(TOOL_RESULT_MAX_CHARS + 2)
-      expect(cappedFirst.text.endsWith('\n…')).toBe(true)
+      expect(cappedFirst.text).toContain('[… truncated')
     }
+  })
+
+  it('preserves multimodal ImageContent blocks for Pi Agent without text-only degradation', async () => {
+    getAllTools.mockReturnValue([
+      { name: 'generate_image', description: 'Draw', inputSchema: {}, serverId: 'painter' },
+    ])
+    callTool.mockResolvedValue({
+      success: true,
+      content: '[Image: image/png]',
+      items: [
+        { type: 'text', text: '插画生成完成：' },
+        { type: 'image', data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', mimeType: 'image/png' },
+      ],
+    })
+
+    const [tool] = buildMcpAgentTools('zh-CN')
+    const result = await tool!.execute('c1', {})
+    expect(result.content).toHaveLength(2)
+    expect(result.content[0]).toEqual({ type: 'text', text: '插画生成完成：' })
+    expect(result.content[1]).toEqual({
+      type: 'image',
+      data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      mimeType: 'image/png',
+    })
   })
 })

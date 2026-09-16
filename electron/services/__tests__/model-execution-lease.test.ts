@@ -140,7 +140,7 @@ describe('ModelExecutionLeaseRegistry', () => {
     expect(receipt.capabilityEvidence.subjectFingerprint).not.toBe('forged-subject')
   })
 
-  it('treats explicit physical limits on an unknown same-protocol endpoint as operational evidence, never provider feature facts', () => {
+  it('treats explicit physical limits on a proxy endpoint as operational evidence while preserving verified provider feature facts', () => {
     const configuredModel = {
       ...modelProfile(),
       baseUrl: 'https://proxy.example.com/v1',
@@ -159,19 +159,19 @@ describe('ModelExecutionLeaseRegistry', () => {
 
     expect(registry.begin(configuredModel.id).capabilityEvidence).toMatchObject({
       source: {
-        contextWindowTokens: 'user-operational-cap',
+        contextWindowTokens: 'verified-provider-preset',
         maxOutputTokens: 'user-operational-cap',
-        featureFlags: 'unknown',
+        featureFlags: 'verified-provider-preset',
       },
       contextWindowTokens: 1_000_000,
       maxOutputTokens: 2048,
-      reasoning: null,
-      structuredOutput: null,
-      usage: null,
+      reasoning: true,
+      structuredOutput: true,
+      usage: true,
     })
   })
 
-  it('clamps an unknown endpoint output plan to its explicit finite context limit', () => {
+  it('clamps an unknown endpoint output plan to its explicit finite context limit and respects declared capabilities', () => {
     const profile: ModelProfile = {
       ...modelProfile(),
       provider: 'custom',
@@ -191,13 +191,13 @@ describe('ModelExecutionLeaseRegistry', () => {
       source: {
         contextWindowTokens: 'user-operational-cap',
         maxOutputTokens: 'user-operational-cap',
-        featureFlags: 'unknown',
+        featureFlags: 'user-operational-cap',
       },
       contextWindowTokens: 32_768,
       maxOutputTokens: 32_768,
-      reasoning: null,
-      structuredOutput: null,
-      usage: null,
+      reasoning: true,
+      structuredOutput: true,
+      usage: true,
     })
   })
 
@@ -277,6 +277,32 @@ describe('ModelExecutionLeaseRegistry', () => {
       structuredOutput: true,
       usage: true,
     })
+  })
+
+  it('resolves capabilities from Pi-AI model registry when model is absent from local preset dictionary', () => {
+    const profile: ModelProfile = {
+      ...modelProfile(),
+      id: 'qwen-model',
+      provider: 'custom',
+      protocol: 'openai',
+      modelName: 'qwen3.7-plus',
+      baseUrl: 'https://my-proxy.com/v1',
+      maxTokens: 8192,
+      capabilities: undefined,
+    }
+
+    const evidence = resolveModelExecutionCapabilityEvidence(profile)
+    expect(evidence).toMatchObject({
+      source: {
+        contextWindowTokens: 'pi-ai-model-registry',
+        featureFlags: 'pi-ai-model-registry',
+      },
+      reasoning: true,
+      structuredOutput: true,
+      usage: true,
+    })
+    expect(evidence.contextWindowTokens).toBeGreaterThanOrEqual(128_000)
+    expect(evidence.maxOutputTokens).toBe(8192)
   })
 
   it('irreversibly closes an active lease without affecting other leases', () => {

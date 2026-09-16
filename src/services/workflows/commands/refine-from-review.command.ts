@@ -254,7 +254,7 @@ export class RefineFromReviewCommand extends BaseWorkflowCommand<string> {
       context,
     )
     this.assertNotCancelled(context)
-    const cleanRefined = this.stripThinkingTags(refined).trim()
+    const cleanRefined = refined.trim()
     assertMateriallyCompleteRevision(
       this.params.draftContent,
       cleanRefined,

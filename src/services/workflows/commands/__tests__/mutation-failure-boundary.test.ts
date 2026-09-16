@@ -143,10 +143,14 @@ function stubLlm(command: object, response: string): void {
   const target = command as {
     callLLMWithBuilder: () => Promise<string>
     callLLMWithBoundedCompletion?: () => Promise<string>
+    callLLMWithBoundedCompletionResult?: () => Promise<{ content: string; artifact?: Record<string, unknown> }>
   }
   vi.spyOn(target, 'callLLMWithBuilder').mockResolvedValue(response)
   if (typeof target.callLLMWithBoundedCompletion === 'function') {
     vi.spyOn(target as Required<typeof target>, 'callLLMWithBoundedCompletion').mockResolvedValue(response)
+  }
+  if (typeof target.callLLMWithBoundedCompletionResult === 'function') {
+    vi.spyOn(target as Required<typeof target>, 'callLLMWithBoundedCompletionResult').mockResolvedValue({ content: response })
   }
 }
 
@@ -1469,6 +1473,7 @@ describe('workflow mutation failure boundaries', () => {
       if (channel === 'kb:search') return []
       if (channel === 'db:character-get-all') return []
       if (channel === 'db:project-core-get') return {}
+      if (channel === 'db:blueprint-get') return null
       throw new Error(`unexpected IPC: ${channel}`)
     })
     stubVelaIpc(invoke)
@@ -1478,8 +1483,8 @@ describe('workflow mutation failure boundaries', () => {
       chapterNumber: 1,
     })
     const llm = vi.spyOn(command as unknown as {
-      callLLMWithBoundedCompletion: (...args: unknown[]) => Promise<string>
-    }, 'callLLMWithBoundedCompletion').mockResolvedValue(response)
+      callLLMWithBoundedCompletionResult: (...args: unknown[]) => Promise<{ content: string }>
+    }, 'callLLMWithBoundedCompletionResult').mockResolvedValue({ content: response })
     const stepCallbacks = callbacks()
 
     await expect(command.execute({

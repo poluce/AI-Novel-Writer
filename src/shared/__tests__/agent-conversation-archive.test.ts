@@ -35,6 +35,36 @@ describe('agent conversation archive', () => {
     })
   })
 
+  it('round-trips the per-conversation thinking level and drops junk', () => {
+    const json = serializeAgentConversationArchive([
+      {
+        id: 'c1',
+        title: '思考等级',
+        createdAt: 1,
+        updatedAt: 2,
+        mode: 'planning',
+        modelId: 'm1',
+        thinkingLevel: 'high',
+        messages: [{ id: 'u1', role: 'user', content: '你好', createdAt: 1 }],
+      },
+      {
+        id: 'c2',
+        title: '脏数据',
+        createdAt: 1,
+        updatedAt: 2,
+        mode: 'planning',
+        modelId: null,
+        // 存档来自磁盘，等级是外部输入：认不出来就退回"不指定"。
+        thinkingLevel: 'max' as never,
+        messages: [{ id: 'u2', role: 'user', content: '你好', createdAt: 1 }],
+      },
+    ], 'c1')
+
+    const archive = parseAgentConversationArchive(JSON.parse(json))
+    expect(archive.conversations[0]?.thinkingLevel).toBe('high')
+    expect(archive.conversations[1]?.thinkingLevel).toBeNull()
+  })
+
   it('rejects a corrupt archive', () => {
     expect(() => parseAgentConversationArchive({ version: 2, conversations: [] }))
       .toThrow(/版本/)

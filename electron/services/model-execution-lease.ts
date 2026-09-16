@@ -1,10 +1,16 @@
 import { createHash, randomUUID } from 'node:crypto'
 
+import { getBuiltinModel, getBuiltinProviders } from '@earendil-works/pi-ai/providers/all'
+
 import type {
+  ModelExecutionCapabilityEvidenceSource,
   ModelExecutionLeaseReceipt,
   ModelProfile,
 } from '../../src/shared/ipc-channels'
-import { resolveModelProfileCapabilities } from '../../src/shared/provider-presets'
+import {
+  type ModelCapabilities,
+  resolveModelProfileCapabilities,
+} from '../../src/shared/provider-presets'
 
 const DEFAULT_MODEL_EXECUTION_LEASE_TTL_MS = 4 * 60 * 60 * 1_000
 
@@ -65,6 +71,72 @@ function positiveInteger(value: unknown): number | null {
     : null
 }
 
+/**
+ * Query @earendil-works/pi-ai built-in model registry to resolve real capabilities
+ * for models that may not be in the static local BUILTIN_PRESETS dictionary.
+ */
+export function resolvePiAiModelCapabilities(
+  modelName: string,
+  provider?: string,
+): ModelCapabilities | undefined {
+  const trimmed = modelName.trim()
+  if (!trimmed) return undefined
+
+  const queryModel = getBuiltinModel as (
+    prov: string,
+    id: string,
+  ) => { contextWindow?: number; maxTokens?: number; reasoning?: boolean } | undefined
+
+  // 1. Direct provider match if provider exists in Pi-AI
+  let piModel = provider ? queryModel(provider, trimmed) : undefined
+
+  // 2. Search all Pi-AI providers
+  if (!piModel) {
+    for (const p of getBuiltinProviders()) {
+      const candidate = queryModel(p, trimmed)
+      if (candidate) {
+        piModel = candidate
+        break
+      }
+    }
+  }
+
+  // 3. Search case-insensitive
+  if (!piModel) {
+    const lower = trimmed.toLowerCase()
+    for (const p of getBuiltinProviders()) {
+      const candidate = queryModel(p, lower)
+      if (candidate) {
+        piModel = candidate
+        break
+      }
+    }
+  }
+
+  // 4. Match stripped prefix (e.g. openrouter/model or provider/model)
+  if (!piModel && trimmed.includes('/')) {
+    const slug = trimmed.split('/').pop()!
+    for (const p of getBuiltinProviders()) {
+      const candidate = queryModel(p, slug)
+      if (candidate) {
+        piModel = candidate
+        break
+      }
+    }
+  }
+
+  if (!piModel) return undefined
+
+  return {
+    contextWindowTokens: piModel.contextWindow ?? null,
+    maxOutputTokens: piModel.maxTokens ?? 4096,
+    reasoning: piModel.reasoning ?? false,
+    structuredOutput: true,
+    usage: true,
+    toolCalling: true,
+  }
+}
+
 export function resolveModelExecutionCapabilityEvidence(
   model: ModelProfile,
 ): ModelExecutionLeaseReceipt['capabilityEvidence'] {
@@ -72,12 +144,29 @@ export function resolveModelExecutionCapabilityEvidence(
     ...endpointSubject(model),
     modelName: model.modelName,
   })
-  const verified = resolveModelProfileCapabilities(model)
+  const presetVerified = resolveModelProfileCapabilities(model)
+  const piVerified = !presetVerified ? resolvePiAiModelCapabilities(model.modelName, model.provider) : undefined
+  const verified = presetVerified ?? piVerified
+  const verifiedSource: ModelExecutionCapabilityEvidenceSource = presetVerified
+    ? 'verified-provider-preset'
+    : (piVerified ? 'pi-ai-model-registry' : 'unknown')
+
   const explicitContextWindow = positiveInteger(model.capabilities?.contextWindowTokens)
   const explicitOutputCap = positiveInteger(model.capabilities?.maxOutputTokens)
   const legacyOutputCap = positiveInteger(model.maxTokens)
   const operationalOutputCap = explicitOutputCap ?? legacyOutputCap
   const verifiedOutputLimit = positiveInteger(verified?.maxOutputTokens)
+
+  const hasInvalidExplicitOutput = model.capabilities?.maxOutputTokens !== undefined
+    && model.capabilities.maxOutputTokens !== null
+    && !positiveInteger(model.capabilities.maxOutputTokens)
+  const hasInvalidLegacyOutput = model.maxTokens !== undefined
+    && (Number.isNaN(model.maxTokens) || model.maxTokens <= 0)
+
+  if (hasInvalidExplicitOutput || hasInvalidLegacyOutput) {
+    throw new ModelExecutionLeaseError('INVALID_OUTPUT_CAPABILITY', '模型输出上限无效')
+  }
+
   const unconstrainedOutputTokens = verifiedOutputLimit && operationalOutputCap
     ? Math.min(verifiedOutputLimit, operationalOutputCap)
     : verifiedOutputLimit ?? operationalOutputCap
@@ -89,27 +178,32 @@ export function resolveModelExecutionCapabilityEvidence(
     throw new ModelExecutionLeaseError('INVALID_OUTPUT_CAPABILITY', '模型输出上限无效')
   }
 
-  const maxOutputSource = verifiedOutputLimit === maxOutputTokens
-    ? 'verified-provider-preset' as const
-    : explicitOutputCap
-      ? 'user-operational-cap' as const
-      : 'legacy-profile' as const
+  const maxOutputSource: ModelExecutionCapabilityEvidenceSource = verifiedOutputLimit === maxOutputTokens
+    ? (verified ? verifiedSource : 'verified-provider-preset')
+    : (explicitOutputCap
+      ? 'user-operational-cap'
+      : 'legacy-profile')
+
   return {
     source: {
       contextWindowTokens: verified
-        ? 'verified-provider-preset'
+        ? verifiedSource
         : explicitContextWindow
           ? 'user-operational-cap'
           : 'unknown',
       maxOutputTokens: maxOutputSource,
-      featureFlags: verified ? 'verified-provider-preset' : 'unknown',
+      featureFlags: verified
+        ? verifiedSource
+        : model.capabilities
+          ? 'user-operational-cap'
+          : 'unknown',
     },
     subjectFingerprint,
     contextWindowTokens: contextWindowTokens ?? null,
     maxOutputTokens,
-    reasoning: verified?.reasoning ?? null,
-    structuredOutput: verified?.structuredOutput ?? null,
-    usage: verified?.usage ?? null,
+    reasoning: verified?.reasoning ?? (typeof model.capabilities?.reasoning === 'boolean' ? model.capabilities.reasoning : null),
+    structuredOutput: verified?.structuredOutput ?? (typeof model.capabilities?.structuredOutput === 'boolean' ? model.capabilities.structuredOutput : null),
+    usage: verified?.usage ?? (typeof model.capabilities?.usage === 'boolean' ? model.capabilities.usage : null),
   }
 }
 

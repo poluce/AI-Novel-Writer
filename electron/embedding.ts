@@ -194,13 +194,6 @@ function releaseSmokeEmbeddings(
 
 // ===== Embedding API 调用 =====
 
-const KNOWN_OPENAI_COMPATIBLE_ROOTS = new Set([
-  'https://api.openai.com',
-  'https://api.deepseek.com',
-  'http://localhost:11434',
-  'http://127.0.0.1:11434',
-])
-
 const OLLAMA_LOCAL_HOSTS = new Set(['localhost', '127.0.0.1'])
 
 function ollamaOpenAIEmbeddingBaseUrl(baseUrl: string): string | undefined {
@@ -233,11 +226,16 @@ function buildOpenAIEmbeddingUrl(baseUrl: string): string {
   if (/\/v\d+(?:[a-z0-9.-]*)$/i.test(base)) {
     return `${base}/embeddings`
   }
-  if (KNOWN_OPENAI_COMPATIBLE_ROOTS.has(base.toLowerCase())) {
-    return `${base}/v1/embeddings`
+  try {
+    const parsed = new URL(base)
+    const pathname = parsed.pathname.replace(/\/+$/, '')
+    if (!pathname || pathname === '' || pathname === '/api') {
+      return `${parsed.protocol}//${parsed.host}/v1/embeddings`
+    }
+  } catch {
+    // fallback
   }
-  // A user-provided /api path is not an inferred OpenAI-compatible root.
-  return `${base}/embeddings`
+  return `${base}/v1/embeddings`
 }
 
 /** OpenAI Embedding API */

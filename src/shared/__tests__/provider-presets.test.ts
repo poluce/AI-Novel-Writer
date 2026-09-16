@@ -57,7 +57,14 @@ describe('provider catalog', () => {
     expect(resolveModelProfileCapabilities({
       ...legacy,
       baseUrl: 'https://proxy.example.com/v1',
-    })).toBeUndefined()
+    })).toEqual({
+      contextWindowTokens: 1_000_000,
+      maxOutputTokens: 384_000,
+      reasoning: true,
+      structuredOutput: true,
+      usage: true,
+      toolCalling: true,
+    })
 
     expect(resolveModelProfileCapabilities({
       ...legacy,
@@ -65,8 +72,10 @@ describe('provider catalog', () => {
     })).toBeUndefined()
 
     expect(resolveModelProfileCapabilities({
-      ...legacy,
-      baseUrl: 'https://api.deepseek.com?tenant=other',
+      provider: 'custom',
+      protocol: 'openai',
+      baseUrl: 'https://proxy.example.com/v1',
+      modelName: 'my-custom-model',
     })).toBeUndefined()
 
     const explicit = {

@@ -31,6 +31,7 @@ import type { FileWriteCommitState } from '../../src/shared/ipc-channels'
 import type { AgentPromptHistoryTurn } from '../../src/shared/agent-conversation-archive'
 import type { WritingLanguage } from '../../src/shared/writing-language'
 import type { AgentScope } from '../../src/shared/agent-scope'
+import type { AssistantThinkingLevel } from '../../src/shared/agent-runtime'
 import type { PiModelRuntime } from './pi-models'
 
 export type { PiAgentEvent } from '../../src/shared/agent-events'
@@ -81,6 +82,13 @@ export interface AgentSessionOptions {
    * 适配器走 `model.samplingParams`，Gemini 走 `before_payload` 补请求体。
    */
   sampling?: ResolvedGenerationParameters
+  /** harness 的思考等级；缺省 `off`，即 Pi 的默认行为。 */
+  thinkingLevel?: AssistantThinkingLevel
+  /**
+   * 产品侧的思考预算补丁是否生效。用户在输入框里显式选了思考等级时为
+   * false——那个等级由 harness 直接下发，不该被预算覆盖。
+   */
+  applySamplingThinking?: boolean
 }
 
 interface PendingConfirmation {
@@ -106,6 +114,8 @@ export class AgentSession {
   private readonly conversationId: string | null
   private readonly confirmationNames: ReadonlySet<string>
   private readonly modelIdentity: { modelId: string; modelName: string }
+  /** 用户显式选了思考等级时为 false，避免预算补丁把它盖掉。 */
+  private readonly applySamplingThinking: boolean
   /** 只为旧存档播种时补全 `AssistantMessage` 的元数据。 */
   private readonly model: PiModelRuntime['model']
   /** 执行工具的提交态记录；没有执行环境时为 null。 */
@@ -125,6 +135,8 @@ export class AgentSession {
   private readonly announcedToolCalls = new Set<string>()
   /** 当前这一轮累积的可见文本；工具回合之间的正文按顺序拼接。 */
   private fullText = ''
+  /** 有一轮生成在跑；`close()` 之外的并发操作靠它判断。 */
+  private busy = false
   private closed = false
 
   private constructor(
@@ -142,6 +154,7 @@ export class AgentSession {
     this.systemPrompt = options.systemPrompt
     this.modelIdentity = options.modelIdentity
     this.model = options.model
+    this.applySamplingThinking = options.applySamplingThinking ?? true
     this.executionEnv = options.executionEnv ?? null
     this.commitTracker = options.executionEnv instanceof ConfinedExecutionEnv
       ? options.executionEnv
@@ -164,6 +177,8 @@ export class AgentSession {
       systemPrompt: options.systemPrompt,
       tools,
       ...(executionEnv ? { toolContext: { env: executionEnv } } : {}),
+      // 用户没选就是 `off`（Pi 的默认），选了就交给 harness 当思考等级下发。
+      thinkingLevel: options.thinkingLevel ?? 'off',
       // 读工具并行；写工具与 MCP 由各自 `executionMode: 'sequential'` 钉住。
       toolExecution: 'parallel',
       compaction: options.compactionSettings ?? DEFAULT_COMPACTION_SETTINGS,
@@ -202,16 +217,22 @@ export class AgentSession {
   // ===== 钩子：领域语义都挂在这里 =====
 
   private registerHooks(sampling: ResolvedGenerationParameters | null): void {
-    // 系统提示词每轮重取（技能目录与项目事实会变），L1 界面快照每轮注入。
-    this.unsubscribes.push(this.harness.hooks.on('transform_context', (event) => ({
-      messages: this.injectL1(event.messages),
-      systemPrompt: this.systemPrompt,
-    })))
+    // 系统提示词每轮重取（技能目录与项目事实会变），L1 界面快照每轮作为系统动态上下文注入。
+    this.unsubscribes.push(this.harness.hooks.on('transform_context', (event) => {
+      const l1 = buildL1AgentContext(this.editorSnapshot, this.language)
+      const systemPrompt = l1 ? `${this.systemPrompt}\n\n${l1}` : this.systemPrompt
+      return {
+        messages: event.messages,
+        systemPrompt,
+      }
+    }))
 
     // Gemini 适配器不读 samplingParams，温度与思考预算只能补进请求体。
     if (sampling && this.model.api === 'google-generative-ai') {
       this.unsubscribes.push(this.harness.hooks.on('before_payload', (event) => ({
-        payload: patchGoogleSamplingPayload(event.payload, sampling),
+        payload: patchGoogleSamplingPayload(event.payload, sampling, {
+          applyThinking: this.applySamplingThinking,
+        }),
       })))
     }
 
@@ -448,17 +469,27 @@ export class AgentSession {
 
   async prompt(input: string): Promise<void> {
     this.fullText = ''
-    const result = await this.lane.prompt(input, undefined, BACKGROUND_CONTEXT)
-    if (!result.ok) {
-      const message = result.error.message || String(result.error)
-      recordAgentFailure(this.modelIdentity, message)
-      logFailure('Agent', 'prompt rejected', undefined, {
-        conversationId: this.conversationId,
-        scope: this.scope,
-        error: message,
-      })
-      this.emit({ type: 'error', message })
+    this.busy = true
+    try {
+      const result = await this.lane.prompt(input, undefined, BACKGROUND_CONTEXT)
+      if (!result.ok) {
+        const message = result.error.message || String(result.error)
+        recordAgentFailure(this.modelIdentity, message)
+        logFailure('Agent', 'prompt rejected', undefined, {
+          conversationId: this.conversationId,
+          scope: this.scope,
+          error: message,
+        })
+        this.emit({ type: 'error', message })
+      }
+    } finally {
+      this.busy = false
     }
+  }
+
+  /** 是否有一轮生成正在进行；换模型/思考等级要重建会话时用它判断能不能安全关掉。 */
+  isBusy(): boolean {
+    return this.busy
   }
 
   /** Resolve a pending tool confirmation from the renderer. */
@@ -480,28 +511,28 @@ export class AgentSession {
     })
   }
 
-  async close(): Promise<void> {
-    if (this.closed) return
+  /**
+   * 关掉 harness；成功与否都要让调用方知道。
+   *
+   * harness 在一轮操作还在跑时会拒绝关闭（`HarnessClosed`）。此时不能假装已经
+   * 关掉——调用方要据此拒绝重建会话，否则两个 harness 会同时打开同一个存档。
+   */
+  async close(): Promise<boolean> {
+    if (this.closed) return true
     this.closed = true
     for (const pending of this.pendingConfirmations.values()) pending.resolve(false)
     this.pendingConfirmations.clear()
     for (const unsubscribe of this.unsubscribes) unsubscribe()
     try {
       await this.harness.close(BACKGROUND_CONTEXT)
+      return true
     } catch (error) {
       logFailure('Agent', 'failed to close agent harness', error, {
         conversationId: this.conversationId,
         scope: this.scope,
       })
+      return false
     }
-  }
-
-  private injectL1(messages: AgentMessage[]): AgentMessage[] {
-    const l1 = buildL1AgentContext(this.editorSnapshot, this.language)
-    if (!l1) return messages
-    const injected: AgentMessage = { role: 'user', content: l1, timestamp: Date.now() }
-    if (messages.length === 0) return [injected]
-    return [...messages.slice(0, -1), injected, messages[messages.length - 1]]
   }
 }
 

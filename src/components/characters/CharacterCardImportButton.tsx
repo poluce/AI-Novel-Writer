@@ -11,7 +11,6 @@ import type { ProjectSessionContext } from '../../shared/ipc-channels'
 import { appErrorMessage } from '../../i18n/app-errors'
 import { captureProjectSession, isProjectSessionCurrent, isProjectSessionPath } from '../project-session-gate'
 import { Button } from '../ui/Button'
-import { confirm } from '../ui/Confirm'
 import { toast } from '../ui/Toast'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../ui/Dialog'
 
@@ -112,16 +111,8 @@ function SessionImportButton({ session, compact, disabled }: Props & { session: 
       return
     }
     setBusy(true)
-    // The shared confirmation owns its own modal; release this focus trap first.
-    setOpen(false)
     try {
-      const allowed = await confirm(text(
-        `本次粘贴及选中文件的全部文本将发送到以下模型端点，用于提取角色卡。提取后需预览并确认，才会写入角色名单；不会直接覆盖角色图谱。\n\n模型：${model.name} (${model.modelName})\n端点：${model.baseUrl}\n\n是否发送并提取？`,
-        `All pasted text and selected files will be sent to the following model endpoint to extract character cards. Preview and confirmation are required before saving to the roster; the character graph will not be overwritten directly.\n\nModel: ${model.name} (${model.modelName})\nEndpoint: ${model.baseUrl}\n\nSend and extract?`,
-      ), { title: text('AI 提取角色卡', 'AI character-card extraction'), confirmText: text('发送并提取', 'Send and extract') })
       if (!isProjectSessionCurrent(session)) return
-      setOpen(true)
-      if (!allowed) return
       const currentModel = useLLMStore.getState().models.find(candidate => candidate.id === model.id)
       if (!currentModel || currentModel.baseUrl !== model.baseUrl || currentModel.modelName !== model.modelName) {
         toast.warning(text('模型配置已改变，请重新确认后发送。', 'The model configuration changed. Confirm again before sending.'))

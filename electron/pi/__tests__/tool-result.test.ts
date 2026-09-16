@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  TOOL_RESULT_MAX_CHARS,
   truncateToolResultContent,
   truncateToolText,
 } from '../tool-result'
@@ -11,25 +10,32 @@ describe('truncateToolText', () => {
     expect(truncateToolText('短结果')).toBe('短结果')
   })
 
-  it('caps observations at 3000 characters', () => {
-    const text = '字'.repeat(TOOL_RESULT_MAX_CHARS + 80)
+  it('uses Pi-agent truncateHead to cap long observations without breaking lines', () => {
+    const lines = Array.from({ length: 3000 }, (_, i) => `第 ${i + 1} 行正文内容`)
+    const text = lines.join('\n')
     const truncated = truncateToolText(text)
-    expect(truncated.startsWith('字'.repeat(TOOL_RESULT_MAX_CHARS))).toBe(true)
-    expect(truncated.endsWith('\n…')).toBe(true)
-    expect(truncated.length).toBe(TOOL_RESULT_MAX_CHARS + 2)
+    expect(truncated).toContain('第 1 行正文内容')
+    expect(truncated).toContain('[… truncated')
+    expect(truncated).toContain('lines')
+  })
+
+  it('honors byte boundaries when text exceeds byte limit', () => {
+    const text = truncateToolText('一二三四五六七八九十', { maxBytes: 15, maxLines: 100 })
+    expect(text).toContain('[… truncated')
   })
 })
 
 describe('truncateToolResultContent (applied by the afterToolCall hook)', () => {
   it('caps text blocks and leaves other content untouched', () => {
+    const lines = Array.from({ length: 3000 }, (_, i) => `Line ${i + 1}`)
     const capped = truncateToolResultContent([
       { type: 'text', text: '短' },
-      { type: 'text', text: '长'.repeat(TOOL_RESULT_MAX_CHARS + 5) },
+      { type: 'text', text: lines.join('\n') },
       { type: 'image', data: 'abc' },
     ])
 
     expect(capped[0]).toEqual({ type: 'text', text: '短' })
-    expect(capped[1].text!.length).toBe(TOOL_RESULT_MAX_CHARS + 2)
+    expect(capped[1].text!).toContain('[… truncated')
     expect(capped[2]).toEqual({ type: 'image', data: 'abc' })
   })
 })

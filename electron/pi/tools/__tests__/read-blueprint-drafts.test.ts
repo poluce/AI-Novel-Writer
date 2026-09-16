@@ -71,4 +71,20 @@ describe('read_drafts', () => {
     const tool = createReadDraftsTool('zh-CN')
     await expect(tool.execute('c1', { chapter_number: 1, draft_type: 'revised' })).rejects.toThrow('revised')
   })
+
+  it('supports pagination with offset and limit', async () => {
+    const lines = ['第一行', '第二行', '第三行', '第四行', '第五行'].join('\n')
+    draftListMock.mockReturnValue([{ id: 1, version: 1, status: 'draft', chapterNumber: 2 }])
+    draftGetFullMock.mockReturnValue({ id: 1, version: 1, content: lines })
+
+    const tool = createReadDraftsTool('zh-CN')
+    const result = await tool.execute('c1', { chapter_number: 2, offset: 2, limit: 2 })
+    const first = result.content[0]
+    if (first.type === 'text') {
+      expect(first.text).toContain('第二行\n第三行')
+      expect(first.text).not.toContain('第一行')
+      expect(first.text).not.toContain('第四行')
+      expect(first.text).toContain('[第 2–3 行 / 共 5 行]')
+    }
+  })
 })

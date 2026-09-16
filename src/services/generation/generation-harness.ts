@@ -156,6 +156,7 @@ export interface PhysicalGenerationRequest {
 
 export interface ProviderCompletion {
   content: string
+  artifact?: Record<string, unknown>
   finishReason?: LLMFinishReason
   usage?: TokenUsage
 }
@@ -188,12 +189,14 @@ export type GenerationOutcome =
   | {
       status: 'completed'
       content: string
+      artifact?: Record<string, unknown>
       finishReason: 'stop'
       receipt: GenerationAttemptReceipt
     }
   | {
       status: 'incomplete'
       content: string
+      artifact?: Record<string, unknown>
       finishReason: Exclude<LLMFinishReason, 'stop'>
       receipt: GenerationAttemptReceipt
     }
@@ -344,18 +347,24 @@ function createPromptBudgetReport(input: {
       utf8Bytes: overheadUtf8Bytes,
     }))
   }
+  const contextCapacityUtf8Bytes = input.contextWindowTokens && input.contextWindowTokens >= 32_768
+    ? Math.max(0, Math.floor((input.contextWindowTokens - input.reservedOutputTokens - CONTEXT_SAFETY_RESERVE_TOKENS) * 1.5))
+    : 0
+
+  const baseLimitUtf8Bytes = Math.max(input.policy.limitUtf8Bytes, contextCapacityUtf8Bytes)
+
   const exceededSectionLimits = sectionEvaluations.filter(section => (
     section.limitUtf8Bytes !== undefined
     && section.report.utf8Bytes > section.limitUtf8Bytes
   ))
   const effectiveLimitUtf8Bytes = exceededSectionLimits.length > 0
     ? Math.min(
-        input.policy.limitUtf8Bytes,
+        baseLimitUtf8Bytes,
         ...exceededSectionLimits.map(section => (
           totalUtf8Bytes - section.report.utf8Bytes + section.limitUtf8Bytes!
         )),
       )
-    : input.policy.limitUtf8Bytes
+    : baseLimitUtf8Bytes
   const errorCode: PromptBudgetResultCode = totalUtf8Bytes > effectiveLimitUtf8Bytes
     ? 'PROMPT_BUDGET_EXHAUSTED'
     : 'OK'
@@ -478,7 +487,16 @@ function resolveInitialCapabilities(model: Readonly<GenerationModelDescriptor>):
 }
 
 function estimateInputTokens(messages: readonly GenerationMessage[]): number {
-  return Math.max(1, Math.ceil(messages.reduce((total, message) => total + message.content.length, 0)))
+  let total = 0
+  for (const message of messages) {
+    const text = message.content
+    if (!text) continue
+    // CJK characters average ~1.5 - 1.8 tokens in modern BPE tokenizers (DeepSeek, Qwen, Claude, GPT-4o)
+    const cjk = (text.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu) || []).length
+    const other = text.length - cjk
+    total += Math.ceil(cjk * 1.6 + other * 0.35)
+  }
+  return Math.max(1, total)
 }
 
 function copyCapabilities(capabilities: ResolvedCapabilityEvidence): ResolvedCapabilityEvidence {
@@ -731,6 +749,7 @@ export function createGenerationHarness(dependencies: {
             return {
               status: 'completed',
               content: completion.content,
+              artifact: completion.artifact,
               finishReason,
               receipt,
             }
@@ -738,6 +757,7 @@ export function createGenerationHarness(dependencies: {
           return {
             status: 'incomplete',
             content: completion.content,
+            artifact: completion.artifact,
             finishReason,
             receipt,
           }

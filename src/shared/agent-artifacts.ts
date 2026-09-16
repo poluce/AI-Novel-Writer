@@ -67,10 +67,10 @@ export function artifactFromToolResult(
   if (!context.projectSession) return null
   const record = details && typeof details === 'object' ? details as Record<string, unknown> : {}
 
-  if (toolName === 'write_file') {
-    if (record.commitState !== 'committed') return null
-    const path = detailText(record, 'path')
-    const name = detailText(record, 'name') ?? path
+  if (toolName === 'write_file' || toolName === 'write' || toolName === 'edit') {
+    if (record.commitState && record.commitState !== 'committed') return null
+    const path = detailText(record, 'path') ?? detailText(record, 'file_path')
+    const name = detailText(record, 'name') ?? (path ? path.split(/[/\\]/).pop() : undefined)
     if (!path || !name) return null
     return createToolArtifact({
       type: 'file_modified',

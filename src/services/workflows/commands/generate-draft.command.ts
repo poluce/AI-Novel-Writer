@@ -259,7 +259,10 @@ async function sha256Hex(value: string): Promise<string> {
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
 }
 
-/** Join a visible continuation without allowing a repeated prompt tail to count as new prose. */
+/**
+ * @deprecated 遗留分段续写拼接函数。
+ * 现代模型通过 8K~16K 单次输出完整章节，仅在极端超长章节场景下作兼容兜底。
+ */
 export function appendVisibleDraftContinuation(draft: string, continuation: string): string {
   return appendVisibleTextContinuation(draft, continuation, sanitizeDraftText)
 }
@@ -597,7 +600,7 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
             `  初始生成响应结束：finishReason=${initialCompletion.finishReason}`,
             `  Initial generation response ended: finishReason=${initialCompletion.finishReason}`,
           ))
-          const initialVisibleDraft = sanitizeDraftText(this.stripThinkingTags(initialCompletion.content))
+          const initialVisibleDraft = sanitizeDraftText(initialCompletion.content)
           recoverableDraftCandidate = initialVisibleDraft
           callbacks.log(uiText(
             `  初始生成可见单位：visibleUnits=${countDraftUnits(initialVisibleDraft)}`,
@@ -927,7 +930,7 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
       ))
       this.assertNotCancelled(params.context)
       const beforeChars = countDraftUnits(draft)
-      const visibleAddition = sanitizeDraftText(this.stripThinkingTags(addition.content))
+      const visibleAddition = sanitizeDraftText(addition.content)
       const candidateDraft = appendVisibleDraftContinuation(
         draft,
         visibleAddition,

@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import type { AgentTool } from '@earendil-works/pi-agent-core'
+import { formatSkillInvocation, type AgentTool } from '@earendil-works/pi-agent-core'
 import { Type } from '@earendil-works/pi-ai'
 
 import { writingLanguageText, type WritingLanguage } from '../../../src/shared/writing-language'
@@ -54,8 +54,15 @@ export function createLoadWritingSkillTool(
           `Skill "${name}" has no readable body.`,
         ))
       }
+      const formatted = formatSkillInvocation({
+        name: skill.name,
+        description: skill.description,
+        filePath: skill.location,
+        content,
+        disableModelInvocation: false,
+      })
       return {
-        content: [{ type: 'text', text: content }],
+        content: [{ type: 'text', text: formatted }],
         // 技能目录一并给出，方便模型理解正文里提到的文件名归属（不承诺可读）。
         details: {
           name: skill.name,

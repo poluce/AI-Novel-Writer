@@ -27,7 +27,6 @@ import {
 } from '../../../shared/blueprint-semantic-contract'
 import { structuredContractDiagnostic } from '../../../shared/structured-contract-diagnostic'
 import { requireWorkflowProjectSession, workflowUiText, workflowWritingLanguage } from '../workflow-project-session'
-import { stripThinkingTags } from '../workflow-utils'
 import { promptLanguageText } from '../../prompt-language'
 import { retryDirectoryCharacterSync } from '../directory-character-sync-recovery'
 export {
@@ -180,7 +179,7 @@ function boundedFactText(value: string, maxBytes: number): string {
 }
 
 function normalizeGeneratedBlueprintText(content: string): string {
-  const trimmed = stripThinkingTags(content).trim()
+  const trimmed = content.trim()
   const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/iu.exec(trimmed)
   const parsed: unknown = JSON.parse(fenced ? fenced[1].trim() : trimmed)
   const candidates = parsed && typeof parsed === 'object' && !Array.isArray(parsed) && Object.hasOwn(parsed, 'blueprints')

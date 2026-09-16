@@ -646,6 +646,7 @@ describe('llm project statistics', () => {
       requestId: 'field-stream',
       fullText: '金手指内容',
       finishReason: 'stop',
+      artifact: { value: '金手指内容' },
     })
   })
 

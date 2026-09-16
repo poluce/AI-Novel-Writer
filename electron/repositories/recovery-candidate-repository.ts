@@ -59,16 +59,8 @@ function serializedSource(source: RecoveryChapterSource): string {
   return JSON.stringify(sourceSnapshot(source))
 }
 
-function visibleOnly(text: string): string {
-  const withoutPairedThinking = text.replace(/<think>[\s\S]*?(?:<\/think>|$)/giu, '')
-  const orphanClosingTag = /<\/think>/iu.exec(withoutPairedThinking)
-  if (!orphanClosingTag || orphanClosingTag.index === undefined) {
-    return withoutPairedThinking.replace(/<\/?think>/giu, '').trim()
-  }
-  const visibleSuffix = withoutPairedThinking.slice(orphanClosingTag.index + orphanClosingTag[0].length)
-  return visibleSuffix
-    .replace(/<\/?think>/giu, '')
-    .trim()
+function normalizeVisibleText(text: string): string {
+  return typeof text === 'string' ? text.trim() : ''
 }
 
 function assertText(value: string, label: string, max: number): string {
@@ -143,7 +135,7 @@ export class RecoveryCandidateRepository {
       || !Number.isSafeInteger(request.sourceDraft.version)
       || request.sourceDraft.version < 1
     )) throw new Error('候选源草稿身份无效')
-    const visibleText = visibleOnly(request.visibleText)
+    const visibleText = normalizeVisibleText(request.visibleText)
     if (!visibleText) throw new Error('恢复候选没有可见正文')
     const serialized = serializedSource(request.source)
     const candidateId = randomUUID()
@@ -216,7 +208,7 @@ export class RecoveryCandidateRepository {
     if (!row) throw new Error('恢复候选不存在或已处理')
     toCandidate(row)
     if (!sourceIsCurrent(row)) throw new Error('恢复候选的源章节已变化，已拒绝保存')
-    const visibleText = visibleOnly(text)
+    const visibleText = normalizeVisibleText(text)
     if (!visibleText) throw new Error('恢复候选没有可见正文')
 
     db.prepare(`

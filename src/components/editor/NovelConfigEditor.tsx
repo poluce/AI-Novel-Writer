@@ -22,6 +22,8 @@ import { Input } from '../ui/Input'
 import { NativeSelect } from '../ui/NativeSelect'
 import GenerateConfigDialog from '../dialogs/GenerateConfigDialog'
 import { useLocaleStore } from '../../stores/locale-store'
+import { useAgentStore } from '../../stores/agent-store'
+import { useLayoutStore } from '../../stores/layout-store'
 import {
   captureProjectSession,
   isProjectSessionCurrent,
@@ -125,7 +127,16 @@ function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
     setShowGenerateConfig(true)
   }
 
-  /** 单字段 AI 生成 */
+  const FIELD_LABELS: Record<GeneratableField, { zhCN: string; enUS: string }> = {
+    coreOutline: { zhCN: '核心大纲', enUS: 'Core outline' },
+    worldSetting: { zhCN: '世界观设定', enUS: 'World setting' },
+    goldenFinger: { zhCN: '核心金手指', enUS: 'Golden finger' },
+    protagonistProfile: { zhCN: '主角设定', enUS: 'Protagonist profile' },
+    globalGuidance: { zhCN: '创作指导', enUS: 'Creative guidance' },
+    writingStyle: { zhCN: '写作风格', enUS: 'Writing style' },
+  }
+
+  /** 单字段 AI 生成：通过 Agent 工具 propose_novel_config 触发调度 */
   const handleFieldGenerate = async (fieldKey: GeneratableField) => {
     const projectSession = captureProjectSession(currentProject)
     if (!projectSession || !isProjectSessionPath(projectSession, projectKey)) return
@@ -133,37 +144,18 @@ function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
       addLog('error', text('请先在设置中配置 AI 模型', 'Configure an AI model in Settings first.'))
       return
     }
-    if (generatingField) return // 防止并发
 
     setCollapsedSections(current => ({ ...current, [fieldKey]: false }))
     setGeneratingField(fieldKey)
-    try {
-      const { GenerateFieldCommand } = await import('../../services/workflows/commands/generate-field.command')
-      if (!isProjectSessionCurrent(projectSession)) return
-      const cmd = new GenerateFieldCommand(fieldKey)
-      await cmd.execute({
-        step: { id: '', commandId: '', name: '', params: {} },
-        context: {
-          runId: 'config-field',
-          projectPath: projectSession.projectPath,
-          projectSession,
-          writingLanguage: resolveWritingLanguage(currentProject?.novelConfig.writingLanguage),
-          uiLocale: useLocaleStore.getState().locale,
-          data: {},
-          cancelled: false,
-        },
-        callbacks: {
-          log: (msg: string) => useWorkflowStore.getState().addLog('info', msg),
-          setProgress: () => { },
-          appendText: () => { },
-        },
-      })
-    } catch (e) {
-      if (!isProjectSessionCurrent(projectSession)) return
-      addLog('error', text(`生成失败：${e}`, `Generation failed: ${e}`))
-    } finally {
-      if (isProjectSessionCurrent(projectSession)) setGeneratingField(null)
-    }
+    const fieldInfo = FIELD_LABELS[fieldKey] ?? { zhCN: fieldKey, enUS: fieldKey }
+    const fieldName = text(fieldInfo.zhCN, fieldInfo.enUS)
+
+    useLayoutStore.getState().openRightPanel('agent')
+    const promptMessage = text(
+      `请结合当前小说已有的类型、设定与大纲，使用 propose_novel_config 工具为【${fieldName}】字段生成具体、充实且符合故事风格的设定内容。`,
+      `Please use the propose_novel_config tool to generate detailed, fitting content for the "${fieldName}" field based on current novel settings.`,
+    )
+    void useAgentStore.getState().sendMessage(promptMessage)
   }
 
   const genres = ['玄幻', '仙侠', '都市', '科幻', '历史', '军事', '游戏', '末世', '悬疑', '灵异', '言情', '古言', '现言', '奇幻', '武侠', '轻小说', '同人', '职场']

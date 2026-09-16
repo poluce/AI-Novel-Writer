@@ -17,6 +17,8 @@ import type { AgentSkillCatalogEntry } from './agent-skills'
 import type { AgentScope } from './agent-scope'
 import type { AgentEditorSnapshot, PiAgentEvent, RendererAction, RendererActionResult } from './agent-events'
 import type { AgentPromptHistoryTurn } from './agent-conversation-archive'
+import type { AssistantThinkingLevel } from './agent-runtime'
+import type { AgentTurnRefusalCode } from './agent-turn-refusal'
 import type { DraftStatus } from './draft-status'
 import type { DraftAnnotation } from './draft-annotation'
 import type {
@@ -470,6 +472,7 @@ export interface LLMStreamEvents {
   'llm:stream-done': {
     requestId: string
     fullText: string
+    artifact?: Record<string, unknown>
     usage?: TokenUsage
     /** Main-process-normalized completion state. Missing provider values become `unknown`. */
     finishReason: LLMFinishReason
@@ -615,6 +618,7 @@ export interface LLMRequest {
 
 export type ModelExecutionCapabilityEvidenceSource =
   | 'verified-provider-preset'
+  | 'pi-ai-model-registry'
   | 'user-operational-cap'
   | 'legacy-profile'
   | 'unknown'
@@ -668,6 +672,8 @@ export interface TokenUsage {
 export interface ModelProfile {
   id: string
   name: string
+  /** 所属渠道名称（如 hajimi / 自定义中转），同一个渠道下的模型共享该名称 */
+  channelName?: string
   provider: 'openai' | 'gemini' | 'deepseek' | 'ollama' | 'bigmodel' | 'xai' | 'siliconflow' | 'custom'
   protocol: 'openai' | 'gemini'
   modelName: string
@@ -1145,8 +1151,11 @@ export interface AgentChannels {
       history?: AgentPromptHistoryTurn[],
       skills?: AgentSkillCatalogEntry[],
       scope?: AgentScope,
+      /** 会话级思考等级；缺省表示不指定（Pi 默认的 off）。 */
+      thinkingLevel?: AssistantThinkingLevel,
     ]
-    return: { success: boolean; error?: string }
+    /** `code` 只在主进程主动拒绝这一轮时给出（见 shared/agent-turn-refusal）。 */
+    return: { success: boolean; error?: string; code?: AgentTurnRefusalCode }
   }
   'agent:confirm': {
     args: [conversationId: string, toolCallId: string, confirmed: boolean]

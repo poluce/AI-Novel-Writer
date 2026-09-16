@@ -20,7 +20,6 @@ import {
   workflowWritingLanguage,
 } from '../workflow-project-session'
 import { characterArchitecturePrompts, promptLanguageText } from '../../prompt-language'
-import { stripThinkingTags } from '../workflow-utils'
 import type { WorkflowContext } from '../../../stores/workflow-store'
 import type { NovelConfig, ProjectSessionContext } from '../../../shared/ipc-channels'
 import type { ProjectCoreSynopsisExpected } from '../../../../electron/repositories/project-core-repository'
@@ -41,6 +40,7 @@ import {
   mergeExpandedNovelConfig,
 } from '../novel-config-expansion'
 import { internalPrompt } from '../../../prompts/internal/load'
+import { parseModelJson } from '../workflow-utils'
 
 // --- 基础工具库 ---
 
@@ -623,15 +623,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function decodeCompleteNovelConfig(
-  content: string,
+  contentOrArtifact: string | Record<string, unknown>,
   expectedTotalChapters: number,
   expectedWordsPerChapter: number,
 ): NovelConfig {
   let value: unknown
   try {
-    const trimmed = content.trim()
-    const fenced = /^```json[ \t]*\r?\n([\s\S]*?)\r?\n```$/iu.exec(trimmed)
-    value = JSON.parse(fenced?.[1].trim() ?? trimmed)
+    value = parseModelJson<unknown>(contentOrArtifact)
   } catch {
     throw new Error('AI 返回的小说配置不是完整 JSON 对象')
   }
@@ -751,7 +749,7 @@ function findCompleteJsonObjectEnd(source: string, start: number): number | unde
 }
 
 function extractSingleCompleteJsonObject(content: string): string {
-  const source = stripThinkingTags(content).trim()
+  const source = content.trim()
   const candidates: string[] = []
   let searchFrom = 0
   while (searchFrom < source.length) {
@@ -941,7 +939,7 @@ async function writeArchToDb(
   projectSession: ProjectSessionContext,
   fallbackError: string,
 ): Promise<void> {
-  const cleanContent = stripThinkingTags(content)
+  const cleanContent = content.trim()
   const result = await ipc.invokeWithProjectSession(
     projectSession,
     'db:project-core-update',
@@ -1031,8 +1029,10 @@ export class GenerateConfigCommand extends BaseWorkflowCommand<string> {
       context,
     )
     let resultRaw: string
+    let resultArtifact: Record<string, unknown> | undefined
     if (initial.finishReason === 'stop') {
       resultRaw = initial.content
+      resultArtifact = initial.artifact
     } else if (initial.finishReason === 'length') {
       callbacks.log(text(
         '首轮配置 JSON 达到输出上限，已丢弃不可信截断内容，正在请求一次完整替代 JSON...',
@@ -1055,6 +1055,7 @@ export class GenerateConfigCommand extends BaseWorkflowCommand<string> {
         throw this.createIncompleteCompletionError(replacement.finishReason)
       }
       resultRaw = replacement.content
+      resultArtifact = replacement.artifact
     } else {
       throw this.createIncompleteCompletionError(initial.finishReason)
     }
@@ -1066,7 +1067,7 @@ export class GenerateConfigCommand extends BaseWorkflowCommand<string> {
     ))
     let parsed: NovelConfig
     try {
-      parsed = decodeCompleteNovelConfig(resultRaw, this.totalChapters, this.wordsPerChapter)
+      parsed = decodeCompleteNovelConfig(resultArtifact ?? resultRaw, this.totalChapters, this.wordsPerChapter)
     } catch (e) {
       throw new Error(text(
         'AI 返回的小说配置不完整或无效，结果未应用。详细信息: ' + String(e),
@@ -1095,7 +1096,7 @@ export class GenerateConfigCommand extends BaseWorkflowCommand<string> {
         },
         context,
       )
-      const replacementGuidance = this.stripThinkingTags(replacement).trim()
+      const replacementGuidance = replacement.trim()
       if (!isGeneratedGlobalGuidanceValid(replacementGuidance)) {
         throw new Error(text(
           `全局写作要求仍不符合 ${GENERATED_GLOBAL_GUIDANCE_MIN_RULES}–${GENERATED_GLOBAL_GUIDANCE_MAX_RULES} 条且不超过 ${GENERATED_GLOBAL_GUIDANCE_MAX_CHARS} 字符的合同，配置未应用。`,
@@ -2102,8 +2103,8 @@ export class GeneratePlotArchitectureCommand extends BaseWorkflowCommand<string>
     try {
       merged = await runCompletion()
     } catch (error) {
-      const partialText = stripThinkingTags(interruptedContent).trim()
-      const seedTrimmed = stripThinkingTags(seedText).trim()
+      const partialText = interruptedContent.trim()
+      const seedTrimmed = seedText.trim()
       const madeProgress = partialText !== seedTrimmed
       if (
         !context.cancelled
@@ -2268,7 +2269,7 @@ export class GeneratePlotArchitectureCommand extends BaseWorkflowCommand<string>
     const result = await ipc.invokeWithProjectSession(
       projectSession,
       'db:project-core-synopsis-commit',
-      { synopsis: stripThinkingTags(synopsis), expected },
+      { synopsis, expected },
       expectedProjectPath,
     )
     if (!result.success) {

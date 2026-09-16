@@ -206,7 +206,6 @@ describe('reasoning policy', () => {
   it.each([
     ['siliconflow', 'https://api.siliconflow.cn/v1', 'deepseek-ai/DeepSeek-V3.2'],
     ['custom', 'https://qwen-proxy.example.test/v1', 'qwen-long'],
-    ['deepseek', 'https://deepseek-proxy.example.test/v1', 'deepseek-v4-flash'],
   ] as const)('does not inject official DeepSeek V4 fields for %s/%s/%s', (
     provider,
     baseUrl,
@@ -240,6 +239,88 @@ describe('reasoning policy', () => {
       effective: 'low',
       status: 'mapped',
       source: 'project-strategy',
+    })
+  })
+
+  it('maps reasoning for custom relay endpoints when model declares reasoning capability', () => {
+    const relayGemini: ModelProfile = {
+      ...geminiFlashLite,
+      provider: 'gemini',
+      protocol: 'gemini',
+      modelName: 'gemini-3.8-flash',
+      baseUrl: 'https://codelinklink.online/antigravity',
+      capabilities: {
+        contextWindowTokens: 1_000_000,
+        maxOutputTokens: 8192,
+        reasoning: true,
+        structuredOutput: true,
+        usage: true,
+      },
+    }
+
+    expect(resolveReasoningPolicy({ model: relayGemini, stage: 'drafting' })).toMatchObject({
+      requested: 'low',
+      effective: 'low',
+      status: 'mapped',
+      providerDirective: { adapter: 'gemini-thinking-budget', thinkingBudget: 1024 },
+    })
+
+    expect(resolveReasoningPolicy({ model: relayGemini, stage: 'planning' })).toMatchObject({
+      requested: 'medium',
+      effective: 'medium',
+      status: 'mapped',
+      providerDirective: { adapter: 'gemini-thinking-budget', thinkingBudget: 8192 },
+    })
+
+    expect(resolveReasoningPolicy({ model: relayGemini, stage: 'review' })).toMatchObject({
+      requested: 'high',
+      effective: 'high',
+      status: 'mapped',
+      providerDirective: { adapter: 'gemini-thinking-budget', thinkingBudget: 24576 },
+    })
+  })
+
+  it('does not sniff regex or force openai reasoning effort for unknown OpenAI models on custom relay', () => {
+    const customQwQ: ModelProfile = {
+      ...geminiFlashLite,
+      provider: 'custom',
+      protocol: 'openai',
+      modelName: 'qwq-32b-preview',
+      baseUrl: 'https://my-relay.example.com/v1',
+      capabilities: {
+        contextWindowTokens: 131_072,
+        maxOutputTokens: 8192,
+        reasoning: true,
+        structuredOutput: true,
+        usage: true,
+      },
+    }
+
+    // Without explicit adapter, unknown models do not inject proprietary OpenAI reasoning_effort
+    const resolution = resolveReasoningPolicy({ model: customQwQ, stage: 'planning' })
+    expect(resolution).toMatchObject({
+      status: 'unsupported',
+      effective: null,
+    })
+    expect(resolution.providerDirective).toBeUndefined()
+
+    // With explicit reasoningAdapter configured by user, honors the user selection without regex sniffing
+    const configuredDeepSeek: ModelProfile = {
+      ...customQwQ,
+      modelName: 'unusual-relay-model-slug',
+      capabilities: {
+        ...customQwQ.capabilities!,
+        reasoningAdapter: 'deepseek-v4-thinking',
+      },
+    }
+    const deepSeekRes = resolveReasoningPolicy({ model: configuredDeepSeek, stage: 'planning' })
+    expect(deepSeekRes).toMatchObject({
+      status: 'mapped',
+      providerDirective: {
+        adapter: 'deepseek-v4-thinking',
+        thinking: 'enabled',
+        reasoningEffort: 'high',
+      },
     })
   })
 })

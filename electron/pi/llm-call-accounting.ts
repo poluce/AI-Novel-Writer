@@ -1,3 +1,4 @@
+import { calculateContextTokens } from '@earendil-works/pi-agent-core'
 import type { Usage } from '@earendil-works/pi-ai'
 
 import { LLMHistoryRepository } from '../repositories/llm-repository'
@@ -21,7 +22,7 @@ function logAgentCall(record: AgentCallRecord, startedAt: number, success: boole
       purpose: 'agent',
       promptTokens: record.usage?.input ?? null,
       completionTokens: record.usage?.output ?? null,
-      totalTokens: record.usage?.totalTokens ?? null,
+      totalTokens: record.usage ? calculateContextTokens(record.usage) : null,
       durationMs: Math.max(0, Date.now() - startedAt),
       success,
       errorMessage: record.errorMessage,

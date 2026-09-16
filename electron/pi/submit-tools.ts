@@ -130,9 +130,50 @@ function textSchema() {
   })
 }
 
+function novelConfigSchema() {
+  return Type.Object({
+    genre: Type.String(),
+    targetAudience: Type.String(),
+    subGenre: Type.String(),
+    plotStructure: Type.Union([
+      Type.Literal('three_act'),
+      Type.Literal('heros_journey'),
+      Type.Literal('save_the_cat'),
+      Type.Literal('kishotenketsu'),
+      Type.Literal('multi_thread'),
+      Type.Literal('freeform'),
+    ]),
+    narrativePOV: Type.Union([
+      Type.Literal('third_limited'),
+      Type.Literal('first_person'),
+      Type.Literal('third_omniscient'),
+      Type.Literal('multi_pov'),
+    ]),
+    coreOutline: Type.String(),
+    worldSetting: Type.String(),
+    goldenFinger: Type.String(),
+    protagonistProfile: Type.String(),
+    globalGuidance: Type.String(),
+    writingStyle: Type.String(),
+    totalChapters: Type.Optional(Type.Integer()),
+    wordsPerChapter: Type.Optional(Type.Integer()),
+    referenceWorks: Type.Optional(Type.String()),
+  })
+}
+
 /** Open JSON document: the tool arguments are the artifact root. */
 function jsonSchema() {
   return Type.Unknown()
+}
+
+/** Full novel configuration artifact. */
+export function submitNovelConfigTool(): AgentTool<ReturnType<typeof novelConfigSchema>> {
+  return buildSubmitTool(
+    'submit_novel_config',
+    'Submit Novel Config',
+    'Submit the verified full novel configuration artifact.',
+    novelConfigSchema(),
+  )
 }
 
 /** Draft / revision: title + full body. */
@@ -247,6 +288,7 @@ export function createSubmitTool(name: SubmitToolName): AnyAgentTool {
     case 'submit_style_analysis': return submitStyleAnalysisTool()
     case 'submit_text': return submitTextTool()
     case 'submit_json': return submitJsonTool()
+    case 'submit_novel_config': return submitNovelConfigTool()
   }
 }
 

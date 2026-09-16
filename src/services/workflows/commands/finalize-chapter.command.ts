@@ -19,6 +19,7 @@ import {
 import {
   runPostProcessPipeline,
   getChapterFinalizeScope,
+  parseModelJson,
   type PostProcessStep,
   type PostProcessStatus,
 } from '../workflow-utils'
@@ -68,15 +69,9 @@ export interface FinalizePostProcessGeneration {
   ): Promise<string>
 }
 
-/** 容错 JSON 解析（剥离 Markdown 代码块 + 自动截取有效 JSON 边界） */
+/** 标准结构化 JSON 解析（剥离 Markdown 围栏，废除首尾括号截取） */
 function parseJSON<T>(text: string): T {
-  let cleanText = text.replace(/```json?\n?/gi, '').replace(/```\n?/gi, '').trim()
-  const firstBrace = cleanText.indexOf('{')
-  const lastBrace = cleanText.lastIndexOf('}')
-  if (firstBrace !== -1 && lastBrace !== -1) {
-    cleanText = cleanText.substring(firstBrace, lastBrace + 1)
-  }
-  return JSON.parse(cleanText) as T
+  return parseModelJson<T>(text)
 }
 
 const CONTINUITY_FACT_LIMIT = 12

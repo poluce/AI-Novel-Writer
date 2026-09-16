@@ -1,8 +1,8 @@
-import { useState, useEffect, useLayoutEffect, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react'
 import {
   X, Plus, Trash2, Check, Save, Globe, Cpu, Database,
   Type, Settings2, Zap, Eye, EyeOff, ChevronDown, MessageSquare,
-  Info, Palette, ExternalLink, RefreshCw, RotateCcw, BookOpen,
+  Info, Palette, ExternalLink, RefreshCw, RotateCcw, BookOpen, Search,
 } from 'lucide-react'
 import PromptSettings from './PromptSettings'
 import SkillSettings from './SkillSettings'
@@ -18,6 +18,7 @@ import { LOW_VRAM_EMBEDDING_OPTIONS, normalizeEmbeddingOptions } from '../../sha
 import type { ModelCapabilities, ProviderPreset } from '../../shared/provider-presets'
 import { BUILTIN_PRESETS } from '../../shared/provider-presets'
 import { createModelProfileDraft } from '../../shared/model-profile-draft'
+import { channelHasModel, groupModelsByChannel, type ModelChannelGroup } from '../../shared/agent-runtime'
 import type { ModelProviderResourceId } from '../../shared/model-provider-resources'
 import { randomUUID } from '../../utils/id'
 import { Button } from '../ui/Button'
@@ -217,6 +218,7 @@ function LLMSection({
   const filtered = models.filter((m) =>
     m.purposes?.some((p) => purposes.includes(p as ModelProfile['purposes'][number]))
   )
+  const channelGroups = useMemo(() => groupModelsByChannel(filtered), [filtered])
 
   /** 创建新模型草稿；向量模型由工厂选择完整的 SiliconFlow 默认值。 */
   const handleAdd = () => {
@@ -226,35 +228,62 @@ function LLMSection({
     }))
   }
 
+  /**
+   * 把一个渠道下的多个模型一次加进来。
+   *
+   * 存档结构保持扁平（一个模型 = 一条档案），这里只把当前表单的渠道字段
+   * （provider / protocol / baseUrl / apiKey 与高级设置）复制过去、换掉模型名；
+   * 同一渠道里已经存在的模型名直接跳过。
+   */
+  const handleAddModels = async (template: ModelProfile, modelNames: readonly string[]) => {
+    for (const modelName of modelNames) {
+      const known = useLLMStore.getState().models
+      if (channelHasModel(known, template, modelName)) continue
+      const saved = await saveModel({
+        ...template,
+        id: randomUUID(),
+        name: modelName,
+        modelName,
+        purposes: [...purposes],
+      })
+      if (!saved) return
+    }
+  }
+
   const isEmbeddingSection = purposes.includes('embedding')
   const openSiliconFlowInvite = () => void openModelProviderResource('siliconflow-invite', text)
 
-  /** 保存模型；若是该分类第一个则自动设为默认 */
-  const handleSave = async () => {
+  /** 保存模型（支持单模型或本渠道批量保存）；若是该分类第一个则自动设为默认 */
+  const handleSave = async (modelsToSave?: ModelProfile[], deletedIds?: string[]) => {
     if (!editingModel) return
     setSaving(true)
-    const saved = await saveModel(editingModel)
-    if (!saved) {
-      setSaving(false)
-      return
-    }
-    // 新增模型后，如果该分类还没有默认则自动设为默认
-    const countBefore = filtered.length
-    if (countBefore === 0) {
-      if (isEmbeddingSection) {
-        if (!await setDefaultEmbeddingModel(editingModel.id)) {
-          setSaving(false)
-          return
-        }
-      } else {
-        if (!await setDefaultModel(editingModel.id)) {
-          setSaving(false)
-          return
+    try {
+      const targets = (modelsToSave && modelsToSave.length > 0) ? modelsToSave : [editingModel]
+      let firstSavedId = editingModel.id
+      for (const target of targets) {
+        const ok = await saveModel(target)
+        if (!ok) return
+        firstSavedId = target.id
+      }
+      if (deletedIds && deletedIds.length > 0) {
+        for (const id of deletedIds) {
+          await deleteModel(id)
         }
       }
+
+      // 新增模型后，如果该分类还没有默认则自动设为默认
+      const countBefore = filtered.length
+      if (countBefore === 0) {
+        if (isEmbeddingSection) {
+          await setDefaultEmbeddingModel(firstSavedId)
+        } else {
+          await setDefaultModel(firstSavedId)
+        }
+      }
+      setEditingModel(null)
+    } finally {
+      setSaving(false)
     }
-    setEditingModel(null)
-    setSaving(false)
   }
 
 
@@ -271,6 +300,8 @@ function LLMSection({
           saving={saving}
           purposeOptions={purposes}
           presets={presets}
+          existingModels={models}
+          onAddModels={handleAddModels}
         />
       )}
 
@@ -279,7 +310,7 @@ function LLMSection({
         <>
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
-              {text(`已配置 ${filtered.length} 个${purposeLabel}`, `${filtered.length} ${purposeLabel} configured`)}
+              {text(`已配置 ${channelGroups.length} 个渠道 (${filtered.length} 个${purposeLabel})`, `${channelGroups.length} channel(s) (${filtered.length} ${purposeLabel}) configured`)}
             </span>
             <Button size="sm" onClick={handleAdd}>
               <Plus size={13} />
@@ -307,7 +338,7 @@ function LLMSection({
             </div>
           )}
 
-          {filtered.length === 0 ? (
+          {channelGroups.length === 0 ? (
             <div
               className="flex flex-col items-center justify-center py-16 gap-3 rounded-xl"
               style={{ border: '1.5px dashed var(--color-border)' }}
@@ -322,19 +353,28 @@ function LLMSection({
               </Button>
             </div>
           ) : (
-            <div className="space-y-2">
-              {filtered.map((model) => (
-                <ModelCard
-                  key={model.id}
-                  model={model}
-                  isDefault={isEmbeddingSection
-                    ? defaultEmbeddingModelId === model.id
-                    : defaultModelId === model.id}
-                  onSetDefault={() => isEmbeddingSection
-                    ? setDefaultEmbeddingModel(model.id)
-                    : setDefaultModel(model.id)}
-                  onEdit={() => setEditingModel({ ...model })}
-                  onDelete={() => deleteModel(model.id)}
+            <div className="space-y-3">
+              {channelGroups.map((group) => (
+                <ChannelCard
+                  key={group.key}
+                  group={group}
+                  defaultModelId={isEmbeddingSection ? defaultEmbeddingModelId : defaultModelId}
+                  onEdit={() => {
+                    setEditingModel({ ...group.representative })
+                  }}
+                  onDelete={async () => {
+                    const channelTitle = group.channelName || group.representative.name || group.label
+                    const confirmed = window.confirm(
+                      text(
+                        `确定要删除渠道「${channelTitle}」吗？该渠道下的 ${group.models.length} 个模型配置都将被删除。`,
+                        `Are you sure you want to delete channel "${channelTitle}"? All ${group.models.length} models will be deleted.`
+                      )
+                    )
+                    if (!confirmed) return
+                    for (const m of group.models) {
+                      await deleteModel(m.profile.id)
+                    }
+                  }}
                 />
               ))}
             </div>
@@ -345,97 +385,294 @@ function LLMSection({
   )
 }
 
-/** 模型卡片 */
-function ModelCard({
-  model, isDefault, onSetDefault, onEdit, onDelete,
+/** 渠道卡片 (按渠道聚合，对齐 DSH，简洁卡片不展开内部模型列表) */
+function ChannelCard({
+  group,
+  defaultModelId,
+  onEdit,
+  onDelete,
 }: {
-  model: ModelProfile
-  isDefault: boolean
-  onSetDefault: () => void
+  group: ModelChannelGroup
+  defaultModelId: string | null
   onEdit: () => void
   onDelete: () => void
 }) {
   const text = useLocaleStore(s => s.text)
+  const rep = group.representative
+  const channelTitle = group.channelName || rep.channelName || rep.name || group.label
+  const hasDefault = group.models.some(m => m.profile.id === defaultModelId)
+
   return (
     <div
       className={cn(
-        'flex items-center gap-3 px-4 py-3 rounded-xl group transition-colors',
-        isDefault
-          ? 'border border-[var(--color-accent)]'
-          : 'border border-[var(--color-border)] hover:border-[var(--color-accent)]',
+        'flex items-center gap-3 px-4 py-3 rounded-xl group transition-colors border',
+        hasDefault
+          ? 'border-[var(--color-accent)]/50 bg-[color-mix(in_srgb,var(--color-accent)_4%,var(--color-panel))]'
+          : 'border-[var(--color-border)] hover:border-[var(--color-accent)]/60 bg-[var(--color-panel)]',
       )}
-      style={{ backgroundColor: isDefault ? 'color-mix(in srgb, var(--color-accent) 5%, var(--color-panel))' : 'var(--color-panel)' }}
     >
-      {/* 图标 */}
+      {/* 头部：渠道图标 */}
       <div
         className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 text-lg"
         style={{ backgroundColor: 'var(--color-hover)' }}
       >
-        {providerIcon(model.provider)}
+        {providerIcon(rep.provider)}
       </div>
 
-      {/* 信息 */}
+      {/* 渠道信息 */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium truncate" style={{ color: 'var(--color-text)' }}>
-            {model.name || model.modelName}
+          <span className="text-sm font-semibold truncate" style={{ color: 'var(--color-text)' }}>
+            {channelTitle}
           </span>
-          {isDefault && (
-            <span className="text-[0.7rem] px-1.5 py-0.5 rounded-full bg-[var(--color-accent)] text-white flex-shrink-0">
+          <span className="text-[0.68rem] px-1.5 py-0.5 rounded bg-[var(--color-hover)] text-[var(--color-text-muted)] flex-shrink-0 font-mono">
+            {rep.protocol}
+          </span>
+          {hasDefault && (
+            <span className="text-[0.68rem] px-1.5 py-0.5 rounded bg-[var(--color-accent)] text-white flex-shrink-0 font-medium">
               {text('默认', 'Default')}
             </span>
           )}
         </div>
-        <p className="text-xs truncate mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-          {model.provider} · {model.modelName} · {model.baseUrl}
+        <p className="text-xs truncate mt-0.5 font-mono" style={{ color: 'var(--color-text-muted)' }}>
+          {rep.baseUrl}
         </p>
       </div>
 
-      {/* 操作按钮（hover 显示） */}
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        {!isDefault && (
-          <button
-            onClick={onSetDefault}
-            title={text('设为默认', 'Set as default')}
-            className="flex items-center justify-center w-7 h-7 rounded-lg transition-colors hover:bg-[var(--color-hover)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
-          >
-            <Check size={14} />
-          </button>
-        )}
+      {/* 渠道操作按钮 */}
+      <div className="flex items-center gap-1">
         <button
+          type="button"
           onClick={onEdit}
           title={text('编辑', 'Edit')}
-          className="flex items-center justify-center w-7 h-7 rounded-lg transition-colors hover:bg-[var(--color-hover)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+          aria-label={text('编辑', 'Edit')}
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors hover:bg-[var(--color-hover)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] cursor-pointer"
         >
-          <Settings2 size={14} />
+          <Settings2 size={13} />
+          <span>{text('编辑', 'Edit')}</span>
         </button>
         <button
+          type="button"
           onClick={onDelete}
           title={text('删除', 'Delete')}
-          className="flex items-center justify-center w-7 h-7 rounded-lg transition-colors hover:bg-red-500/10 text-[var(--color-text-muted)] hover:text-[var(--color-error-text)]"
+          aria-label={text('删除', 'Delete')}
+          className="flex items-center justify-center w-7 h-7 rounded-lg transition-colors hover:bg-red-500/10 text-[var(--color-text-muted)] hover:text-[var(--color-error-text)] cursor-pointer"
         >
-          <Trash2 size={14} />
+          <Trash2 size={13} />
         </button>
       </div>
     </div>
   )
 }
 
-// ==================== 模型编辑表单 ====================
+// ==================== 模型编辑表单与弹窗 ====================
 
+/** 获取可用模型弹窗 (DSH 风格，模态对话框) */
+function FetchModelsModal({
+  open,
+  onClose,
+  discoveredModels,
+  alreadyAddedModelNames,
+  onAddModels,
+}: {
+  open: boolean
+  onClose: () => void
+  discoveredModels: DiscoveredModel[]
+  alreadyAddedModelNames: string[]
+  onAddModels: (modelNames: string[]) => void
+}) {
+  const text = useLocaleStore(s => s.text)
+  const [query, setQuery] = useState('')
+  const [selected, setSelected] = useState<string[]>([])
+
+  if (!open) return null
+
+  const normalized = query.trim().toLowerCase()
+  const visible = normalized
+    ? discoveredModels.filter(m =>
+        m.id.toLowerCase().includes(normalized) ||
+        m.name.toLowerCase().includes(normalized) ||
+        m.value.toLowerCase().includes(normalized),
+      )
+    : discoveredModels
+
+  const visibleUnadded = visible.filter(m => !alreadyAddedModelNames.includes(m.value))
+  const allVisibleSelected = visibleUnadded.length > 0 && visibleUnadded.every(m => selected.includes(m.value))
+
+  const toggleSelectAll = () => {
+    if (allVisibleSelected) {
+      setSelected(prev => prev.filter(val => !visibleUnadded.some(m => m.value === val)))
+    } else {
+      setSelected(prev => Array.from(new Set([...prev, ...visibleUnadded.map(m => m.value)])))
+    }
+  }
+
+  const handleAdopt = () => {
+    onAddModels(selected)
+    onClose()
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
+      data-channel-model-adder
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={text('获取可用模型', 'Fetch available models')}
+        className="w-full max-w-lg rounded-xl shadow-2xl flex flex-col max-h-[85vh] border border-[var(--color-border)] bg-[var(--color-panel)] overflow-hidden"
+      >
+        {/* 标题栏 */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border)]">
+          <div>
+            <h3 className="text-sm font-semibold text-[var(--color-text)]">
+              {text('获取可用模型', 'Fetch available models')}
+            </h3>
+            <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
+              {text('添加到本渠道：从端点发现的可用模型。勾选后点击「添加所选」即可加入本渠道。', 'Add to this channel: select discovered models to include in this channel.')}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={text('关闭', 'Close')}
+            className="p-1 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)] cursor-pointer"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* 搜索与全选工具栏 */}
+        <div className="flex items-center gap-2 px-5 py-3 border-b border-[var(--color-border)]/60 bg-[var(--color-bg)]/30">
+          <div className="relative flex-1">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={text('搜索模型 ID 或名称...', 'Search model ID or name...')}
+              className="pl-8 text-xs h-8"
+              type="search"
+            />
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={visibleUnadded.length === 0}
+            onClick={toggleSelectAll}
+            className="text-xs h-8 flex-shrink-0"
+          >
+            {allVisibleSelected ? text('取消全选', 'Deselect all') : text('全选', 'Select all')}
+          </Button>
+        </div>
+
+        {/* 候选列表 */}
+        <div className="flex-1 overflow-y-auto px-5 py-2 space-y-1 min-h-[160px] max-h-[360px]">
+          {visible.length === 0 ? (
+            <div className="py-8 text-center text-xs text-[var(--color-text-muted)]">
+              {text('未找到匹配的模型', 'No matching models found')}
+            </div>
+          ) : (
+            visible.map((candidate) => {
+              const alreadyAdded = alreadyAddedModelNames.includes(candidate.value)
+              const checked = alreadyAdded || selected.includes(candidate.value)
+              const optionLabel = candidate.name === candidate.id
+                ? candidate.id
+                : `${candidate.name} (${candidate.id})`
+
+              return (
+                <label
+                  key={candidate.id}
+                  className={cn(
+                    'flex items-center gap-3 px-3 py-2 rounded-lg text-xs transition-colors cursor-pointer border',
+                    alreadyAdded
+                      ? 'opacity-50 cursor-default bg-transparent border-transparent'
+                      : checked
+                        ? 'bg-[var(--color-hover)] border-[var(--color-border)]'
+                        : 'hover:bg-[var(--color-hover)]/50 border-transparent',
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    disabled={alreadyAdded}
+                    aria-label={optionLabel}
+                    onChange={() => {
+                      if (alreadyAdded) return
+                      setSelected(prev =>
+                        prev.includes(candidate.value)
+                          ? prev.filter(v => v !== candidate.value)
+                          : [...prev, candidate.value]
+                      )
+                    }}
+                    className="rounded text-[var(--color-accent)]"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-[var(--color-text)] truncate">
+                      {candidate.id}
+                    </div>
+                    {candidate.name && candidate.name !== candidate.id && (
+                      <div className="text-[0.7rem] text-[var(--color-text-muted)] truncate">
+                        {candidate.name}
+                      </div>
+                    )}
+                  </div>
+                  {alreadyAdded && (
+                    <span className="text-[0.7rem] text-[var(--color-text-muted)] px-1.5 py-0.5 rounded bg-[var(--color-bg)]">
+                      {text('已添加', 'Added')}
+                    </span>
+                  )}
+                </label>
+              )
+            })
+          )}
+        </div>
+
+        {/* 底部操作 */}
+        <div className="flex items-center justify-between px-5 py-3 border-t border-[var(--color-border)] bg-[var(--color-bg)]/50">
+          <span className="text-xs text-[var(--color-text-muted)]">
+            {text(`已选择 ${selected.length} 个模型`, `${selected.length} model(s) selected`)}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={onClose}>
+              {text('取消', 'Cancel')}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={selected.length === 0}
+              onClick={handleAdopt}
+            >
+              <Plus size={13} />
+              {text(`添加 ${selected.length} 个模型`, `Add ${selected.length} model(s)`)}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 /** 模型编辑表单 */
 function ModelForm({
-  model, onChange, onSave, onCancel, saving, presets,
+  model, onChange, onSave, onCancel, saving, presets, existingModels, onAddModels,
 }: {
   model: ModelProfile
   onChange: (m: ModelProfile) => void
-  onSave: () => void
+  onSave: (modelsToSave?: ModelProfile[], deletedIds?: string[]) => void
   onCancel: () => void
   saving: boolean
   purposeOptions: ModelProfile['purposes']
   /** 服务商预设（来自 BUILTIN_PRESETS 常量） */
   presets: ProviderPreset[]
+  /** 已保存的全部档案：用来判断该渠道下哪些模型已经加过。 */
+  existingModels: readonly ModelProfile[]
+  /** 把发现到的模型批量加成同一渠道下的新档案。 */
+  onAddModels: (template: ModelProfile, modelNames: readonly string[]) => Promise<void>
 }) {
   const text = useLocaleStore(s => s.text)
   const locale = useLocaleStore(s => s.locale)
@@ -443,6 +680,25 @@ function ModelForm({
   const [advancedOpen, setAdvancedOpen] = useState(false)
   // 标记"模型标识"是否使用自定义输入模式
   const [customModelName, setCustomModelName] = useState(false)
+  const [showDiscoveryModal, setShowDiscoveryModal] = useState(false)
+
+  // 查找属于此渠道的其他已保存模型（第一条模型即当前表单的 model）
+  const initialOtherModels = useMemo(() => {
+    return existingModels.filter(m => (
+      m.id !== model.id &&
+      m.provider === model.provider &&
+      m.protocol === model.protocol &&
+      m.baseUrl.replace(/\/+$/, '').toLowerCase() === model.baseUrl.replace(/\/+$/, '').toLowerCase() &&
+      m.apiKey === model.apiKey
+    )).map(m => ({
+      id: m.id,
+      modelName: m.modelName || '',
+      name: m.name && m.name !== m.modelName && m.name !== model.name ? m.name : '',
+    }))
+  }, [existingModels, model.id, model.provider, model.protocol, model.baseUrl, model.apiKey, model.name])
+
+  const [primaryModelAlias, setPrimaryModelAlias] = useState('')
+  const [extraModels, setExtraModels] = useState<Array<{ id: string; modelName: string; name: string }>>(initialOtherModels)
 
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean, error?: string } | null>(null)
@@ -479,6 +735,7 @@ function ModelForm({
     setDiscovering(false)
     setDiscoveredModels([])
     setDiscoveryNotice(null)
+    setShowDiscoveryModal(false)
   }
 
   const isEmbedding = model.purposes?.includes('embedding')
@@ -627,6 +884,7 @@ function ModelForm({
       if (!isCurrentRequest()) return
       if (result.success) {
         setDiscoveredModels(result.models)
+        setShowDiscoveryModal(true)
       } else {
         setDiscoveryNotice(result.errorCode)
       }
@@ -663,13 +921,13 @@ function ModelForm({
         </div>
       )}
 
-      {/* 显示名称 */}
+      {/* 渠道名称 */}
       <div>
-        <Label>{text('显示名称', 'Display name')}</Label>
+        <Label>{text('渠道名称', 'Channel name')}</Label>
         <Input
           value={model.name}
           onChange={(e) => up('name', e.target.value)}
-          placeholder={text('如：DeepSeek 主力 / GPT-4o 备用', 'e.g. DeepSeek primary / GPT-4o backup')}
+          placeholder={text('如：hajimi / 自定义中转', 'e.g. hajimi / Custom gateway')}
         />
       </div>
 
@@ -681,14 +939,14 @@ function ModelForm({
             value={model.provider}
             onChange={(e) => handleProviderChange(e.target.value as ModelProfile['provider'])}
           >
-            <option value="openai">OpenAI</option>
-            <option value="deepseek">DeepSeek</option>
-            <option value="gemini">Google Gemini</option>
-            <option value="xai">xAI(Grok)</option>
-            <option value="siliconflow">SiliconFlow</option>
-            <option value="ollama">{text('Ollama（本地）', 'Ollama (local)')}</option>
-            <option value="bigmodel">{text('BigModel（智谱）', 'BigModel (Zhipu)')}</option>
-            <option value="custom">{text('自定义', 'Custom')}</option>
+            {presets.map((p) => (
+              <option key={p.provider} value={p.provider}>
+                {p.displayName || p.provider}
+              </option>
+            ))}
+            {!presets.some((p) => p.provider === 'custom') && (
+              <option value="custom">{text('自定义', 'Custom')}</option>
+            )}
           </NativeSelect>
         </div>
         <div>
@@ -699,6 +957,7 @@ function ModelForm({
           >
             <option value="openai">OpenAI</option>
             <option value="gemini">Gemini</option>
+            <option value="anthropic">Anthropic</option>
           </NativeSelect>
         </div>
       </div>
@@ -795,20 +1054,28 @@ function ModelForm({
         </div>
       </div>
 
-      <div className="space-y-2 rounded-lg p-3" style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-hover)' }}>
+      {/* DSH 风格模型列表 (ModelListEditor) */}
+      <div className="space-y-3 rounded-lg p-3" style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-hover)' }}>
         <div className="flex items-center justify-between gap-3">
           <div>
-            <Label className="mb-0">{text('端点模型列表', 'Endpoint model list')}</Label>
-            <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
-              {text('填写端点与 API Key 后即可获取；选择模型后再保存配置。', 'Enter the endpoint and API key to refresh, then save after choosing a model.')}
+            <Label className="mb-0">{text('模型列表', 'Models')} ({1 + extraModels.length})</Label>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+              {text('该渠道下配置的可用模型列表。点击下方「+ 添加模型」可手填模型 ID，或点击右侧获取端点模型后一键导入。', 'Configured models for this channel. Click "+ Add model" or fetch from endpoint.')}
             </p>
           </div>
-          <Button type="button" size="sm" variant="outline" onClick={handleDiscoverModels} disabled={discovering}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={handleDiscoverModels}
+            disabled={discovering}
+          >
             <RefreshCw size={13} className={discovering ? 'animate-spin' : undefined} />
             {discovering ? text('获取中...', 'Refreshing...') : text('获取模型列表', 'Refresh model list')}
           </Button>
         </div>
 
+        {/* 端点模型下拉快捷选择（满足已有端点模型列表选择契约） */}
         {discoveredModels.length > 0 && (
           <NativeSelect
             aria-label={text('端点模型列表', 'Endpoint model list')}
@@ -820,7 +1087,7 @@ function ModelForm({
               onChange({ ...model, modelName: value })
             }}
           >
-            <option value="">{text('选择端点返回的模型', 'Choose a model returned by the endpoint')}</option>
+            <option value="">{text('选择端点返回的模型（快捷填入主模型）', 'Choose a model returned by the endpoint')}</option>
             {discoveredModels.map(candidate => (
               <option key={`${candidate.id}:${candidate.value}`} value={candidate.value}>
                 {candidate.name === candidate.id ? candidate.id : `${candidate.name} (${candidate.id})`}
@@ -829,31 +1096,99 @@ function ModelForm({
           </NativeSelect>
         )}
 
+        {/* 获取端点模型弹窗 (DSH 风格) */}
+        <FetchModelsModal
+          open={showDiscoveryModal}
+          onClose={() => setShowDiscoveryModal(false)}
+          discoveredModels={discoveredModels}
+          alreadyAddedModelNames={[model.modelName, ...extraModels.map(m => m.modelName)].filter(Boolean)}
+          onAddModels={(modelNames) => {
+            const toAdd = modelNames.filter(name => name !== model.modelName && !extraModels.some(m => m.modelName === name))
+            setExtraModels(prev => [
+              ...prev,
+              ...toAdd.map(name => ({ id: randomUUID(), modelName: name, name }))
+            ])
+            void onAddModels(model, modelNames)
+          }}
+        />
+
         {discoveryNoticeText && (
           <p role="status" className="text-xs" style={{ color: 'var(--color-error-text)' }}>
             {discoveryNoticeText}
           </p>
         )}
-      </div>
 
-      {isEmbedding && model.provider === 'siliconflow' && model.modelName === 'BAAI/bge-m3' && (
-        <div className="rounded-lg p-3 space-y-2" style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-hover)' }}>
-          <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-            {text('BAAI/bge-m3 当前在 SiliconFlow 提供免费调用。完成实名认证后可使用，仍受固定速率限制约束。', 'BAAI/bge-m3 is currently free on SiliconFlow. Verification is required; fixed rate limits still apply.')}
-          </p>
-          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
-            <button type="button" onClick={() => void openModelProviderResource('siliconflow-invite', text)} className="text-[var(--color-accent)] hover:underline">
-              {text('邀请注册链接', 'Invitation registration link')}
-            </button>
-            <button type="button" onClick={() => void openModelProviderResource('siliconflow-console', text)} className="text-[var(--color-accent)] hover:underline">
-              {text('官方控制台', 'Official console')}
-            </button>
-            <button type="button" onClick={() => void openModelProviderResource('siliconflow-docs', text)} className="text-[var(--color-accent)] hover:underline">
-              {text('官方文档', 'Official documentation')}
-            </button>
+        {/* 模型行列表：第 1 行为主模型，后续行为本渠道添加的额外模型 */}
+        <div className="space-y-1.5 pt-1">
+          {/* 主模型行 */}
+          <div className="flex items-center gap-2 p-2 rounded-md bg-[var(--color-bg)] border border-[var(--color-border)]">
+            <Input
+              value={model.modelName}
+              placeholder={text('模型 ID (如 gemini-3.8-flash-high)', 'Model ID (e.g. gemini-3.8-flash-high)')}
+              className="flex-1 text-xs"
+              onChange={(e) => up('modelName', e.target.value)}
+            />
+            <Input
+              value={primaryModelAlias}
+              placeholder={text('模型别名 (可选，留空同模型 ID)', 'Model alias (optional, defaults to model ID)')}
+              className="flex-1 text-xs"
+              onChange={(e) => setPrimaryModelAlias(e.target.value)}
+            />
+            <span className="text-[0.68rem] px-1.5 py-0.5 rounded bg-[var(--color-hover)] text-[var(--color-text-muted)] flex-shrink-0">
+              {text('主模型', 'Primary')}
+            </span>
           </div>
+
+          {/* 额外添加的模型行 */}
+          {extraModels.map((item, index) => (
+            <div key={item.id} className="flex items-center gap-2 p-2 rounded-md bg-[var(--color-bg)] border border-[var(--color-border)]">
+              <Input
+                value={item.modelName}
+                placeholder={text('模型 ID (如 gemini-3.8-flash-high)', 'Model ID (e.g. gemini-3.8-flash-high)')}
+                className="flex-1 text-xs"
+                onChange={(e) => {
+                  const val = e.target.value
+                  setExtraModels(prev => prev.map((m, i) => i === index ? { ...m, modelName: val } : m))
+                }}
+              />
+              <Input
+                value={item.name}
+                placeholder={text('模型别名 (可选，留空同模型 ID)', 'Model alias (optional, defaults to model ID)')}
+                className="flex-1 text-xs"
+                onChange={(e) => {
+                  const val = e.target.value
+                  setExtraModels(prev => prev.map((m, i) => i === index ? { ...m, name: val } : m))
+                }}
+              />
+              <button
+                type="button"
+                title={text('删除模型', 'Remove model')}
+                aria-label={`${text('删除模型', 'Remove model')} ${index + 2}`}
+                onClick={() => {
+                  setExtraModels(prev => prev.filter((_, i) => i !== index))
+                }}
+                className="p-1.5 rounded hover:bg-[var(--color-hover)] text-[var(--color-text-muted)] hover:text-[var(--color-error-text)] transition-colors"
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
+          ))}
         </div>
-      )}
+
+        {/* + 添加模型按钮 (DSH 核心手动追加行按钮) */}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="w-full mt-2"
+          onClick={() => {
+            setExtraModels(prev => [...prev, { id: randomUUID(), modelName: '', name: '' }])
+          }}
+        >
+          <Plus size={13} />
+          {text('添加模型', 'Add model')}
+        </Button>
+      </div>
 
       <div>
         <Label>{text('上下文窗口', 'Context Window')}</Label>
@@ -945,8 +1280,8 @@ function ModelForm({
                   }}
                 >
                   {text(
-                    '最大输出 Token 没有给提示词留下安全空间。生成前预算检查会阻止请求；请降低最大输出或增大上下文窗口。此提示不会阻止保存。',
-                    'Max output tokens leave no safe room for the prompt. The preflight budget check will block generation; lower the output limit or increase the context window. This warning does not block saving.',
+                    '最大输出接近或超过上下文窗口，建议预留足够的上下文空间给提示词与历史记录。此提示不会阻止保存。',
+                    'Max output approaches or exceeds the context window. Reserving ample room for prompts and conversation history is recommended. This notice does not block saving.',
                   )}
                 </p>
               )}
@@ -1000,7 +1335,34 @@ function ModelForm({
         </Button>
         <Button
           className="flex-1"
-          onClick={onSave}
+          onClick={() => {
+            if (!model.modelName.trim()) {
+              onSave()
+              return
+            }
+            const channelName = model.channelName || (extraModels.length > 0 ? (model.name.trim() || undefined) : undefined)
+            const validExtra = extraModels.filter(m => m.modelName.trim())
+            const extraProfiles: ModelProfile[] = validExtra.map(row => ({
+              ...model,
+              id: row.id,
+              ...(channelName ? { channelName } : {}),
+              modelName: row.modelName.trim(),
+              name: row.name.trim() || row.modelName.trim(),
+            }))
+            const currentExtraIds = new Set(validExtra.map(r => r.id))
+            const deletedIds = initialOtherModels
+              .filter(m => !currentExtraIds.has(m.id))
+              .map(m => m.id)
+
+            const savedPrimaryName = primaryModelAlias.trim() !== ''
+              ? primaryModelAlias.trim()
+              : model.name
+
+            onSave([
+              { ...model, ...(channelName ? { channelName } : {}), name: savedPrimaryName },
+              ...extraProfiles
+            ], deletedIds)
+          }}
           disabled={saving || !model.baseUrl.trim() || !model.modelName.trim() || (!model.apiKey.trim() && model.provider !== 'ollama')}
         >
           <Save size={13} />

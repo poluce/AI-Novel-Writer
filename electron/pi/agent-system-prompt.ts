@@ -129,16 +129,10 @@ function buildL0ProjectContext(core: ProjectCoreData | null, language: WritingLa
     parts.push(`${label('叙事视角', 'Point of view')}: ${modelFacts.narrativePOV}`)
   }
   if (core.coreOutline) {
-    const outline = core.coreOutline.length > 300
-      ? `${core.coreOutline.slice(0, 300)}${label('…', '...')}`
-      : core.coreOutline
-    parts.push(`${label('核心大纲', 'Core outline')}: ${outline}`)
+    parts.push(`${label('核心大纲', 'Core outline')}: ${core.coreOutline}`)
   }
   if (core.writingStyle) {
-    const style = core.writingStyle.length > 150
-      ? `${core.writingStyle.slice(0, 150)}${label('…', '...')}`
-      : core.writingStyle
-    parts.push(`${label('写作风格', 'Writing style')}: ${style}`)
+    parts.push(`${label('写作风格', 'Writing style')}: ${core.writingStyle}`)
   }
   return parts.join('\n')
 }

@@ -29,6 +29,21 @@ function invokeForProjectSession<C extends InvokeChannel>(
 // ===== 文本处理通用工具 =====
 
 /**
+ * 标准模型结构化 JSON 解析器
+ * 统一剥离 Markdown 代码围栏（```json ... ```），彻底废除首尾括号脆弱截断。
+ * 兼容直接传入已经解析的强类型对象。
+ */
+export function parseModelJson<T = unknown>(textOrObject: string | Record<string, unknown>): T {
+  if (typeof textOrObject === 'object' && textOrObject !== null) {
+    return textOrObject as T
+  }
+  const trimmed = String(textOrObject).trim()
+  const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/iu.exec(trimmed)
+  const cleanJson = fenced ? fenced[1].trim() : trimmed
+  return JSON.parse(cleanJson) as T
+}
+
+/**
  * 剥除文本中可能包含的 <think>...</think> 思维链标签
  * 用于清洗大模型在生成正文时输出的思维链，避免其被持久化写入磁盘文件
  */

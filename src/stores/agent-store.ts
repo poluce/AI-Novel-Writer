@@ -17,6 +17,7 @@ import { createAgentExecutionContext } from '../services/agent/project-context'
 import { writingLanguageText } from '../shared/writing-language'
 import { projectSessionContextFromProject } from '../shared/project-session-context'
 import type { ProjectSessionContext } from '../shared/ipc-channels'
+import type { AssistantThinkingLevel } from '../shared/agent-runtime'
 import {
   toAgentPromptHistory,
   type AgentConversationArchive,
@@ -28,6 +29,8 @@ import {
 } from '../shared/draft-excerpt'
 import { ipc } from '../services/ipc-client'
 import { logFailure, logInfo } from '../shared/fail-log'
+import { describeProviderFailure } from '../shared/provider-error-message'
+import { describeAgentTurnRefusal } from '../shared/agent-turn-refusal'
 import type {
   PiAgentEvent,
   PiToolCallInfo,
@@ -71,6 +74,8 @@ export interface AgentConversation {
   mode: AgentMode
   /** 当前会话使用的模型 ID（null 表示使用默认） */
   modelId: string | null
+  /** 会话级思考等级；null 表示不指定（Pi 默认的 off）。 */
+  thinkingLevel: AssistantThinkingLevel | null
   /** 属于哪个助手：项目助手（跟着书）/ 界面助手（跟着应用） */
   scope: AgentScope
 }
@@ -122,8 +127,10 @@ export interface AgentState {
   setShowHistory: (show: boolean) => void
   /** 设置当前会话模式 */
   setMode: (mode: AgentMode) => void
-  /** 设置当前会话使用的模型 */
+  /** 设置当前会话使用的模型档案（渠道）；同时清掉会话级模型覆盖。 */
   setModelId: (modelId: string | null) => void
+  /** 设置当前会话的思考等级；null 表示不指定（Pi 默认）。 */
+  setThinkingLevel: (thinkingLevel: AssistantThinkingLevel | null) => void
   /** 发送消息（触发 Agent ReAct 循环） */
   sendMessage: (content: string) => Promise<void>
   /** 取消当前生成 */
@@ -157,6 +164,7 @@ function fromPersistedConversation(
     updatedAt: conversation.updatedAt,
     mode: conversation.mode,
     modelId: conversation.modelId,
+    thinkingLevel: conversation.thinkingLevel ?? null,
     messages: conversation.messages.map(message => ({
       id: message.id,
       role: message.role,
@@ -229,6 +237,11 @@ export function selectIsGenerating(state: Pick<AgentState, 'conversations' | 'ac
 
 /** 把主进程 PiToolCallInfo 映射为渲染层 ToolCallInfo（UI 兼容）。 */
 function toToolCallInfo(call: PiToolCallInfo): ToolCallInfo {
+  const resultText = typeof call.result === 'string'
+    ? call.result
+    : call.result
+      ? JSON.stringify(call.result, null, 2)
+      : undefined
   return {
     id: call.id,
     toolName: call.toolName,
@@ -236,6 +249,7 @@ function toToolCallInfo(call: PiToolCallInfo): ToolCallInfo {
     status: call.status,
     error: call.error,
     details: call.result,
+    result: resultText,
     // MCP 工具的命名由主进程决定（mcp__server__tool），这里是唯一可推断来源的地方。
     source: call.toolName.startsWith('mcp__') ? 'mcp' : 'builtin',
   }
@@ -312,6 +326,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       // Null means “use the default once when a run starts”; the runtime then
       // freezes the selected lease across the entire ReAct loop.
       modelId: null,
+      // 会话级思考等级跟着这条会话走，换会话不互相影响。
+      thinkingLevel: null,
       scope: get().activeScope,
     }
     set(state => ({
@@ -489,6 +505,16 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     }))
   },
 
+  setThinkingLevel: (thinkingLevel) => {
+    const conv = get().getActiveConversation()
+    if (!conv) return
+    set(state => ({
+      conversations: state.conversations.map(c =>
+        c.id === conv.id ? { ...c, thinkingLevel } : c
+      ),
+    }))
+  },
+
   sendMessage: async (content) => {
     if (!content.trim() && get().composerCitations.length === 0) return
     if (selectIsGenerating(get())) {
@@ -511,6 +537,9 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
           case 'clear': {
             const activeConv = get().getActiveConversation()
             if (activeConv) {
+              void ipc.invoke('agent:discard-session', activeConv.id, activeConv.scope).catch((error) => {
+                logFailure('Agent', 'discard conversation session on clear failed', error, { conversationId: activeConv.id, scope: activeConv.scope })
+              })
               set(state => ({
                 conversations: state.conversations.map(c =>
                   c.id === activeConv.id ? { ...c, messages: [] } : c
@@ -560,6 +589,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     }
     const convId = conv.id
     const modelId = conv.modelId ?? undefined
+    // 会话级思考等级随这一轮下发；没选时不传，主进程按 Pi 默认的 off 处理。
+    const thinkingLevel = conv.thinkingLevel ?? undefined
     const executionContext = createAgentExecutionContext(modelId, requestLocale)
     const modelText = (zhCNText: string, enUSText: string) => writingLanguageText(
       executionContext.writingLanguage,
@@ -576,13 +607,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     if (skillInvocation) {
       const skill = skillInvocation.skill
       const displayName = skillDisplayName(skill, executionContext.writingLanguage)
-      let skillContent = skill.localizedContent?.[executionContext.writingLanguage] ?? skill.content
-      if (skillInvocation.input) {
-        skillContent = skillContent
-          .replace(/\$\{args\}/g, skillInvocation.input)
-          .replace(/\$1/g, skillInvocation.input)
-      }
-      content = `${modelText('[用户使用了 Skill:', '[The user invoked Skill:')} ${displayName}]\n\n${modelText('用户输入:', 'User input:')} ${skillInvocation.input || modelText('(无额外参数)', '(no additional arguments)')}\n\n---\n\n${skillContent}`
+      const inputStr = skillInvocation.input ? `\n${modelText('输入参数：', 'Arguments: ')}${skillInvocation.input}` : ''
+      content = `${modelText('[用户请求调用技能：', '[The user invoked skill: ')}${skill.metadata.name} (${displayName})]${inputStr}\n\n${modelText('请根据需要通过 load_writing_skill 加载并执行该技能要求。', 'Please load and execute this skill via load_writing_skill as appropriate.')}`
     }
 
     // 构建用户消息
@@ -642,7 +668,12 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       inflightTurns.set(convId, { assistantMsgId: assistantMsg.id, uiLocale: requestLocale })
       set({ activeRequestId: assistantMsg.id })
 
-      logInfo('Agent', 'sending prompt', { conversationId: convId, modelId, chars: content.trim().length })
+      logInfo('Agent', 'sending prompt', {
+        conversationId: convId,
+        modelId,
+        thinkingLevel,
+        chars: content.trim().length,
+      })
       // 技能目录随系统提示词一起下发：注册表可能刚开始加载（例如刚清空会话后
       // 新建第一条），先等它，别把空目录发给模型。
       await skillRegistry.ensureLoaded()
@@ -655,6 +686,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         toAgentPromptHistory(conv.messages),
         buildAgentSkillCatalog(executionContext.writingLanguage),
         conv.scope,
+        thinkingLevel,
       )
       if (!result.success) {
         logFailure('Agent', 'renderer prompt returned failure', undefined, {
@@ -664,7 +696,11 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         })
         updateAssistantMsg(m => ({
           ...m,
-          content: text('生成失败，请重试。', 'Generation failed. Please try again.'),
+          // 主进程主动拒绝时带原因码（模型没了、上一轮还没跑完…），按码给出
+          // 可读文案；未知异常仍旧只显示通用失败，不把内部文本甩进气泡。
+          content: result.code
+            ? describeAgentTurnRefusal(result.code, requestLocale)
+            : text('生成失败，请重试。', 'Generation failed. Please try again.'),
           streaming: false,
         }))
         set({ activeRequestId: null })
@@ -916,7 +952,11 @@ export function handleAgentEvent({ conversationId, event }: {
         })
         updateInflightAssistantMsg(conversationId, m => ({
           ...m,
-          content: event.message,
+          // 日志里留原始报文，界面上给人话。
+          content: describeProviderFailure(
+            event.message,
+            inflightTurns.get(conversationId)?.uiLocale ?? useLocaleStore.getState().locale,
+          ),
           streaming: false,
         }))
         inflightTurns.delete(conversationId)

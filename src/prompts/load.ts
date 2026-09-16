@@ -15,8 +15,8 @@
  * 加载时只剥掉作为分隔符的那一个空行，原文自带的换行逐字节保留。
  */
 import { BUILTIN_PROMPT_STRUCTURES } from './manifest'
-import { ZH_CN_PROMPT_SOURCES } from './generated/zh-CN'
-import { EN_US_PROMPT_SOURCES } from './generated/en-US'
+import { ZH_CN_PARSED_PROMPTS, ZH_CN_PROMPT_SOURCES } from './generated/zh-CN'
+import { EN_US_PARSED_PROMPTS, EN_US_PROMPT_SOURCES } from './generated/en-US'
 import type { PromptLanguageOverlay, PromptTemplate, PromptSectionName } from './types'
 import { PROMPT_SECTION_NAMES } from './types'
 
@@ -64,11 +64,10 @@ function requireSection(
 }
 
 function readTemplate(structure: (typeof BUILTIN_PROMPT_STRUCTURES)[number]): PromptTemplate {
-  const source = zhByKey[structure.key]
-  if (source === undefined) {
+  const sections = ZH_CN_PARSED_PROMPTS[structure.key] ?? (zhByKey[structure.key] ? parsePromptSections(zhByKey[structure.key]) : undefined)
+  if (sections === undefined) {
     throw new Error(`Missing zh-CN prompt source for ${structure.key}`)
   }
-  const sections = parsePromptSections(source)
   const template: PromptTemplate = {
     key: structure.key,
     name: requireSection(sections, structure.key, 'name'),
@@ -85,13 +84,12 @@ function readTemplate(structure: (typeof BUILTIN_PROMPT_STRUCTURES)[number]): Pr
   return template
 }
 
-/** 内置模板（中文正文），顺序与 manifest 一致。 */
+/** 内置模板（中文正文），顺序与 manifest 一致。编译期预解析，零运行时正则开销。 */
 export const BUILTIN_PROMPTS: PromptTemplate[] = BUILTIN_PROMPT_STRUCTURES.map(readTemplate)
 
 function readOverlay(key: string): PromptLanguageOverlay | undefined {
-  const source = enByKey[key]
-  if (source === undefined) return undefined
-  const sections = parsePromptSections(source)
+  const sections = EN_US_PARSED_PROMPTS[key] ?? (enByKey[key] ? parsePromptSections(enByKey[key]) : undefined)
+  if (sections === undefined) return undefined
   const overlay: PromptLanguageOverlay = {
     systemRole: requireSection(sections, key, 'systemRole'),
     content: requireSection(sections, key, 'content'),

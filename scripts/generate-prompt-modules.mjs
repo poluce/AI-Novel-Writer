@@ -23,17 +23,55 @@ const promptsRoot = path.join(repositoryRoot, 'src', 'prompts')
 const generatedRoot = path.join(promptsRoot, 'generated')
 const LANGUAGES = ['zh-CN', 'en-US']
 
+const SECTION_PATTERN = /<!--\s*section:([A-Za-z]+)\s*-->\n/g
+const VALID_SECTIONS = new Set(['name', 'description', 'systemRole', 'systemSuffix', 'taskGuidance', 'content'])
+
+function parseSections(source) {
+  const sections = {}
+  const matches = [...source.matchAll(SECTION_PATTERN)]
+  for (const [index, match] of matches.entries()) {
+    const name = match[1]
+    if (!VALID_SECTIONS.has(name)) {
+      throw new Error(`Unknown prompt section: ${name}`)
+    }
+    const start = (match.index ?? 0) + match[0].length
+    const next = matches[index + 1]
+    const end = next?.index ?? source.length
+    let body = source.slice(start, end)
+    if (body.endsWith('\n\n')) body = body.slice(0, -2)
+    else if (body.endsWith('\n')) body = body.slice(0, -1)
+    sections[name] = body
+  }
+  return sections
+}
+
 function renderModule(language, sources) {
+  const parsedEntries = sources
+    .map(([key, text]) => `  ${JSON.stringify(key)}: ${JSON.stringify(parseSections(text))},`)
+    .join('\n')
+
   const entries = sources
     .map(([key, text]) => `  ${JSON.stringify(key)}: ${JSON.stringify(text)},`)
     .join('\n')
+
+  const upperLang = language === 'zh-CN' ? 'ZH_CN' : 'EN_US'
+
   return `/**
  * GENERATED FILE — do not edit.
  *
  * Source of truth: src/prompts/${language}/*.md
  * Regenerate with: pnpm run generate:prompts
  */
-export const ${language === 'zh-CN' ? 'ZH_CN_PROMPT_SOURCES' : 'EN_US_PROMPT_SOURCES'}: Readonly<Record<string, string>> = Object.freeze({
+import type { PromptSectionName } from '../types'
+
+export type PreParsedPromptSections = Readonly<Partial<Record<PromptSectionName, string>>>
+
+/** Pre-parsed prompt sections — compiled at build time to eliminate runtime regex parsing overhead. */
+export const ${upperLang}_PARSED_PROMPTS: Readonly<Record<string, PreParsedPromptSections>> = Object.freeze({
+${parsedEntries}
+})
+
+export const ${upperLang}_PROMPT_SOURCES: Readonly<Record<string, string>> = Object.freeze({
 ${entries}
 })
 `

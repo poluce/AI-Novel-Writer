@@ -17,11 +17,13 @@ import {
 import type { GenerationReasoningStage } from '../../../shared/reasoning-types'
 import {
   completeBoundedCompletion,
+  completeBoundedCompletionResult,
   createBoundedCompletionError,
   redactVisibleCompletionText,
   type BoundedCompletionMode,
 } from '../bounded-completion'
 import { workflowUiText, workflowWritingLanguage } from '../workflow-project-session'
+import { parseModelJson } from '../workflow-utils'
 import type { WritingSkillStage } from '../../../shared/writing-skills'
 import type { SubmitToolName } from '../../../shared/submit-contract'
 
@@ -33,6 +35,7 @@ export interface CommandExecuteParams {
 
 export interface LLMCompletion {
   content: string
+  artifact?: Record<string, unknown>
   finishReason: LLMFinishReason
   receipt: GenerationAttemptReceipt
 }
@@ -239,16 +242,16 @@ export abstract class BaseWorkflowCommand<TResult = string> {
 
   /**
    * Explicit continuation seam for commands whose product contract permits a
-   * bounded retry. Ordinary callLLM callers remain single-shot and fail-closed.
+   * bounded retry. Returns both content and any structured artifact.
    */
-  protected async callLLMWithBoundedCompletion(
+  protected async callLLMWithBoundedCompletionResult(
     prompt: string,
     systemPrompt: string,
     callbacks: StepCallbacks,
     continuation: { mode: BoundedCompletionMode; maxContinuations: number },
     options: WorkflowLLMOptions | undefined,
     context: WorkflowContext,
-  ): Promise<string> {
+  ): Promise<{ content: string; artifact?: Record<string, unknown> }> {
     const text = (zhCNText: string, enUSText: string) => workflowUiText(context, zhCNText, enUSText)
     const completion = await this.callLLMResult(prompt, systemPrompt, callbacks, options, context)
     callbacks.log(text(
@@ -256,7 +259,7 @@ export abstract class BaseWorkflowCommand<TResult = string> {
       `  Initial bounded response: finishReason=${completion.finishReason}`,
     ))
     let continuationCount = 0
-    return completeBoundedCompletion({
+    return completeBoundedCompletionResult({
       initial: completion,
       mode: continuation.mode,
       maxContinuations: continuation.maxContinuations,
@@ -271,7 +274,7 @@ export abstract class BaseWorkflowCommand<TResult = string> {
       preserveCompleteStructuredPrompt: continuation.mode === 'replace-structured-output'
         && options?.promptBudget !== undefined,
       isCancelled: () => context.cancelled,
-      redactVisibleText: text => this.stripThinkingTags(text),
+      redactVisibleText: textToRedact => this.stripThinkingTags(textToRedact),
       requestContinuation: async continuationPrompt => {
         continuationCount += 1
         callbacks.log(text(
@@ -292,6 +295,29 @@ export abstract class BaseWorkflowCommand<TResult = string> {
         return next
       },
     })
+  }
+
+  /**
+   * Explicit continuation seam for commands whose product contract permits a
+   * bounded retry. Ordinary callLLM callers remain single-shot and fail-closed.
+   */
+  protected async callLLMWithBoundedCompletion(
+    prompt: string,
+    systemPrompt: string,
+    callbacks: StepCallbacks,
+    continuation: { mode: BoundedCompletionMode; maxContinuations: number },
+    options: WorkflowLLMOptions | undefined,
+    context: WorkflowContext,
+  ): Promise<string> {
+    const result = await this.callLLMWithBoundedCompletionResult(
+      prompt,
+      systemPrompt,
+      callbacks,
+      continuation,
+      options,
+      context,
+    )
+    return result.content
   }
 
   /**
@@ -426,11 +452,12 @@ export abstract class BaseWorkflowCommand<TResult = string> {
       const outcome = await execution.session.complete(injection.task, { signal: execution.signal })
       this.reportGenerationPromptBudget(callbacks, outcome.receipt)
       this.assertNotCancelled(context)
-      const content = this.stripThinkingTags(outcome.content)
+      const content = outcome.content
       callbacks.appendText(content)
       callbacks.setProgress(90)
       return {
         content,
+        artifact: outcome.artifact,
         finishReason: outcome.finishReason,
         receipt: outcome.receipt,
       }
@@ -496,33 +523,18 @@ export abstract class BaseWorkflowCommand<TResult = string> {
   }
 
   /**
-   * 去除 DeepSeek 等模型的 <think> 标签，保证落盘纯净
+   * 去除 DeepSeek 等模型的 <think> 标签，用于旧版 bounded-completion 延续上下文
    */
   protected stripThinkingTags(text: string): string {
     return redactVisibleCompletionText(text)
   }
 
   /**
-   * 全局容错 JSON 解析器
-   * 自动剥离 Markdown ```json 代码块并处理尾随逗号等常见大模型幻觉
+   * @deprecated 废弃手写括号截断。统一使用 parseModelJson，优先推荐 Submit Tool。
    */
   protected parseJSON<T>(text: string): T {
     try {
-      // 1. 剥离 Markdown 块
-      let cleanText = text.replace(/```json?\n?/gi, '').replace(/```\n?/gi, '').trim()
-      // 2. 如果存在前序引导语，截取第一把括号到最后一把括号
-      const firstBrace = cleanText.indexOf('{')
-      const firstBracket = cleanText.indexOf('[')
-      const lastBrace = cleanText.lastIndexOf('}')
-      const lastBracket = cleanText.lastIndexOf(']')
-
-      if (firstBrace !== -1 && lastBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
-        cleanText = cleanText.substring(firstBrace, lastBrace + 1)
-      } else if (firstBracket !== -1 && lastBracket !== -1) {
-        cleanText = cleanText.substring(firstBracket, lastBracket + 1)
-      }
-      
-      return JSON.parse(cleanText) as T
+      return parseModelJson<T>(text)
     } catch {
       throw new Error(`AI 返回的数据格式乱码，无法解析为有效层级结构。尝试解析内容末端: ${text.slice(-100)}`)
     }

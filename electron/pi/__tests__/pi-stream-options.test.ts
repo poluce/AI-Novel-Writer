@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   patchGoogleSamplingPayload,
+  rejectsMinimalThinkingLevel,
   toPiModelSamplingParams,
   toPiSamplingParams,
 } from '../pi-stream-options'
@@ -94,5 +95,53 @@ describe('patchGoogleSamplingPayload', () => {
     const payload = { model: 'deepseek-chat', messages: [] }
     expect(patchGoogleSamplingPayload(payload, { temperature: 0.4, maxTokens: 512 })).toBe(payload)
     expect(patchGoogleSamplingPayload(undefined, { temperature: 0.4, maxTokens: 512 })).toBeUndefined()
+  })
+
+  // pi-ai 把"关思考"实现成 Gemini 3 Flash 的最低等级 MINIMAL，而 Google API 上游
+  // 直接 400："Thinking level MINIMAL is not supported for this model"。
+  it('globally lifts deprecated MINIMAL thinking level to LOW across all Gemini models without regex', () => {
+    for (const model of ['gemini-3.8-flash', 'gemini-3.8-flash-high', 'gemini-3.7-flash-low', 'gemini-3-flash', 'gemini-flash-latest']) {
+      const payload = {
+        model,
+        contents: [],
+        config: { thinkingConfig: { thinkingLevel: 'MINIMAL' } },
+      }
+      patchGoogleSamplingPayload(payload, { temperature: undefined, maxTokens: 4096 })
+      expect(payload.config.thinkingConfig).toEqual({ thinkingLevel: 'LOW' })
+    }
+  })
+
+  it('never touches a level the user picked explicitly', () => {
+    const payload = {
+      model: 'gemini-3.8-flash-high',
+      contents: [],
+      config: { thinkingConfig: { includeThoughts: true, thinkingLevel: 'HIGH' } },
+    }
+    patchGoogleSamplingPayload(payload, { temperature: undefined, maxTokens: 4096 })
+    expect(payload.config.thinkingConfig).toEqual({ includeThoughts: true, thinkingLevel: 'HIGH' })
+  })
+
+  it('leaves the thinking budget alone when the user picked a level', () => {
+    const payload = { model: 'gemini-2.5-flash-lite', contents: [], config: {} }
+    patchGoogleSamplingPayload(
+      payload,
+      {
+        temperature: 0.5,
+        maxTokens: 4096,
+        reasoning: { adapter: 'gemini-thinking-budget', thinkingBudget: 8192 },
+      },
+      { applyThinking: false },
+    )
+    // 温度照旧补进去，思考留给 harness 下发的等级。
+    expect(payload.config).toEqual({ temperature: 0.5 })
+  })
+})
+
+describe('rejectsMinimalThinkingLevel', () => {
+  it('universally rejects MINIMAL without brittle regex sniffing', () => {
+    expect(rejectsMinimalThinkingLevel('gemini-3.8-flash')).toBe(true)
+    expect(rejectsMinimalThinkingLevel('gemini-3.7-flash')).toBe(true)
+    expect(rejectsMinimalThinkingLevel('gemini-3-flash')).toBe(true)
+    expect(rejectsMinimalThinkingLevel('gemini-flash-latest')).toBe(true)
   })
 })

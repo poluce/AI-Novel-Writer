@@ -63,14 +63,6 @@ function getModelConfig(modelId: string): ModelProfile | null {
   return models.find((m) => m.id === modelId) ?? null
 }
 
-function splitGenerationMessages(messages: LLMRequest['messages']): { systemPrompt: string; userPrompt: string } {
-  const systemPrompt = messages.filter(message => message.role === 'system').map(message => message.content).join('\n\n')
-  const userPrompt = messages.filter(message => message.role !== 'system').map(message => (
-    message.role === 'assistant' ? `Assistant:\n${message.content}` : message.content
-  )).join('\n\n')
-  return { systemPrompt, userPrompt }
-}
-
 function resolveSubmitToolName(request: Pick<LLMRequest, 'submitTool'>) {
   return isSubmitToolName(request.submitTool) ? request.submitTool : 'submit_text'
 }
@@ -78,7 +70,7 @@ function resolveSubmitToolName(request: Pick<LLMRequest, 'submitTool'>) {
 function toStreamSingleShotOptions(
   model: ModelProfile,
   params: ResolvedGenerationParameters,
-  extra: Pick<StreamSingleShotOptions, 'signal' | 'inFlightId'> = {},
+  extra: Pick<StreamSingleShotOptions, 'signal' | 'inFlightId' | 'onDelta'> = {},
 ): StreamSingleShotOptions {
   return {
     ...extra,
@@ -96,11 +88,15 @@ async function completeSingleShot(
   model: ModelProfile,
   request: Pick<LLMRequest, 'messages' | 'submitTool'>,
   params: ResolvedGenerationParameters,
-  extra?: Pick<StreamSingleShotOptions, 'signal' | 'inFlightId'>,
+  extra?: Pick<StreamSingleShotOptions, 'signal' | 'inFlightId' | 'onDelta'>,
 ) {
   assertGenerationModelSupportsTools(model)
   const submitTool = resolveSubmitToolName(request)
-  const { systemPrompt, userPrompt } = splitGenerationMessages(request.messages)
+  const systemPrompt = request.messages.filter(m => m.role === 'system').map(m => m.content).join('\n\n')
+  const nonSystem = request.messages.filter(m => m.role !== 'system')
+  const userPrompt = nonSystem.length === 1 && nonSystem[0].role === 'user'
+    ? nonSystem[0].content
+    : nonSystem.map(m => m.role === 'assistant' ? `Assistant:\n${m.content}` : m.content).join('\n\n')
   const result = await streamSingleShot(
     model,
     systemPrompt,
@@ -114,6 +110,7 @@ async function completeSingleShot(
   return {
     success,
     content,
+    artifact: result.artifact,
     finishReason,
     error: success ? undefined : `finish:${finishReason}`,
   }
@@ -252,12 +249,16 @@ export function registerLLMController() {
       {
         signal: abortController.signal,
         inFlightId: `llm:${requestId}`,
+        onDelta: (chunk: string) => {
+          win?.webContents.send('llm:stream-chunk', { requestId, chunk })
+        },
       },
     ).then(result => {
       recordOnce({ success: result.success, error: result.error, finishReason: result.finishReason })
       win?.webContents.send('llm:stream-done', {
         requestId,
         fullText: result.content,
+        artifact: result.artifact,
         finishReason: result.finishReason,
       })
     }).catch(error => {

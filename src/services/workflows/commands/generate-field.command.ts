@@ -130,7 +130,7 @@ export class GenerateFieldCommand extends BaseWorkflowCommand<string> {
     }
     let result = await requestFieldCompletion(prompt, `generate-field-${this.fieldKey}`)
     this.assertNotCancelled(context)
-    let cleanResult = this.stripThinkingTags(result).trim()
+    let cleanResult = result.trim()
 
     if (!cleanResult && this.fieldKey !== 'globalGuidance') {
       callbacks.log(workflowUiText(context, `「${label}」生成返回空结果`, `Generation returned no content for “${label}”.`))
@@ -151,7 +151,7 @@ export class GenerateFieldCommand extends BaseWorkflowCommand<string> {
         'generate-field-globalGuidance-replacement',
       )
       this.assertNotCancelled(context)
-      cleanResult = this.stripThinkingTags(result).trim()
+      cleanResult = result.trim()
       if (!isGeneratedGlobalGuidanceValid(cleanResult)) {
         throw new Error(workflowUiText(
           context,

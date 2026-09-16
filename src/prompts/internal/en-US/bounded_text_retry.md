@@ -7,5 +7,5 @@ The previous text stopped at the length limit. Continue and complete the origina
 {{visible_tail}}
 
 [Requirements]
-- Output only new visible prose. Do not repeat, summarize, explain, use Markdown, or reveal reasoning.
+- Output only new visible prose. Do not repeat, summarize, explain, or use Markdown.
 - Continue naturally from the end of the completed text and finish the original task.

@@ -254,6 +254,54 @@ describe('model discovery settings flow', () => {
     expect(useLLMStore.getState().defaultModelId).toBe(model.id)
   })
 
+  it('adds several discovered models to the same channel in one go', async () => {
+    // 一个渠道下挂多个模型：发现列表里多选，一次落成多条档案（存档结构仍是扁平的，
+    // 渠道字段照抄当前表单，只换模型名）。
+    const model = savedProfile()
+    const discoverModels = vi.fn(async () => ({
+      success: true as const,
+      models: [
+        { id: 'provider/model-a', name: 'Model A', value: 'provider/model-a' },
+        { id: 'provider/model-b', name: 'Model B', value: 'provider/model-b' },
+        // 当前档案自己：已经在渠道里了，不能再加一条。
+        { id: 'manual-model', name: 'Manual', value: model.modelName },
+      ],
+    }))
+    const { saveModel } = await renderSettings(model, discoverModels)
+    await act(async () => {
+      await page.getByRole('button', { name: '编辑', exact: true }).click()
+      await page.getByRole('button', { name: '获取模型列表', exact: true }).click()
+    })
+
+    await expect.element(page.getByText('添加到本渠道')).toBeVisible()
+    const alreadyAdded = document.querySelector<HTMLInputElement>(
+      'input[aria-label="Manual (manual-model)"]',
+    )
+    expect(alreadyAdded?.disabled).toBe(true)
+
+    await act(async () => {
+      await page.getByLabelText('Model A (provider/model-a)').click()
+      await page.getByLabelText('Model B (provider/model-b)').click()
+    })
+    await act(async () => {
+      await page.getByRole('button', { name: '添加 2 个模型', exact: true }).click()
+    })
+
+    await vi.waitFor(() => expect(saveModel).toHaveBeenCalledTimes(2))
+    expect(saveModel.mock.calls.map(call => ((call as unknown as [ModelProfile])[0]).modelName))
+      .toEqual(['provider/model-a', 'provider/model-b'])
+    for (const call of saveModel.mock.calls) {
+      const saved = (call as unknown as [ModelProfile])[0]
+      expect(saved.id).not.toBe(model.id)
+      expect(saved.name).toBe(saved.modelName)
+      expect(saved.provider).toBe(model.provider)
+      expect(saved.protocol).toBe(model.protocol)
+      expect(saved.baseUrl).toBe(model.baseUrl)
+      expect(saved.apiKey).toBe(model.apiKey)
+      expect(saved.purposes).toEqual(['generation', 'refinement', 'summary'])
+    }
+  })
+
   it('keeps manual model input available after discovery fails', async () => {
     const model = savedProfile()
     const discoverModels = vi.fn(async () => ({
@@ -324,8 +372,8 @@ describe('model discovery settings flow', () => {
   })
 
   it('ignores a pending discovery after switching to another saved profile', async () => {
-    const first = savedProfile({ id: 'first-profile', name: 'First profile' })
-    const second = savedProfile({ id: 'second-profile', name: 'Second profile', modelName: 'second-manual-model' })
+    const first = savedProfile({ id: 'first-profile', name: 'First profile', channelName: 'First profile' })
+    const second = savedProfile({ id: 'second-profile', name: 'Second profile', channelName: 'Second profile', modelName: 'second-manual-model' })
     let settleDiscovery!: (result: ModelDiscoveryResult) => void
     const pendingDiscovery = new Promise<ModelDiscoveryResult>((resolve) => {
       settleDiscovery = resolve
@@ -473,5 +521,28 @@ describe('model discovery settings flow', () => {
     await expect.element(page.getByText('网络请求失败，请检查端点或网络后重试。手工模型 ID 仍可使用。', { exact: true })).toBeVisible()
     expect(document.body.textContent).not.toContain(sensitiveDetail)
     await expect.element(page.getByRole('button', { name: '获取模型列表', exact: true })).toBeEnabled()
+  })
+
+  it('groups multiple models under one channel card in settings list', async () => {
+    const common = { channelName: 'hajimi', apiKey: 'test-key', baseUrl: 'https://relay.example/v1' }
+    const modelA = savedProfile({ id: 'model-1', ...common, modelName: 'gemini-3.8-flash' })
+    const modelB = savedProfile({ id: 'model-2', ...common, modelName: 'gemini-3.1-pro-low' })
+    const modelC = savedProfile({ id: 'model-3', ...common, modelName: 'gemini-3.7-flash' })
+    const discoverModels = vi.fn()
+    await renderSettings(modelA, discoverModels, 'zh-CN', [modelB, modelC])
+
+    // Should only have 1 channel card
+    const editButtons = Array.from(document.querySelectorAll('button[title="编辑"]'))
+    expect(editButtons).toHaveLength(1)
+    await expect.element(page.getByText('已配置 1 个渠道 (3 个生成模型)')).toBeVisible()
+
+    // Clicking edit opens the form which lists all 3 models in ModelListEditor
+    await act(async () => {
+      await page.getByRole('button', { name: '编辑', exact: true }).click()
+    })
+    await expect.element(page.getByRole('button', { name: '获取模型列表', exact: true })).toBeVisible()
+    expect(Array.from(document.querySelectorAll('input')).some(input => input.value === 'gemini-3.8-flash')).toBe(true)
+    expect(Array.from(document.querySelectorAll('input')).some(input => input.value === 'gemini-3.1-pro-low')).toBe(true)
+    expect(Array.from(document.querySelectorAll('input')).some(input => input.value === 'gemini-3.7-flash')).toBe(true)
   })
 })

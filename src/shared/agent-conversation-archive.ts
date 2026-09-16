@@ -1,3 +1,5 @@
+import { isAssistantThinkingLevel, type AssistantThinkingLevel } from './agent-runtime'
+
 export const AGENT_CONVERSATION_ARCHIVE_VERSION = 1 as const
 
 type PersistedAgentMode = 'planning' | 'fast'
@@ -19,6 +21,8 @@ export interface PersistedAgentConversation {
   updatedAt: number
   mode: PersistedAgentMode
   modelId: string | null
+  /** 会话级思考等级；缺省表示 Pi 默认（off）。 */
+  thinkingLevel?: AssistantThinkingLevel | null
 }
 
 export interface AgentConversationArchive {
@@ -81,6 +85,9 @@ function persistConversation(value: unknown): PersistedAgentConversation | null 
     updatedAt: conversation.updatedAt,
     mode: isMode(conversation.mode) ? conversation.mode : 'planning',
     modelId: typeof conversation.modelId === 'string' ? conversation.modelId : null,
+    thinkingLevel: isAssistantThinkingLevel(conversation.thinkingLevel)
+      ? conversation.thinkingLevel
+      : null,
   }
 }
 

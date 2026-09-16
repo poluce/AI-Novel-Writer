@@ -3,4 +3,4 @@
 currentState 必填，必须包含 location、powerLevel、physicalState、mentalState、keyItems、recentEvents、updatedAtChapter；updatedAtChapter 必须是非负整数。
 appearance、personality、background、abilities、motivation、arc、notes 每项不超过 120 字符；currentState 的文本字段每项不超过 80 字符。
 keyItems 可为非空字符串或非空字符串数组；recentEvents 可为非空字符串或非空字符串数组。数组每项必须是非空字符串，不得混入数字、对象或 null；没有内容时使用字符串“无”，不得输出空数组。
-禁止输出 relationships、schemaVersion、角色图谱 Markdown、解释、代码围栏或思考过程。
+禁止输出 relationships、schemaVersion、角色图谱 Markdown。请通过提交工具输出结构化 entries 列表。

@@ -50,7 +50,7 @@ describe('RecoveryCandidateRepository project-local seam', () => {
       chapterTitle: source.title,
       source,
       sourceDraft: null,
-      visibleText: 'reasoning: private chain</think>林岚推开驾驶室的门。',
+      visibleText: '林岚推开驾驶室的门。',
       failureCode: 'PROVIDER_REQUEST_FAILED',
       failureReason: 'connection reset',
     })
@@ -87,21 +87,22 @@ describe('RecoveryCandidateRepository project-local seam', () => {
     )).resolves.toEqual([])
   })
 
-  it('drops every prefix before an orphan thinking close tag', () => {
+  it('preserves visible prose verbatim as provided by the application layer', () => {
+    const visibleText = '林岚推开驾驶室的门，风沙吹拂过车窗。'
     const recorded = RecoveryCandidateRepository.record({
-      runId: 'run-hidden-prefix',
+      runId: 'run-verbatim',
       stepId: 'generate-draft',
       projectId: 'project-recovery',
       chapterNumber: 3,
       chapterTitle: source.title,
       source,
       sourceDraft: null,
-      visibleText: 'Let me inspect the scene constraints first.</think>林岚推开驾驶室的门。',
+      visibleText,
       failureCode: 'PROVIDER_REQUEST_FAILED',
       failureReason: 'connection reset',
     })
 
-    expect(recorded.visibleText).toBe('林岚推开驾驶室的门。')
+    expect(recorded.visibleText).toBe(visibleText)
   })
 
   it('updates a pending candidate durably without creating formal project facts', async () => {

@@ -8,5 +8,5 @@ The previous structured output stopped at the length limit. Complete the task ag
 
 [Requirements]
 - Rebuild and return the complete JSON from the beginning; do not return only a suffix.
-- Output only complete JSON accepted by JSON.parse, with no Markdown, explanation, or reasoning.
+- Output only complete JSON accepted by JSON.parse, with no Markdown or explanation.
 - Use the visible prior output only as evidence; the original task remains authoritative, and every required field and array must be complete.

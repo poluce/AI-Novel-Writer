@@ -10,6 +10,9 @@ import { globalExecutionEnv, projectExecutionEnv } from './execution-tools'
 import { projectSkillsRoot, userSkillsRoot } from '../services/writing-skill-catalog'
 import { createRendererActionDispatcher } from './renderer-action-dispatch'
 import type { AgentEditorSnapshot, RendererActionResult } from '../../src/shared/agent-events'
+import {
+  acceptedAssistantThinkingLevel,
+} from '../../src/shared/agent-runtime'
 import { isAgentSkillCatalog, type AgentSkillCatalogEntry } from '../../src/shared/agent-skills'
 import { isAgentScope, type AgentScope } from '../../src/shared/agent-scope'
 import type { AgentPromptHistoryTurn } from '../../src/shared/agent-conversation-archive'
@@ -218,6 +221,7 @@ export function registerAgentController(): void {
     history?: AgentPromptHistoryTurn[],
     skills?: unknown,
     scope?: unknown,
+    thinkingLevel?: unknown,
   ) => {
     return manager.prompt(
       conversationId,
@@ -227,6 +231,7 @@ export function registerAgentController(): void {
       history,
       acceptedSkillCatalog(skills),
       acceptedScope(scope),
+      acceptedAssistantThinkingLevel(thinkingLevel),
     )
   })
 

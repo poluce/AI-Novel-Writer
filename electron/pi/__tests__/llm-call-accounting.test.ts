@@ -38,6 +38,23 @@ describe('recordAgentCall', () => {
     expect(record.durationMs).toBeGreaterThanOrEqual(0)
   })
 
+  it('calculates total tokens via Pi calculateContextTokens when totalTokens is omitted or 0', () => {
+    recordAgentCall(identity, {
+      input: 300,
+      output: 100,
+      cacheRead: 50,
+      cacheWrite: 20,
+      totalTokens: 0,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    }, Date.now() - 10, true)
+
+    expect(logCall).toHaveBeenCalledWith(expect.objectContaining({
+      promptTokens: 300,
+      completionTokens: 100,
+      totalTokens: 470,
+    }))
+  })
+
   it('keeps null token columns when the provider reported no usage', () => {
     recordAgentCall(identity, undefined, Date.now(), true)
 

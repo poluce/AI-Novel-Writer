@@ -16,7 +16,12 @@ import { useProjectStore } from './project-store'
 
 /** 一次性生成的回调（正文不再流式：主进程只在完成时回一次） */
 interface StreamCallbacks {
-  onDone?: (fullText: string, usage: TokenUsage | undefined, finishReason: LLMFinishReason) => void
+  onDone?: (
+    fullText: string,
+    usage: TokenUsage | undefined,
+    finishReason: LLMFinishReason,
+    artifact?: Record<string, unknown>,
+  ) => void
   onError?: (error: string) => void
 }
 
@@ -169,7 +174,11 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
     // 注册完成/失败事件监听
     const unsubDone = ipc.on('llm:stream-done', (data) => {
       if (data.requestId === requestId) {
-        callbacks.onDone?.(data.fullText, data.usage, data.finishReason ?? 'unknown')
+        if (data.artifact !== undefined) {
+          callbacks.onDone?.(data.fullText, data.usage, data.finishReason ?? 'unknown', data.artifact)
+        } else {
+          callbacks.onDone?.(data.fullText, data.usage, data.finishReason ?? 'unknown')
+        }
         cleanup()
       }
     })

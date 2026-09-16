@@ -9,16 +9,11 @@ import { Decoration } from '@codemirror/view'
 import { openSearchPanel, closeSearchPanel, search } from '@codemirror/search'
 import { Sparkles, Bold, Check, Pencil, MessageSquarePlus } from 'lucide-react'
 import { cn } from '../../lib/utils'
-import { createGenerationRuntime } from '../../services/generation/generation-runtime'
 import type { GenerationReasoningStage } from '../../shared/reasoning-types'
 import { countDraftUnits } from '../../shared/draft-units'
 import { useLocaleStore } from '../../stores/locale-store'
-import { logFailure } from '../../shared/fail-log'
-import { useProjectStore } from '../../stores/project-store'
-import { getActiveProjectSessionContext } from '../../shared/project-session-context'
-import { resolveWritingLanguage } from '../../shared/writing-language'
-import { promptLanguageText } from '../../services/prompt-language'
-import { composePromptSystemRole, renderPrompt, resolvePromptTemplate } from '../../services/prompt-templates'
+import { useAgentStore } from '../../stores/agent-store'
+import { useLayoutStore } from '../../stores/layout-store'
 import {
   MAX_DRAFT_ANNOTATIONS,
   MAX_DRAFT_ANNOTATION_NOTE,
@@ -60,13 +55,6 @@ const AI_ACTIONS = [
   { key: 'continue', label: ['续写', 'Continue'], color: 'text-[var(--color-category-review-text)]', prompt: ['根据现有因果和人物动机，自然续写接下来的情节。', 'Continue naturally from the established causality and character motivation.'], reasoningStage: 'drafting' },
   { key: 'dialogue', label: ['对话', 'Dialogue'], color: 'text-[var(--color-success-text)]', prompt: ['将这部分改写为有区分度、能推动冲突的自然对话。', 'Rewrite this passage as distinct, natural dialogue that advances the conflict.'], reasoningStage: 'drafting' },
 ] satisfies readonly EditorAIAction[]
-
-const EDITOR_AI_GENERATION_BUDGET = Object.freeze({
-  maxAttempts: 1,
-  maxRequestedOutputTokens: 4096,
-  maxRequestedOutputTokensPerAttempt: 4096,
-  deadlineMs: 120_000,
-})
 
 function annotationDecorations(annotations: readonly DraftAnnotation[], docLength = Number.POSITIVE_INFINITY) {
   return Decoration.set(
@@ -428,73 +416,33 @@ export default function CodeMirrorEditor({
     applySelectionRange(null)
   }
 
-  // AI 菜单：一次性 submit_text，完成后才展示结果
+  // AI 菜单：统一作为带选区引用的 Agent Quick Task 派发
   const handleAIAction = async (action: EditorAIAction) => {
-    let runtime: Awaited<ReturnType<typeof createGenerationRuntime>> | null = null
-    let requestSequence: number | null = null
-    try {
-      if (!selectionRange || !editorRef.current?.view) return
-      const view = editorRef.current.view
-      const selectedText = view.state.sliceDoc(selectionRange.from, selectionRange.to)
-      requestSequence = ++aiRequestSequenceRef.current
-      aiTargetRef.current = {
-        requestSequence,
-        from: selectionRange.from,
-        to: selectionRange.to,
-        selectedText,
-        documentText: view.state.doc.toString(),
-      }
-      const writingLanguage = resolveWritingLanguage(
-        useProjectStore.getState().currentProject?.novelConfig.writingLanguage,
-      )
-      const template = await resolvePromptTemplate(
-        'edit_selected_text',
-        getActiveProjectSessionContext() ?? undefined,
-        writingLanguage,
-      )
-      if (!template) throw new Error(uiText('未找到编辑器提示词', 'Editor prompt is unavailable'))
+    if (!selectionRange || !editorRef.current?.view) return
+    const view = editorRef.current.view
+    const selectedText = view.state.sliceDoc(selectionRange.from, selectionRange.to)
+    if (!selectedText.trim()) return
 
-      setActiveAIAction(uiText(...action.label))
-      setAiResult('')
-      setAiError(null)
-
-      runtime = await createGenerationRuntime({ budget: EDITOR_AI_GENERATION_BUDGET })
-      const outcome = await runtime.execute(({ session }) => session.complete({
-        purpose: `editor-ai-${action.key}`,
-        reasoningStage: action.reasoningStage,
-        output: 'visible-text',
-        submitTool: 'submit_text',
-        messages: [
-          { role: 'system', content: composePromptSystemRole(template, writingLanguage) },
-          { role: 'user', content: renderPrompt(template, {
-            edit_instruction: promptLanguageText(writingLanguage, ...action.prompt),
-            selected_text: selectedText,
-          }, writingLanguage) },
-        ],
-      }))
-      if (outcome.status !== 'completed' || outcome.finishReason !== 'stop') {
-        logFailure('EditorAI', 'inline generation did not complete', undefined, {
-          status: outcome.status,
-          finishReason: outcome.finishReason,
-          action: action.key,
-        })
-        if (requestSequence !== aiRequestSequenceRef.current) return
-        setAiResult('')
-        setAiError(uiText('生成未完整完成，结果不可应用', 'Generation did not complete; the result cannot be applied.'))
-        return
-      }
-      if (requestSequence !== aiRequestSequenceRef.current) return
-      setAiResult(outcome.content)
-    } catch (e) {
-      logFailure('EditorAI', 'inline generation threw', e, { action: action.key })
-      if (requestSequence !== aiRequestSequenceRef.current) return
-      setAiResult('')
-      setAiError(uiText('生成失败，结果不可应用', 'Generation failed; the result cannot be applied.'))
-    } finally {
-      await runtime?.close().catch((closeError) => {
-        logFailure('EditorAI', 'generation runtime close failed', closeError)
-      })
+    const fromLine = view.state.doc.lineAt(selectionRange.from).number
+    const toLine = view.state.doc.lineAt(Math.max(selectionRange.to - 1, selectionRange.from)).number
+    const citation: DraftPassageCitation = {
+      id: crypto.randomUUID(),
+      chapterNumber,
+      draftId,
+      version: draftVersion,
+      fromLine,
+      toLine,
+      quote: selectedText.slice(0, MAX_DRAFT_EXCERPT_CHARS),
     }
+
+    useAgentStore.getState().addComposerCitation(citation)
+    useLayoutStore.getState().openRightPanel('agent')
+    setActiveAIAction(uiText(...action.label))
+    const promptText = uiText(...action.prompt)
+    void useAgentStore.getState().sendMessage(promptText)
+
+    setBubbleOpen(false)
+    applySelectionRange(null)
   }
 
   const handleAcceptAI = () => {

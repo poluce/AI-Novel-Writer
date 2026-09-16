@@ -60,6 +60,8 @@ async function buildSession(options: {
   contextWindow?: number
   withExecutionEnv?: boolean
   executionEnv?: ExecutionEnv
+  thinkingLevel?: 'off' | 'low' | 'medium' | 'high'
+  applySamplingThinking?: boolean
 } = {}): Promise<Harness> {
   const faux = fauxProvider()
   const models = createModels()
@@ -100,6 +102,10 @@ async function buildSession(options: {
     tools: (options.tools ?? [addTool]) as never,
     ...(options.confirmationToolNames ? { confirmationToolNames: options.confirmationToolNames } : {}),
     ...(options.compactionSettings ? { compactionSettings: options.compactionSettings } : {}),
+    ...(options.thinkingLevel ? { thinkingLevel: options.thinkingLevel } : {}),
+    ...(options.applySamplingThinking === undefined
+      ? {}
+      : { applySamplingThinking: options.applySamplingThinking }),
     language: 'zh-CN',
     ...(options.executionEnv
       ? { executionEnv: options.executionEnv }
@@ -229,11 +235,13 @@ describe('AgentSession', () => {
     await session.close()
 
     expect(captured).toHaveLength(2)
-    expect(captured[0].systemPrompt).toBe('You are a calculator.')
+    expect(captured[0].systemPrompt).toContain('You are a calculator.')
+    expect(captured[0].systemPrompt).toContain('测试书')
     // 第二轮能看到第一轮的历史（由 harness 从会话条目恢复）。
     expect(captured[1].messages.length).toBeGreaterThan(captured[0].messages.length)
-    const l1Text = JSON.stringify(captured[0].messages)
-    expect(l1Text).toContain('测试书')
+    expect(captured[0].messages).toHaveLength(1)
+    expect(captured[0].messages[0].role).toBe('user')
+    expect(JSON.stringify(captured[0].messages[0].content)).toContain('第一问')
   })
 
   it('mounts the Pi harness execution tools only when an environment is given', async () => {
@@ -292,6 +300,24 @@ describe('AgentSession', () => {
 
     expect(events.some(event => event.type === 'error')).toBe(false)
     expect(events.some(event => event.type === 'done')).toBe(true)
+  })
+
+  it('records the requested thinking level in the lane configuration', async () => {
+    // 用户在输入框选的思考等级要真的落到 harness 上：lane 配置是它每轮生成
+    // 前读取的依据，也是"这一轮到底用哪一档"的唯一持久痕迹。
+    const { session, harnessSession, events } = await buildSession({
+      thinkingLevel: 'medium',
+      applySamplingThinking: false,
+      responses: [fauxAssistantMessage('你好')],
+    })
+
+    await session.prompt('你好')
+    // 关会话会连内存存档一起关掉，配置要在关之前读。
+    const stored = await harnessSession.getValue(laneConfig(AGENT_LANE_NAME), BACKGROUND_CONTEXT)
+    await session.close()
+
+    expect((stored?.value as { thinkingLevel?: string } | undefined)?.thinkingLevel).toBe('medium')
+    expect(events.some(event => event.type === 'error')).toBe(false)
   })
 
   it('reconciles a persisted lane configuration with the current model and tools', async () => {

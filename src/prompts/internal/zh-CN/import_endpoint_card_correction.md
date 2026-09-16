@@ -1,6 +1,6 @@
 【导入推演受限补卡校正】
 上一轮完整 JSON 已可解析，但 characterCards.relationships.target 引用了 characterCards 中不存在的角色名。
-只输出一个完整 JSON 对象，不要 Markdown、解释或思考过程。
+只输出一个完整 JSON 对象，不要 Markdown 或解释。
 只允许输出严格 delta，顶层必须且只能包含 characterCards。
 characterCards 必须新增且只新增这些缺失角色 name：{{unresolved_targets}}
 不得回传 novelConfig、architectureFiles 或任何原有角色卡；不得删除、重排、改名或改写任何原角色。

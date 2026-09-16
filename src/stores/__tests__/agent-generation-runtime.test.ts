@@ -56,7 +56,23 @@ describe('Agent IPC bridge', () => {
       expect.any(Array),
       // 会话属于哪个助手：项目助手 / 界面助手。
       'project',
+      // 没选思考等级就不传，主进程按 Pi 默认的 off 处理。
+      undefined,
     )
+  })
+
+  it('sends the conversation thinking level and keeps it when the model changes', async () => {
+    ipcInvoke.mockResolvedValue({ success: true })
+    useAgentStore.getState().createConversation()
+    useAgentStore.getState().setThinkingLevel('high')
+    useAgentStore.getState().setModelId('model-b')
+
+    await useAgentStore.getState().sendMessage('写一段')
+
+    const sent = ipcInvoke.mock.calls.find(call => call[0] === 'agent:prompt')
+    expect(sent?.[3]).toBe('model-b')
+    // 换渠道不该丢掉用户选的思考等级。
+    expect(sent?.[8]).toBe('high')
   })
 
   it('prepends composer draft citations to the outgoing user message', async () => {
@@ -107,6 +123,7 @@ describe('Agent IPC bridge', () => {
       [],
       expect.any(Array),
       'project',
+      undefined,
     )
   })
 

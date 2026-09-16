@@ -1,3 +1,10 @@
+/**
+ * @deprecated 遗留分段断句续写接龙垫片。
+ * 在现代 Pi Agent 与长输出模型（单次输出 8K~64K tokens）架构下，章节正文与结构化数据
+ * 已全面收归 Submit Tool Calling 单次完整产出，长篇推进转由 Agent 循环自主调度。
+ * 本模块的字符重叠消重与片段拼接逻辑仅作为旧工作流兼容适配保留。
+ */
+
 import type { LLMFinishReason } from '../../shared/ipc-channels'
 import type { WritingLanguage } from '../../shared/writing-language'
 import { localize, type Locale } from '../../i18n/core'
@@ -25,6 +32,7 @@ export type BoundedCompletionMode = 'append-visible-text' | 'replace-structured-
 
 export interface BoundedCompletion {
   content: string
+  artifact?: Record<string, unknown>
   finishReason: LLMFinishReason
 }
 
@@ -141,9 +149,6 @@ function assertMechanicallyCompleteVisibleText(content: string, uiLocale: Locale
   }
   if (/(?:^|\n)\s*```/u.test(trimmed)) {
     throw mechanicalCompletionError(uiLocale, '代码围栏', 'a code fence')
-  }
-  if (/<\/?\s*think(?:\s|>|$)/iu.test(trimmed)) {
-    throw mechanicalCompletionError(uiLocale, 'think 标签残片', 'a leftover think tag')
   }
 
   const paragraphs = trimmed
@@ -447,12 +452,15 @@ function buildContinuationPrompt(
  * A `stop` completion is the only successful terminal state. Structured
  * outputs replace a partial response, while visible prose is overlap-merged.
  */
-export async function completeBoundedCompletion(request: BoundedCompletionRequest): Promise<string> {
+export async function completeBoundedCompletionResult(
+  request: BoundedCompletionRequest,
+): Promise<{ content: string; artifact?: Record<string, unknown> }> {
   const uiLocale = request.uiLocale ?? 'zh-CN'
   assertValidContinuationLimit(request.mode, request.maxContinuations, uiLocale)
   const redact = request.redactVisibleText ?? redactVisibleCompletionText
   const merge = request.mergeVisibleText ?? appendVisibleTextContinuation
   let content = redact(request.initial.content)
+  let artifact = request.initial.artifact
   let finishReason = request.initial.finishReason
   let continuationCount = 0
 
@@ -494,6 +502,7 @@ export async function completeBoundedCompletion(request: BoundedCompletionReques
     const nextVisible = redact(next.content)
     if (request.mode === 'replace-structured-output') {
       content = nextVisible
+      if (next.artifact) artifact = next.artifact
     } else {
       const merged = merge(content, nextVisible)
       if (visibleProseUnitCount(merged) <= visibleProseUnitCount(content)) {
@@ -517,5 +526,10 @@ export async function completeBoundedCompletion(request: BoundedCompletionReques
       throw error
     }
   }
-  return content
+  return { content, artifact }
+}
+
+export async function completeBoundedCompletion(request: BoundedCompletionRequest): Promise<string> {
+  const result = await completeBoundedCompletionResult(request)
+  return result.content
 }

@@ -14,17 +14,19 @@ const DraftType = Type.Union([
 ])
 
 const Schema = Type.Object({
-  chapter_number: Type.Number(),
+  chapter_number: Type.Number({ description: 'Chapter number to read' }),
   draft_type: Type.Optional(DraftType),
+  offset: Type.Optional(Type.Number({ description: '1-based line number to start reading from' })),
+  limit: Type.Optional(Type.Number({ description: 'Maximum number of lines to read' })),
 })
 
 export function createReadDraftsTool(
   language: WritingLanguage,
-): AgentTool<typeof Schema, { chapterNumber: number; version?: number }> {
+): AgentTool<typeof Schema, { chapterNumber: number; version?: number; totalLines?: number; offset?: number; limit?: number }> {
   const text = (zhCN: string, enUS: string) => writingLanguageText(language, zhCN, enUS)
   const description = language === 'en-US'
-    ? 'Read a chapter draft, including its initial or revised versions.'
-    : '读取指定章节的草稿内容。可以获取初稿、修订稿等不同版本。'
+    ? 'Read a chapter draft, including its initial or revised versions, with optional line-level pagination.'
+    : '读取指定章节的草稿内容。支持初稿、修订稿等版本，以及基于行数的分页读取。'
 
   return {
     name: 'read_drafts',
@@ -77,12 +79,29 @@ export function createReadDraftsTool(
         ))
       }
 
+      const allLines = fullDraft.content.split('\n')
+      const totalLines = allLines.length
+      const offset = Math.max(1, params.offset ?? 1)
+      const limit = params.limit && params.limit > 0 ? params.limit : totalLines
+      const startIndex = offset - 1
+      const selectedLines = allLines.slice(startIndex, startIndex + limit)
+      const isPaged = offset > 1 || limit < totalLines
+      const pagedContent = selectedLines.join('\n')
+
+      const header = text(
+        `📝 第 ${chapterNum} 章草稿（${targetName}）${isPaged ? ` [第 ${offset}–${Math.min(startIndex + limit, totalLines)} 行 / 共 ${totalLines} 行]` : ''}`,
+        `📝 Chapter ${chapterNum} draft (${targetName})${isPaged ? ` [Lines ${offset}-${Math.min(startIndex + limit, totalLines)} of ${totalLines}]` : ''}`,
+      )
+
       return {
-        content: [{ type: 'text', text: text(
-          `📝 第 ${chapterNum} 章草稿（${targetName}）\n\n${fullDraft.content}`,
-          `📝 Chapter ${chapterNum} draft (${targetName})\n\n${fullDraft.content}`,
-        ) }],
-        details: { chapterNumber: chapterNum, version: fullDraft.version },
+        content: [{ type: 'text', text: `${header}\n\n${pagedContent}` }],
+        details: {
+          chapterNumber: chapterNum,
+          version: fullDraft.version,
+          totalLines,
+          offset,
+          limit,
+        },
       }
     },
   }

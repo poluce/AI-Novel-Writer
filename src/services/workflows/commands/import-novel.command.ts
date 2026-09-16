@@ -414,9 +414,9 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
       || await resolvePromptTemplate('infer_novel_config', projectSession, writingLanguage)
     if (!template) throw new Error(text('未找到推演 Prompt 模板', 'The import-inference prompt template was not found.'))
 
-    const firstChapter = chapters[0]?.content?.slice(0, 3000)
+    const firstChapter = chapters[0]?.content?.slice(0, 15_000)
       || promptLanguageText(writingLanguage, '（第一章内容不可用）', '(opening chapter unavailable)')
-    const latestChapter = chapters[chapters.length - 1]?.content?.slice(0, 3000)
+    const latestChapter = chapters[chapters.length - 1]?.content?.slice(0, 15_000)
       || promptLanguageText(writingLanguage, '（最新章节不可用）', '(latest chapter unavailable)')
     const inferenceContract = importInferenceJsonContract(writingLanguage)
 
@@ -711,8 +711,8 @@ export class InferBlueprintsPerChapterCommand extends BaseWorkflowCommand<void> 
         activeChapterNumbers = items.map(item => item.number)
         const source = items.map(chapter => promptLanguageText(
           writingLanguage,
-          `【第${chapter.number}章 ${chapter.title || '无标题'}】\n${chapter.content.slice(0, 6000)}`,
-          `[Chapter ${chapter.number}: ${chapter.title || 'Untitled'}]\n${chapter.content.slice(0, 6000)}`,
+          `【第${chapter.number}章 ${chapter.title || '无标题'}】\n${chapter.content.slice(0, 20_000)}`,
+          `[Chapter ${chapter.number}: ${chapter.title || 'Untitled'}]\n${chapter.content.slice(0, 20_000)}`,
         )).join('\n\n')
         const prior = validatedPrefix.slice(-10)
           .map(item => promptLanguageText(

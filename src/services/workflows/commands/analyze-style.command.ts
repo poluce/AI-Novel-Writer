@@ -72,7 +72,7 @@ export class AnalyzeWritingStyleCommand extends BaseWorkflowCommand<string> {
           if (meta) {
             const full = await ipc.invokeWithProjectSession(projectSession, 'db:draft-get-full', meta.id, context.projectPath)
             if (full?.content?.trim()) {
-              sampleTexts.push(full.content.trim().slice(0, 2000))
+              sampleTexts.push(full.content.trim().slice(0, 10_000))
             }
           }
         }
@@ -111,7 +111,7 @@ export class AnalyzeWritingStyleCommand extends BaseWorkflowCommand<string> {
     )
     this.assertNotCancelled(context)
 
-    const cleanResult = this.stripThinkingTags(result).trim()
+    const cleanResult = result.trim()
     if (!cleanResult) {
       callbacks.log(text('文风分析返回空结果', 'Writing-style analysis returned an empty result.'))
       return ''
@@ -155,11 +155,11 @@ export class AnalyzeWritingStyleCommand extends BaseWorkflowCommand<string> {
   private collectProvidedSamples(writingLanguage: WritingLanguage): string[] {
     const samples: string[] = []
     if (this.options.sampleText?.trim()) {
-      samples.push(this.options.sampleText.trim().slice(0, 4000))
+      samples.push(this.options.sampleText.trim().slice(0, 20_000))
     }
     if (this.options.sampleTexts) {
       for (const sample of this.options.sampleTexts) {
-        if (sample.trim()) samples.push(sample.trim().slice(0, 4000))
+        if (sample.trim()) samples.push(sample.trim().slice(0, 20_000))
       }
     }
     if (this.options.chapters) {
@@ -168,8 +168,8 @@ export class AnalyzeWritingStyleCommand extends BaseWorkflowCommand<string> {
         if (chapter.content.trim()) {
           samples.push(promptLanguageText(
             writingLanguage,
-            `第${chapter.number}章 ${chapter.title}\n${chapter.content.trim().slice(0, 2000)}`,
-            `Chapter ${chapter.number}: ${chapter.title}\n${chapter.content.trim().slice(0, 2000)}`,
+            `第${chapter.number}章 ${chapter.title}\n${chapter.content.trim().slice(0, 10_000)}`,
+            `Chapter ${chapter.number}: ${chapter.title}\n${chapter.content.trim().slice(0, 10_000)}`,
           ))
         }
       }

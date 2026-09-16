@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import type { ModelProfile } from '../../shared/ipc-channels'
+import type { ModelCapabilities } from '../../shared/provider-presets'
 import { projectSessionContextFromProject } from '../../shared/project-session-context'
 import { resolveReasoningPolicy } from '../../shared/reasoning-policy'
 import type {
@@ -130,23 +131,48 @@ export function ModelReasoningOverrideSettings({
         </NativeSelect>
         <p className="mt-1 text-[0.7rem] text-[var(--color-text-muted)]">
           {text(
-            '这是请求偏好，不是跨服务商的统一质量刻度；实际值取决于已验证的模型映射。',
-            'This is a request preference, not a universal quality scale; the effective value depends on a verified model mapping.',
+            '设置该模型的思考强度偏好，各创作阶段将按此策略下发给底层推理模型。',
+            'Configure the reasoning effort preference for this model. Creative stages dispatch this setting to the underlying model.',
           )}
         </p>
       </div>
+
+      {model.capabilities?.reasoning && (
+        <div>
+          <Label>{text('推理协议适配器', 'Reasoning protocol adapter')}</Label>
+          <NativeSelect
+            value={model.capabilities.reasoningAdapter ?? 'auto'}
+            onChange={event => onModelChange({
+              ...model,
+              capabilities: {
+                ...model.capabilities!,
+                reasoningAdapter: event.target.value === 'auto'
+                  ? undefined
+                  : event.target.value as ModelCapabilities['reasoningAdapter'],
+              },
+            })}
+            aria-label={text('推理协议适配器', 'Reasoning protocol adapter')}
+          >
+            <option value="auto">{text('自动（预设匹配/原生直通）', 'Auto (Preset / Native passthrough)')}</option>
+            <option value="openai-reasoning-effort">{text('OpenAI Reasoning Effort (reasoning_effort)', 'OpenAI Reasoning Effort (reasoning_effort)')}</option>
+            <option value="deepseek-v4-thinking">{text('DeepSeek Thinking (thinking.type)', 'DeepSeek Thinking (thinking.type)')}</option>
+            <option value="gemini-thinking-budget">{text('Gemini Thinking Budget (thinkingConfig)', 'Gemini Thinking Budget (thinkingConfig)')}</option>
+            <option value="none">{text('原生直通（不发送私有协议字段）', 'Native passthrough (Omit vendor fields)')}</option>
+          </NativeSelect>
+          <p className="mt-1 text-[0.7rem] text-[var(--color-text-muted)]">
+            {text(
+              '指定推理参数在 HTTP 请求中的序列化格式，防止中转代理网关因未知私有字段返回 400。',
+              'Specify how reasoning parameters are serialized to avoid 400 errors from proxy gateways.',
+            )}
+          </p>
+        </div>
+      )}
 
       <div className="space-y-1.5 rounded-md bg-[var(--color-bg)] p-2" aria-label={text('实际生效推理强度', 'Effective reasoning effort')}>
         {outcome(text('章节起草', 'Chapter drafting'), drafting)}
         {outcome(text('故事规划', 'Story planning'), planning)}
         {outcome(text('审稿与修订', 'Review and revision'), review)}
       </div>
-      <p className="text-[0.7rem] text-[var(--color-text-muted)]">
-        {text(
-          '原始推理不会作为章节正文或写入小说长期记忆。',
-          'Raw reasoning is not treated as chapter prose or persisted into long-term novel memory.',
-        )}
-      </p>
     </div>
   )
 }

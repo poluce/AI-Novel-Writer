@@ -43,6 +43,7 @@ function toPersistedConversations(conversations: readonly AgentConversation[]): 
     updatedAt: conversation.updatedAt,
     mode: conversation.mode,
     modelId: conversation.modelId,
+    thinkingLevel: conversation.thinkingLevel,
     messages: conversation.messages
       .filter(message => !(message.streaming && !message.content.trim()))
       .map(message => ({

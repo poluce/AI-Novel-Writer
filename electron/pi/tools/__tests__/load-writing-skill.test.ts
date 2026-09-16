@@ -68,7 +68,10 @@ describe('load_writing_skill', () => {
     const result = await tool.execute('c1', { name: 'scene-craft' })
     const first = result.content[0]
     expect(first.type).toBe('text')
-    if (first.type === 'text') expect(first.text).toContain('有代价的选择')
+    if (first.type === 'text') {
+      expect(first.text).toContain('有代价的选择')
+      expect(first.text).toContain('<skill name="scene-craft"')
+    }
     expect(result.details).toMatchObject({ name: 'scene-craft', source: 'user' })
   })
 

@@ -22,7 +22,6 @@ import type {
   BlueprintRangeCommitMode,
   BlueprintRangeCommitReceipt,
 } from '../../../electron/repositories/blueprint-repository'
-import { stripThinkingTags } from './workflow-utils'
 import { requireWorkflowProjectSession } from './workflow-project-session'
 
 // ==========================================
@@ -54,17 +53,15 @@ export interface DirectoryWorkflowProjectSnapshot {
 // ==========================================
 
 function extractJsonPayload(content: string): string | null {
-  const cleanContent = stripThinkingTags(content)
-  const jsonStr = cleanContent.replace(/```json?\n?/gi, '').replace(/```\n?/g, '').trim()
-  const firstBrace = jsonStr.indexOf('{')
-  const firstBracket = jsonStr.indexOf('[')
-  const lastBrace = jsonStr.lastIndexOf('}')
-  const lastBracket = jsonStr.lastIndexOf(']')
-  if (firstBrace === -1 && firstBracket === -1) return null
-  if (firstBracket !== -1 && (firstBrace === -1 || firstBracket < firstBrace)) {
-    return lastBracket === -1 ? null : jsonStr.substring(firstBracket, lastBracket + 1)
+  const trimmed = content.trim()
+  const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/iu.exec(trimmed)
+  const candidate = fenced ? fenced[1].trim() : trimmed
+  try {
+    JSON.parse(candidate)
+    return candidate
+  } catch {
+    return null
   }
-  return lastBrace === -1 ? null : jsonStr.substring(firstBrace, lastBrace + 1)
 }
 
 function persistedBlueprint(item: BlueprintSemanticItem): ChapterBlueprint {
@@ -112,7 +109,7 @@ export function parseTextBlueprints(content: string, startNum: number, endNum: n
 export function parseTextBlueprintsStrict(content: string, startNum: number, endNum: number): ChapterBlueprint[] {
   try {
     return parseBlueprintSemanticResponseText(
-      stripThinkingTags(content),
+      content,
       chapterRange(startNum, endNum),
     ).map(persistedBlueprint)
   } catch (error) {

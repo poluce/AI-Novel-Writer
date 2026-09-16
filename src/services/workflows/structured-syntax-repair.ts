@@ -81,56 +81,23 @@ interface JsonLexicalEvidence {
 function lexicalEvidence(source: string): JsonLexicalEvidence | undefined {
   const scalars: string[] = []
   let containers = ''
-  let index = 0
-  while (index < source.length) {
-    const character = source[index]
-    if (/\s/u.test(character) || character === ',' || character === ':') {
-      index += 1
-      continue
-    }
-    if ('{}[]'.includes(character)) {
-      containers += character
-      index += 1
-      continue
-    }
-    if (character === '"') {
-      const start = index
-      index += 1
-      let escaped = false
-      while (index < source.length) {
-        const current = source[index]
-        if (!escaped && current === '"') {
-          index += 1
-          const raw = source.slice(start, index)
-          try {
-            scalars.push(`s:${JSON.stringify(JSON.parse(raw))}`)
-          } catch {
-            return undefined
-          }
-          break
-        }
-        if (!escaped && current.charCodeAt(0) < 0x20) return undefined
-        if (escaped) escaped = false
-        else if (current === '\\') escaped = true
-        index += 1
+  // 规范词法模式：匹配双引号字符串、数字字面量、布尔/null字面量以及容器括号
+  const tokenPattern = /"((?:[^"\\]|\\.)*)"|(-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?)|(true|false|null)|([{}[\]])/gu
+  let match: RegExpExecArray | null
+  while ((match = tokenPattern.exec(source)) !== null) {
+    if (match[1] !== undefined) {
+      try {
+        scalars.push(`s:${JSON.stringify(JSON.parse(match[0]))}`)
+      } catch {
+        return undefined
       }
-      if (index > source.length || source[index - 1] !== '"') return undefined
-      continue
+    } else if (match[2] !== undefined) {
+      scalars.push(`n:${match[2]}`)
+    } else if (match[3] !== undefined) {
+      scalars.push(`l:${match[3]}`)
+    } else if (match[4] !== undefined) {
+      containers += match[4]
     }
-    const rest = source.slice(index)
-    const literal = /^(?:true|false|null)/u.exec(rest)?.[0]
-    if (literal) {
-      scalars.push(`l:${literal}`)
-      index += literal.length
-      continue
-    }
-    const number = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/u.exec(rest)?.[0]
-    if (number) {
-      scalars.push(`n:${number}`)
-      index += number.length
-      continue
-    }
-    return undefined
   }
   return { scalars, containers }
 }

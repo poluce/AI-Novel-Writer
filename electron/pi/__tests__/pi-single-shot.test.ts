@@ -129,4 +129,41 @@ describe('streamSingleShot', () => {
     await expect(streamSingleShot({} as never, 'sys', 'user', submitDraftTool(), { signal }))
       .rejects.toBeInstanceOf(SingleShotAbortedError)
   })
+
+  it('recovers artifact from text via Pi parseJsonWithRepair when model outputs JSON text without tool call', async () => {
+    const stream = (async function* () {
+      yield {
+        type: 'text_delta',
+        contentIndex: 0,
+        delta: '```json\n{\n  "title": "测试标题",\n  "body": "测试正文多行\\n第二行"\n}\n```',
+        partial: {},
+      }
+      yield { type: 'done', reason: 'stop', message: {} }
+    })()
+    mockStream(stream)
+
+    const result = await streamSingleShot({} as never, 'sys', 'user', submitDraftTool())
+
+    expect(result.artifact).toEqual({
+      title: '测试标题',
+      body: '测试正文多行\n第二行',
+    })
+    expect(result.finishReason).toBe('stop')
+  })
+
+  it('detects context overflow error via Pi isContextOverflow', async () => {
+    const stream = (async function* () {
+      yield {
+        type: 'error',
+        reason: 'error',
+        error: {
+          errorMessage: 'Your input exceeds the context window of this model',
+        },
+      }
+    })()
+    mockStream(stream)
+
+    await expect(streamSingleShot({} as never, 'sys', 'user', submitDraftTool()))
+      .rejects.toThrow(/Context overflow/)
+  })
 })

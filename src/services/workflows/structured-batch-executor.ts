@@ -269,7 +269,7 @@ export function createStructuredBatchExecutor<TInput, TOutput>(dependencies: {
           return
         }
 
-        let candidateContent = outcome.content
+        let candidateContent = outcome.artifact ? JSON.stringify(outcome.artifact) : outcome.content
         let syntaxRepairApplied = false
         if (isRepairableDirectJsonSyntaxFailure(candidateContent)) {
           const originalContract = task.messages

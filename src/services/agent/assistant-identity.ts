@@ -14,8 +14,8 @@ export const ASSISTANT_WRITING_IDENTITY_KEY = 'assistant_writing_identity'
 export function appShellModeInstruction(language: WritingLanguage): string {
   return writingLanguageText(
     language,
-    '每轮用户消息前会附带当前应用状态（是否打开小说、侧栏/对话框、编辑器与工作流）。请以该状态为准；未打开项目时不要假装能读写该书。不要编造项目事实。',
-    'Each user turn is preceded by the current app state (whether a novel is open, which panes and dialogs are active, editor tabs, and workflows). Treat that snapshot as authoritative. If no project is open, do not pretend you can read or write the book. Do not invent project facts.',
+    '系统上下文包含当前应用状态（是否打开小说、侧栏/对话框、编辑器与工作流）。请以该状态为准；未打开项目时不要假装能读写该书。不要编造项目事实。',
+    'The system context contains the current app state (whether a novel is open, which panes and dialogs are active, editor tabs, and workflows). Treat that snapshot as authoritative. If no project is open, do not pretend you can read or write the book. Do not invent project facts.',
   )
 }
 

@@ -12,16 +12,24 @@ const h = vi.hoisted(() => {
     setSystemPrompt: vi.fn(),
     confirm: vi.fn(),
     abort: vi.fn(),
-    close: vi.fn(async () => {}),
+    close: vi.fn(async () => true),
+    isBusy: vi.fn(() => h.busy),
     transcriptLength: vi.fn(async () => h.transcriptLength),
     seedHistory: vi.fn(async () => {}),
   })
-  return { sessions: [] as Array<Record<string, ReturnType<typeof vi.fn>>>, transcriptLength: 0, makeSession }
+  return {
+    sessions: [] as Array<Record<string, ReturnType<typeof vi.fn>>>,
+    transcriptLength: 0,
+    busy: false,
+    createdOptions: [] as Array<Record<string, unknown>>,
+    makeSession,
+  }
 })
 
 vi.mock('../agent-session', () => ({
   AgentSession: class {
-    static create = vi.fn(async () => {
+    static create = vi.fn(async (options: Record<string, unknown>) => {
+      h.createdOptions.push(options)
       const session = h.makeSession()
       h.sessions.push(session as unknown as Record<string, ReturnType<typeof vi.fn>>)
       return session
@@ -42,12 +50,17 @@ import { buildAgentTools } from '../tool-builder'
 const createPiModelsMock = createPiModels as ReturnType<typeof vi.fn>
 const buildToolsMock = buildAgentTools as ReturnType<typeof vi.fn>
 
-function buildManager(store: AgentConversationStore | null = null) {
+function buildManager(
+  store: AgentConversationStore | null = null,
+  resolveModel?: (modelId?: string) => Record<string, unknown> | null,
+) {
   const events: Array<{ conversationId: string; event: unknown }> = []
   const systemPromptSkills: Array<unknown> = []
   const resolvedScopes: string[] = []
   const manager = new AgentSessionManager({
-    resolveModel: () => ({ id: 'm1', name: 'M', provider: 'gemini', protocol: 'gemini', modelName: 'g', apiKey: 'k', baseUrl: 'https://x', temperature: 0.7, maxTokens: 100, purposes: ['generation'] }),
+    resolveModel: resolveModel
+      ? (modelId => resolveModel(modelId) as never)
+      : () => ({ id: 'm1', name: 'M', provider: 'gemini', protocol: 'gemini', modelName: 'g', apiKey: 'k', baseUrl: 'https://x', temperature: 0.7, maxTokens: 100, purposes: ['generation'] }),
     resolveSystemPrompt: (_conversationId, _scope, skills) => {
       systemPromptSkills.push(skills)
       return 'sys'
@@ -79,6 +92,8 @@ beforeEach(() => {
   buildToolsMock.mockClear()
   h.sessions.length = 0
   h.transcriptLength = 0
+  h.busy = false
+  h.createdOptions.length = 0
 })
 
 afterEach(() => {
@@ -208,5 +223,75 @@ describe('AgentSessionManager', () => {
 
     expect(createPiModelsMock).toHaveBeenCalledTimes(2)
     expect(h.sessions).toHaveLength(2)
+  })
+
+  it('passes the requested thinking level to the session and defaults to off', async () => {
+    const { manager } = buildManager()
+    await manager.prompt('conv-1', 'hi')
+    await manager.prompt('conv-2', 'hi', undefined, undefined, undefined, undefined, 'project', 'high')
+
+    expect(h.createdOptions[0].thinkingLevel).toBe('off')
+    expect(h.createdOptions[0].applySamplingThinking).toBe(true)
+    expect(h.createdOptions[1].thinkingLevel).toBe('high')
+    // 用户显式选了等级：产品侧的思考预算补丁让位。
+    expect(h.createdOptions[1].applySamplingThinking).toBe(false)
+  })
+
+  it('rebuilds the session when the model changes mid-conversation', async () => {
+    const models: Record<string, Record<string, unknown>> = {
+      m1: { id: 'm1', name: 'M1', provider: 'gemini', protocol: 'gemini', modelName: 'g1', apiKey: 'k', baseUrl: 'https://x', temperature: 0.7, maxTokens: 100, purposes: ['generation'] },
+      m2: { id: 'm2', name: 'M2', provider: 'gemini', protocol: 'gemini', modelName: 'g2', apiKey: 'k', baseUrl: 'https://x', temperature: 0.7, maxTokens: 100, purposes: ['generation'] },
+    }
+    const store = fakeStore()
+    const { manager } = buildManager(store, modelId => models[modelId ?? 'm1'] ?? null)
+
+    await manager.prompt('conv-1', 'hi', 'm1')
+    await manager.prompt('conv-1', 'again', 'm2')
+
+    // 换模型 = 换运行时：旧会话关掉，新会话用新档案建，存档要能重新打开
+    // （对话正文在存档里，重开的会话照样带着完整历史）。
+    expect(h.sessions[0].close).toHaveBeenCalled()
+    expect(h.sessions).toHaveLength(2)
+    expect(store.forget).toHaveBeenCalledWith('conv-1')
+    expect(store.open).toHaveBeenCalledTimes(2)
+    expect(createPiModelsMock).toHaveBeenCalledTimes(2)
+    expect((createPiModelsMock.mock.calls[1][0] as { modelName: string }).modelName).toBe('g2')
+  })
+
+  it('rebuilds the session when the thinking level changes and reuses it when it does not', async () => {
+    const { manager } = buildManager()
+
+    await manager.prompt('conv-1', 'hi', undefined, undefined, undefined, undefined, 'project', 'low')
+    await manager.prompt('conv-1', 'again', undefined, undefined, undefined, undefined, 'project', 'low')
+    expect(h.sessions).toHaveLength(1)
+
+    await manager.prompt('conv-1', 'third', undefined, undefined, undefined, undefined, 'project', 'high')
+    expect(h.sessions).toHaveLength(2)
+    expect(h.sessions[0].close).toHaveBeenCalled()
+  })
+
+  it('keeps the session when the runtime is unchanged but the profile disappears', async () => {
+    let missing = false
+    const { manager } = buildManager(null, () => (missing
+      ? null
+      : { id: 'm1', name: 'M', provider: 'gemini', protocol: 'gemini', modelName: 'g', apiKey: 'k', baseUrl: 'https://x', temperature: 0.7, maxTokens: 100, purposes: ['generation'] }))
+
+    await manager.prompt('conv-1', 'hi')
+    missing = true
+    // 档案被删掉不该让已经打开的老会话直接失效。
+    expect(await manager.prompt('conv-1', 'again')).toEqual({ success: true })
+    expect(h.sessions).toHaveLength(1)
+  })
+
+  it('refuses to switch runtime while a turn is still running', async () => {
+    const { manager } = buildManager()
+    await manager.prompt('conv-1', 'hi')
+
+    h.busy = true
+    const result = await manager.prompt('conv-1', 'again', undefined, undefined, undefined, undefined, 'project', 'high')
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('还在生成')
+    expect(h.sessions).toHaveLength(1)
   })
 })

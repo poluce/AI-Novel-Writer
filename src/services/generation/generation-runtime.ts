@@ -93,6 +93,7 @@ function capabilityEvidenceFromLease(
   )
   const validSource = (value: unknown): boolean => [
     'verified-provider-preset',
+    'pi-ai-model-registry',
     'user-operational-cap',
     'legacy-profile',
     'unknown',
@@ -203,7 +204,7 @@ function createDefaultEnvironment(): GenerationRuntimeEnvironment {
         llmStore.generateStream(
           [...request.messages],
           {
-            onDone: (content, usage, finishReason) => succeed({ content, usage, finishReason }),
+            onDone: (content, usage, finishReason, artifact) => succeed({ content, usage, finishReason, artifact }),
             onError: fail,
           },
           frozenModelId,

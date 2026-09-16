@@ -87,6 +87,17 @@ interface MCPServerRuntime {
   error?: string
 }
 
+export type MCPContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image'; data: string; mimeType: string }
+
+export interface MCPCallToolResult {
+  success: boolean
+  content: string
+  items?: MCPContentBlock[]
+  error?: string
+}
+
 // ===== MCP Manager 实现 =====
 
 class MCPManagerImpl {
@@ -278,11 +289,7 @@ class MCPManagerImpl {
   /**
    * 调用 MCP Tool
    */
-  async callTool(serverId: string, toolName: string, args: Record<string, unknown>): Promise<{
-    success: boolean
-    content: string
-    error?: string
-  }> {
+  async callTool(serverId: string, toolName: string, args: Record<string, unknown>): Promise<MCPCallToolResult> {
     const runtime = this.servers.get(serverId)
     if (!runtime || runtime.status !== 'connected') {
       return { success: false, content: '', error: `服务器 ${serverId} 未连接` }
@@ -290,11 +297,31 @@ class MCPManagerImpl {
 
     try {
       const result = await runtime.session!.callTool(toolName, args)
-      const textParts = (result.content ?? [])
-        .filter(c => c.type === 'text')
-        .map(c => c.text ?? '')
-        .join('\n')
-      return { success: true, content: textParts }
+      const textParts: string[] = []
+      const items: MCPContentBlock[] = []
+      for (const c of (result.content ?? [])) {
+        if (c.type === 'text') {
+          const text = c.text ?? ''
+          textParts.push(text)
+          items.push({ type: 'text', text })
+        } else if (c.type === 'image') {
+          const rec = c as Record<string, unknown>
+          const data = typeof rec.data === 'string' ? rec.data : ''
+          const mimeType = typeof rec.mimeType === 'string' ? rec.mimeType : 'image/png'
+          textParts.push(`[Image: ${mimeType}]`)
+          if (data) {
+            items.push({ type: 'image', data, mimeType })
+          }
+        } else if (c.type === 'resource') {
+          const res = (c as Record<string, unknown>).resource as { uri?: string; text?: string } | undefined
+          const text = res?.text ?? `[Resource: ${res?.uri ?? 'unknown'}]`
+          textParts.push(text)
+          items.push({ type: 'text', text })
+        } else {
+          textParts.push(`[${c.type}]`)
+        }
+      }
+      return { success: true, content: textParts.filter(Boolean).join('\n'), items }
     } catch (error) {
       logFailure('MCP', 'tools/call failed', error, { serverId, toolName })
       return { success: false, content: '', error: String(error) }

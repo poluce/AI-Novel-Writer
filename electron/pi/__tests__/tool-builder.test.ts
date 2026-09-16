@@ -15,6 +15,21 @@ vi.mock('../../database', () => ({ getCurrentProjectPath: vi.fn() }))
 import { buildAgentTools, confirmationToolNames } from '../tool-builder'
 
 describe('buildAgentTools', () => {
+  it('keeps every tool name flat, colon-free and snake case', () => {
+    // 工具名是单层平坦名字空间：harness 按名字做全局唯一校验，名字里不允许冒号
+    // （Gemini 的函数名规范同样只接受字母数字、下划线、点、横线）。唯一的“前缀”
+    // 是 MCP 的 `mcp__<服务器>__<工具名>` 约定，用的也是下划线。
+    const names = [
+      ...buildAgentTools('zh-CN', () => {}, 'project').map(tool => tool.name),
+      ...buildAgentTools('zh-CN', () => {}, 'global').map(tool => tool.name),
+    ]
+    expect(names.length).toBeGreaterThan(0)
+    for (const name of names) {
+      expect(name).not.toContain(':')
+      expect(name).toMatch(/^[a-z0-9_]+$/)
+    }
+  })
+
   it('gives the app assistant only project-free tools', () => {
     const names = buildAgentTools('zh-CN', () => {}, 'global').map(tool => tool.name)
     // 没有项目时项目读写工具只会失败，一律不挂。

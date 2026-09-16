@@ -25,6 +25,7 @@ import {
   type WorkflowGenerationRuntimeDependencies,
 } from './base-command'
 import { internalPrompt } from '../../../prompts/internal/load'
+import { parseModelJson } from '../workflow-utils'
 
 const MATERIAL_CHUNK_CHARACTERS = 12_000
 const MATERIAL_EXTRACTION_BATCH_SIZE = 2
@@ -118,10 +119,8 @@ function materialChunks(materials: readonly PlanningMaterial[]): MaterialChunk[]
   })
 }
 
-function parseExtraction(content: string): MaterialExtraction[] {
-  const trimmed = content.trim()
-  const fenced = /^```json[ \t]*\r?\n([\s\S]*?)\r?\n```$/iu.exec(trimmed)
-  const root = JSON.parse(fenced?.[1]?.trim() ?? trimmed) as unknown
+function parseExtraction(content: string | Record<string, unknown>): MaterialExtraction[] {
+  const root = parseModelJson<unknown>(content)
   if (!root || typeof root !== 'object' || Array.isArray(root)) {
     throw new StructuredContractDiagnostic('invalid_envelope', '$')
   }

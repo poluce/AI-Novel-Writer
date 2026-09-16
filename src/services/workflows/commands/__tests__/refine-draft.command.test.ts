@@ -87,7 +87,7 @@ function leaseReceipt(modelId = 'model-a'): ModelExecutionLeaseReceipt {
         featureFlags: 'unknown',
       },
       subjectFingerprint: 'c'.repeat(64),
-      contextWindowTokens: 32_768,
+      contextWindowTokens: 131_072,
       maxOutputTokens: 8192,
       reasoning: null,
       structuredOutput: true,
@@ -1421,5 +1421,61 @@ describe('ReviewChapterCommand reasoning stage', () => {
     expect(completeWithLease.mock.calls[0]?.[0].submitTool).toBe('submit_review')
     expect(completeWithLease.mock.calls[0]?.[0].messages[1]?.content)
       .toContain('【补充写作 Skill：Review craft】')
+  })
+
+  it('consumes structured artifact directly from submit tool without secondary JSON.parse deserialization', async () => {
+    const rawArtifact = {
+      summary: '章节结构紧凑，伏笔回收自然。',
+      items: [
+        {
+          category: 'plot',
+          severity: 'warning',
+          description: '建议第二幕稍加渲染环境压迫感。',
+          quote: '顾舟检查码头的潮汐钟。',
+        },
+      ],
+    }
+    const completeWithLease = vi.fn<GenerationRuntimeEnvironment['completeWithLease']>()
+      .mockResolvedValueOnce({
+        content: 'raw unparsed fallback text',
+        artifact: rawArtifact,
+        finishReason: 'stop',
+      })
+    const createParams: Array<{ content: string }> = []
+    stubIpc(vi.fn(async (channel: string, ...args: unknown[]) => {
+      if (channel === 'kb:search' || channel === 'db:character-get-all') return []
+      if (channel === 'db:project-core-get') return {}
+      if (channel === 'db:draft-get-meta') return { id: 1, chapterNumber: 2, version: 1, status: 'draft', source: 'write' }
+      if (channel === 'db:review-next-index') return 1
+      if (channel === 'db:blueprint-get') return {
+        chapterNumber: 2, title: '重逢', role: '发展', purpose: '顾舟归来', keyEvents: '顾舟敲门',
+        characters: ['顾舟'], suspenseHook: '他为何归来', userGuidance: '', notes: '', notesUpdatedAt: '',
+      }
+      if (channel === 'db:consistency-exemption-list' || channel === 'db:continuity-list-before') return []
+      if (channel === 'db:review-create') {
+        createParams.push(args[0] as { content: string })
+        return { success: true, id: 88 }
+      }
+      throw new Error(`unexpected IPC: ${channel}`)
+    }))
+
+    await chapterReviewCommand(completeWithLease, '顾舟检查码头的潮汐钟。', 2).execute({
+      step: {},
+      context: workflowContext(),
+      callbacks: callbacks(),
+    })
+
+    expect(completeWithLease).toHaveBeenCalledOnce()
+    const savedReview = JSON.parse(createParams[0]!.content) as {
+      items: Array<{ category: string; description: string }>
+    }
+    expect(savedReview.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          category: 'plot',
+          description: '建议第二幕稍加渲染环境压迫感。',
+        }),
+      ]),
+    )
   })
 })

@@ -25,6 +25,8 @@ export interface ModelCapabilities {
   usage: boolean
   /** Endpoint supports native function/tool calling (required by the Pi tool path). */
   toolCalling?: boolean
+  /** User-configured reasoning protocol adapter (avoids blind regex sniffing). */
+  reasoningAdapter?: 'openai-reasoning-effort' | 'gemini-thinking-budget' | 'deepseek-v4-thinking' | 'none'
 }
 
 /** Persisted profile fields needed to resolve effective built-in capabilities. */
@@ -246,24 +248,6 @@ export function createProviderCatalog(): ProviderPreset[] {
 /** 内置默认预设（首次启动时写入持久化文件） */
 export const BUILTIN_PRESETS: ProviderPreset[] = createProviderCatalog()
 
-function normalizedOfficialBaseUrl(value: unknown): string | null {
-  if (typeof value !== 'string') return null
-  try {
-    const endpoint = new URL(value.trim())
-    if (
-      (endpoint.protocol !== 'https:' && endpoint.protocol !== 'http:')
-      || endpoint.username
-      || endpoint.password
-      || endpoint.search
-      || endpoint.hash
-    ) return null
-    endpoint.pathname = endpoint.pathname.replace(/\/+$/u, '') || '/'
-    return endpoint.toString().replace(/\/$/u, '')
-  } catch {
-    return null
-  }
-}
-
 function validatedCapabilities(value: unknown): ModelCapabilities | undefined {
   if (!value || typeof value !== 'object') return undefined
   const candidate = value as Partial<ModelCapabilities>
@@ -276,7 +260,7 @@ function validatedCapabilities(value: unknown): ModelCapabilities | undefined {
     || typeof candidate.reasoning !== 'boolean'
     || typeof candidate.structuredOutput !== 'boolean'
     || typeof candidate.usage !== 'boolean'
-    || typeof candidate.toolCalling !== 'boolean'
+    || (candidate.toolCalling !== undefined && typeof candidate.toolCalling !== 'boolean')
   ) return undefined
   return {
     contextWindowTokens: candidate.contextWindowTokens as number | null,
@@ -284,7 +268,8 @@ function validatedCapabilities(value: unknown): ModelCapabilities | undefined {
     reasoning: candidate.reasoning,
     structuredOutput: candidate.structuredOutput,
     usage: candidate.usage,
-    toolCalling: candidate.toolCalling,
+    ...(candidate.toolCalling !== undefined ? { toolCalling: candidate.toolCalling } : {}),
+    ...(candidate.reasoningAdapter ? { reasoningAdapter: candidate.reasoningAdapter } : {}),
   }
 }
 
@@ -306,16 +291,14 @@ export function resolveModelProfileCapabilities(
   const protocol = profile.protocol
   const modelName = profile.modelName.trim()
   const preset = BUILTIN_PRESETS.find(candidate => candidate.provider === provider)
-  if (
-    !preset
-    || preset.protocol !== protocol
-    || normalizedOfficialBaseUrl(profile.baseUrl) !== normalizedOfficialBaseUrl(preset.baseUrl)
-  ) {
-    return undefined
+  if (preset && preset.protocol === protocol) {
+    const model = preset.models.find(candidate => candidate.name === modelName)
+    if (model?.capabilities) {
+      return validatedCapabilities(model.capabilities)
+    }
   }
 
-  const model = preset.models.find(candidate => candidate.name === modelName)
-  return validatedCapabilities(model?.capabilities)
+  return undefined
 }
 
 /**
@@ -336,19 +319,96 @@ export function resolveModelProfileReasoningMapping(
   const protocol = profile.protocol
   const modelName = profile.modelName.trim()
   const preset = BUILTIN_PRESETS.find(candidate => candidate.provider === provider)
-  if (
-    !preset
-    || preset.protocol !== protocol
-    || normalizedOfficialBaseUrl(profile.baseUrl) !== normalizedOfficialBaseUrl(preset.baseUrl)
-  ) return undefined
 
-  const mapping = preset.models.find(candidate => candidate.name === modelName)
-    ?.reasoningMapping
-  if (!mapping) return undefined
-  return {
-    adapter: mapping.adapter,
-    supportedEfforts: [...mapping.supportedEfforts],
-    providerValues: { ...mapping.providerValues },
-    ...(mapping.requestAliases ? { requestAliases: { ...mapping.requestAliases } } : {}),
+  // 1. 如果匹配预设服务商协议与模型，直接复用该模型的 reasoningMapping
+  if (preset && preset.protocol === protocol) {
+    const mapping = preset.models.find(candidate => candidate.name === modelName)?.reasoningMapping
+    if (mapping) {
+      return {
+        adapter: mapping.adapter,
+        supportedEfforts: [...mapping.supportedEfforts],
+        providerValues: { ...mapping.providerValues },
+        ...(mapping.requestAliases ? { requestAliases: { ...mapping.requestAliases } } : {}),
+      }
+    }
   }
+
+  // 2. 如果用户显式指定了推理协议适配器（例如在模型高级设置中指定）
+  const explicitAdapter = profile.capabilities?.reasoningAdapter
+  if (explicitAdapter === 'none') {
+    return undefined
+  }
+  if (explicitAdapter === 'deepseek-v4-thinking') {
+    return {
+      adapter: 'deepseek-v4-thinking',
+      supportedEfforts: ['off', 'low', 'high', 'max'],
+      providerValues: { off: 'disabled', low: 'low', high: 'high', max: 'max' },
+      requestAliases: { medium: 'high' },
+    }
+  }
+  if (explicitAdapter === 'gemini-thinking-budget') {
+    return {
+      adapter: 'gemini-thinking-budget',
+      supportedEfforts: ['off', 'low', 'medium', 'high'],
+      providerValues: { off: 0, low: 1024, medium: 8192, high: 24576 },
+    }
+  }
+  if (explicitAdapter === 'openai-reasoning-effort') {
+    return {
+      adapter: 'openai-reasoning-effort',
+      supportedEfforts: ['low', 'medium', 'high'],
+      providerValues: { low: 'low', medium: 'medium', high: 'high' },
+      requestAliases: { max: 'high' },
+    }
+  }
+
+  // 3. 跨预设查找：如果自定义/中转端点配置了已知预设模型名且协议一致（如 grok-4.5、deepseek-v4-flash）
+  for (const candidatePreset of BUILTIN_PRESETS) {
+    if (candidatePreset.protocol === protocol) {
+      const match = candidatePreset.models.find(candidate => candidate.name.toLowerCase() === modelName.toLowerCase())
+      if (match?.reasoningMapping) {
+        return {
+          adapter: match.reasoningMapping.adapter,
+          supportedEfforts: [...match.reasoningMapping.supportedEfforts],
+          providerValues: { ...match.reasoningMapping.providerValues },
+          ...(match.reasoningMapping.requestAliases ? { requestAliases: { ...match.reasoningMapping.requestAliases } } : {}),
+        }
+      }
+    }
+  }
+
+  // 4. 如果模型明确声明支持 reasoning（capabilities.reasoning === true）
+  if (profile.capabilities?.reasoning === true) {
+    if (protocol === 'gemini') {
+      return {
+        adapter: 'gemini-thinking-budget',
+        supportedEfforts: ['off', 'low', 'medium', 'high'],
+        providerValues: { off: 0, low: 1024, medium: 8192, high: 24576 },
+      }
+    }
+    if (protocol === 'openai') {
+      if (provider === 'deepseek') {
+        return {
+          adapter: 'deepseek-v4-thinking',
+          supportedEfforts: ['off', 'low', 'high', 'max'],
+          providerValues: { off: 'disabled', low: 'low', high: 'high', max: 'max' },
+          requestAliases: { medium: 'high' },
+        }
+      }
+      if (provider === 'openai' || provider === 'xai') {
+        return {
+          adapter: 'openai-reasoning-effort',
+          supportedEfforts: ['low', 'medium', 'high'],
+          providerValues: { low: 'low', medium: 'medium', high: 'high' },
+          requestAliases: { max: 'high' },
+        }
+      }
+      // 对于中转端点或自定义 provider 的未知模型：
+      // 绝不使用正则 /deepseek/i 或 /r1/i 猜测，也绝不盲目下发 openai-reasoning-effort，避免网关 400 报错。
+      // 保持 undefined，由底层传输层走原生直通通道。
+      return undefined
+    }
+  }
+
+  return undefined
 }

@@ -67,32 +67,43 @@ describe('generation parameter policy', () => {
       .toThrow('0 到 1')
   })
 
-  it('does not apply official Kimi rules or reasoning fields to a proxy endpoint', () => {
+  it('applies fixed Kimi temperature rules uniformly to proxy endpoints', () => {
     expect(resolveGenerationParameters({
       ...openAIModel,
       provider: 'custom',
       baseUrl: 'https://kimi-proxy.example.test/v1',
       modelName: 'kimi-k3',
       temperature: 0.3,
-      reasoningOverride: 'max',
-    }, { maxTokens: 512, creativeStrategy: 'deep-planning', reasoningStage: 'planning' })).toEqual({
-      temperature: 0.3,
+    }, { maxTokens: 512 })).toEqual({
+      temperature: undefined,
       maxTokens: 512,
     })
   })
 
-  it.each([
-    'api.moonshot.cn/v1',
-    'http://api.moonshot.cn/v1',
-    'ftp://api.moonshot.ai/v1',
-  ])('does not apply official Kimi rules to an invalid or non-HTTPS endpoint: %s', (baseUrl) => {
+  it('dynamically recognizes future Kimi reasoning models and thinking variants from Pi-AI without hardcoded lists', () => {
+    // 1. Future version kimi-k4
     expect(resolveGenerationParameters({
       ...openAIModel,
       provider: 'custom',
-      baseUrl,
-      modelName: 'kimi-k3',
-      temperature: 0.3,
-    }, { maxTokens: 512 })).toEqual({ temperature: 0.3, maxTokens: 512 })
+      baseUrl: 'https://api.moonshot.cn/v1',
+      modelName: 'kimi-k4',
+      temperature: 0.5,
+    }, { maxTokens: 512 })).toEqual({
+      temperature: undefined,
+      maxTokens: 512,
+    })
+
+    // 2. Pi-AI registered thinking model kimi-k2-thinking
+    expect(resolveGenerationParameters({
+      ...openAIModel,
+      provider: 'custom',
+      baseUrl: 'https://api.moonshot.ai/v1',
+      modelName: 'kimi-k2-thinking',
+      temperature: 0.7,
+    }, { maxTokens: 512 })).toEqual({
+      temperature: undefined,
+      maxTokens: 512,
+    })
   })
 
   it('maps the profile override through an exact verified model preset', () => {

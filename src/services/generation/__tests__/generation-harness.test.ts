@@ -325,7 +325,7 @@ describe('GenerationHarness', () => {
         totalUtf8Bytes: 8,
         limitUtf8Bytes: 7,
         contextWindowTokens: null,
-        estimatedInputTokens: 4,
+        estimatedInputTokens: 3,
         reservedOutputTokens: 4096,
         sections: [{ sectionName: 'step-guidance', utf8Bytes: 8 }],
         modelId: 'model-a',
@@ -337,7 +337,7 @@ describe('GenerationHarness', () => {
       totalUtf8Bytes: 8,
       limitUtf8Bytes: 7,
       contextWindowTokens: null,
-      estimatedInputTokens: 4,
+      estimatedInputTokens: 3,
       reservedOutputTokens: 4096,
       sections: [{ sectionName: 'step-guidance', utf8Bytes: 8 }],
       modelId: 'model-a',
@@ -477,24 +477,25 @@ describe('GenerationHarness', () => {
         totalUtf8Bytes: 100,
         limitUtf8Bytes: 99,
         contextWindowTokens: 600,
-        estimatedInputTokens: 100,
-        reservedOutputTokens: 0,
+        estimatedInputTokens: 35,
+        reservedOutputTokens: 53,
         sections: [{ sectionName: 'global-guidance', utf8Bytes: 100 }],
       },
     })
     expect(complete).not.toHaveBeenCalled()
 
+    const contextExceededText = 'x'.repeat(300)
     await expect(session.complete({
       purpose: 'context-only-overflow',
       output: 'structured-data',
-      messages: [{ role: 'user', content: oversized }],
+      messages: [{ role: 'user', content: contextExceededText }],
       promptBudget: {
-        limitUtf8Bytes: 200,
-        sections: [{ sectionName: 'global-guidance', messageIndex: 0, finalText: oversized }],
+        limitUtf8Bytes: 500,
+        sections: [{ sectionName: 'global-guidance', messageIndex: 0, finalText: contextExceededText }],
       },
     })).rejects.toMatchObject({
       code: 'CONTEXT_BUDGET_EXHAUSTED',
-      message: expect.stringMatching(/model-a.*600 tokens.*100 tokens.*512 tokens.*0 tokens.*global-guidance=100/u),
+      message: expect.stringMatching(/model-a.*600 tokens.*105 tokens.*512 tokens.*0 tokens.*global-guidance=300/u),
     })
     expect(complete).not.toHaveBeenCalled()
 
@@ -542,7 +543,7 @@ describe('GenerationHarness', () => {
       totalUtf8Bytes: 36,
       limitUtf8Bytes: 128,
       contextWindowTokens: null,
-      estimatedInputTokens: 32,
+      estimatedInputTokens: 14,
       reservedOutputTokens: 4096,
       sections: [{ sectionName: 'global-guidance', utf8Bytes: 36 }],
       modelId: 'model-a',
@@ -816,5 +817,59 @@ describe('GenerationHarness', () => {
     expect(fingerprint).not.toContain('base-url-secret')
     expect(fingerprint).not.toContain('query-secret')
     expect(fingerprint).toContain('provider-a.example/v1')
+  })
+
+  it('dynamically expands prompt budget limit to match modern model context window without early client-side fuse', async () => {
+    const complete = vi.fn<CompletionPort['complete']>().mockResolvedValue({
+      content: '{"success": true}',
+      finishReason: 'stop',
+    })
+    const harness = createGenerationHarness({
+      modelSource: {
+        snapshotDefaultModel: () => ({
+          revision: 'modern-large-context',
+          model: model({ maxTokens: 4096 }),
+          modelExecutionLeaseId: 'lease-modern-context',
+          endpointFingerprint: 'modern-context-endpoint',
+          resolvedCapabilities: {
+            contextWindowTokens: 1_000_000,
+            maxOutputTokens: 4096,
+            reasoning: true,
+            structuredOutput: true,
+            usage: true,
+            source: {
+              contextWindowTokens: 'verified-provider-preset',
+              maxOutputTokens: 'verified-provider-preset',
+              featureFlags: 'verified-provider-preset',
+            },
+          },
+        }),
+      },
+      completionPort: { complete },
+      policy: {
+        maxAttempts: 2,
+        maxRequestedOutputTokens: 8192,
+        maxRequestedOutputTokensPerAttempt: 4096,
+        deadlineMs: 60_000,
+      },
+    })
+    const session = harness.openSession()
+    // A 42KB prompt that would historically exceed the 32KB client-side limit
+    const largePrompt = '测试数据'.repeat(3500)
+
+    const outcome = await session.complete({
+      purpose: 'modern-large-prompt',
+      output: 'structured-data',
+      messages: [{ role: 'user', content: largePrompt }],
+      promptBudget: {
+        limitUtf8Bytes: 32_768, // Legacy 32KB policy limit
+        sections: [{ sectionName: 'story-premise', messageIndex: 0, finalText: largePrompt }],
+      },
+    })
+
+    expect(outcome.status).toBe('completed')
+    expect(complete).toHaveBeenCalledOnce()
+    expect(outcome.receipt.promptBudget?.errorCode).toBe('OK')
+    expect(outcome.receipt.promptBudget?.limitUtf8Bytes).toBeGreaterThan(42_000)
   })
 })

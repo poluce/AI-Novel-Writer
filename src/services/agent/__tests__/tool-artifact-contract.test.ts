@@ -54,8 +54,19 @@ describe('artifactFromToolResult', () => {
     }, context)
     expect(committed).toMatchObject({ type: 'file_modified', name: 'notes.md', path: 'C:\\novels\\p\\notes.md' })
 
+    const writeArtifact = artifactFromToolResult('write', {
+      path: 'C:\\novels\\p\\chapter1.md',
+    }, context)
+    expect(writeArtifact).toMatchObject({ type: 'file_modified', name: 'chapter1.md', path: 'C:\\novels\\p\\chapter1.md' })
+
+    const editArtifact = artifactFromToolResult('edit', {
+      path: 'C:\\novels\\p\\chapter2.md',
+    }, context)
+    expect(editArtifact).toMatchObject({ type: 'file_modified', name: 'chapter2.md', path: 'C:\\novels\\p\\chapter2.md' })
+
     expect(artifactFromToolResult('write_file', { name: 'notes.md', commitState: 'unknown' }, context)).toBeNull()
     expect(artifactFromToolResult('write_file', { name: 'notes.md', commitState: 'not_committed' }, context)).toBeNull()
+    expect(artifactFromToolResult('write', { path: 'notes.md', commitState: 'not_committed' }, context)).toBeNull()
   })
 
   it('builds a workflow card from the renderer launch receipt', () => {

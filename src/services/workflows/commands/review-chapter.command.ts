@@ -98,10 +98,7 @@ function isReviewResult(value: unknown): value is ReviewResult {
     ))
 }
 
-function parseReviewResult(content: string): ReviewResult {
-  const trimmed = content.trim()
-  const fenced = /^```json[ \t]*\r?\n([\s\S]*?)\r?\n```$/iu.exec(trimmed)
-  const parsed: unknown = JSON.parse(fenced?.[1]?.trim() ?? trimmed)
+function boundReviewResult(parsed: unknown): ReviewResult {
   if (!isReviewShape(parsed)) throw new Error('invalid review contract')
   const bounded: ReviewResult = {
     ...(parsed.goalReviews === undefined ? {} : { goalReviews: parsed.goalReviews }),
@@ -117,6 +114,16 @@ function parseReviewResult(content: string): ReviewResult {
   }
   if (!isReviewResult(bounded)) throw new Error('invalid review contract')
   return bounded
+}
+
+function parseReviewResult(content: string | Record<string, unknown>): ReviewResult {
+  if (typeof content === 'object' && content !== null) {
+    return boundReviewResult(content)
+  }
+  const trimmed = content.trim()
+  const fenced = /^```json[ \t]*\r?\n([\s\S]*?)\r?\n```$/iu.exec(trimmed)
+  const parsed: unknown = JSON.parse(fenced?.[1]?.trim() ?? trimmed)
+  return boundReviewResult(parsed)
 }
 
 function formatFinalizedHistory(
@@ -286,7 +293,7 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
     // 期望 JSON 格式返回；bounded 模式会在 length 时自动重建一次。
     // 部分模型/网关在输出上限截断时会把 finishReason 报成 stop，导致
     // 坏 JSON 直接进入解析 → 这里在合同校验失败时再补一次完整替代输出。
-    let reviewResultRaw = await this.callLLMWithBoundedCompletion(
+    let reviewResultRaw = await this.callLLMWithBoundedCompletionResult(
       reviewPrompt,
       promptBuilder.getSystemRole(),
       callbacks,
@@ -302,7 +309,7 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
     )
     this.assertNotCancelled(context)
 
-    const parseAttempt = (): ReviewLike => parseReviewResult(this.stripThinkingTags(reviewResultRaw))
+    const parseAttempt = (): ReviewLike => parseReviewResult(reviewResultRaw.artifact ?? reviewResultRaw.content)
 
     let parsedResult: ReviewLike
     try {
@@ -329,7 +336,7 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
       )
       const rebuildHeading = promptLanguageText(writingLanguage, '【原始审稿任务】', '[Original review task]')
       const rebuildContract = internalPrompt('review_json_retry_contract', writingLanguage)
-      reviewResultRaw = await this.callLLMWithBoundedCompletion(
+      reviewResultRaw = await this.callLLMWithBoundedCompletionResult(
         [rebuildInstruction, rebuildHeading, reviewPrompt, rebuildContract].join('\n\n'),
         promptBuilder.getSystemRole(),
         callbacks,
@@ -454,7 +461,7 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
       `审查完成，已生成审稿报告 r${revIndex}`,
       `Review complete; created review report r${revIndex}`,
     ))
-    return this.stripThinkingTags(reviewResultRaw)
+    return reviewResultRaw.content
   }
 
   private async readCharacterStates(

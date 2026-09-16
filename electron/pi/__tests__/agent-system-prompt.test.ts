@@ -39,7 +39,7 @@ describe('buildMainProcessAgentSystemPrompt', () => {
     expect(prompt).toContain('你是一位经验丰富的长篇小说写作助手')
     expect(prompt).toContain('【不可变系统合同】')
     expect(prompt).toContain('【不可变助手边界】')
-    expect(prompt).toContain('每轮用户消息前会附带当前应用状态')
+    expect(prompt).toContain('系统上下文包含当前应用状态')
     expect(prompt).not.toContain('应用级助手')
     expect(prompt).not.toContain('<tool_call>')
     expect(prompt).not.toContain('当前项目上下文')

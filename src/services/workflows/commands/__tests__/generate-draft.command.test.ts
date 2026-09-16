@@ -1294,7 +1294,7 @@ describe('GenerateDraftCommand generation runtime boundary', () => {
 
   it('binds the final provider request to only the finalized prose that reached that request', async () => {
     const runtime = fakeRuntime(() => outcome('新章正文。'.repeat(125), 'stop'))
-    const overBudget = `林岚把钥匙藏进钟楼。${'过长段落'.repeat(2_000)}`
+    const overBudget = `林岚把钥匙藏进钟楼。${'过长段落'.repeat(10_000)}`
     const included = '周砚守住码头，林岚折返仓库。'
     const { invoke, context, callbacks, command } = setup({
       runtime,

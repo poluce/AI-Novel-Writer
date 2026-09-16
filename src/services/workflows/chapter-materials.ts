@@ -42,7 +42,7 @@ export interface ChapterMaterialBundle {
   omissions: ChapterMaterialOmission[]
 }
 
-const MATERIAL_BUDGET_CHARS = 6_000
+const MATERIAL_BUDGET_CHARS = 30_000
 const PREVIOUS_ENDING_MAX_CHARS = 1_000
 
 function paragraphs(content: string): string[] {

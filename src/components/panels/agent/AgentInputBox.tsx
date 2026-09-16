@@ -8,15 +8,24 @@ import {
   AtSign,
   Workflow,
   X,
+  Cpu,
+  Sparkles,
+  ChevronRight,
+  ChevronLeft,
+  Check,
 } from 'lucide-react'
-import { selectIsGenerating, useAgentStore, type AgentMode } from '../../../stores/agent-store'
+import { selectIsGenerating, useAgentStore } from '../../../stores/agent-store'
 import { useLLMStore } from '../../../stores/llm-store'
-import type { ModelProfile } from '../../../shared/ipc-channels'
+import {
+  groupModelsByChannel,
+  type AssistantThinkingLevel,
+} from '../../../shared/agent-runtime'
 import { useOutsideClick } from '../../../hooks/useOutsideClick'
 import SlashCommandMenu from './SlashCommandMenu'
 import MentionMenu from './MentionMenu'
 import type { SlashCommand, MentionTarget } from '../../../services/agent/intent-router'
 import { useLocaleStore } from '../../../stores/locale-store'
+import { cn } from '../../../lib/utils'
 
 /** 输入框最大高度（px），超出后框内滚动 */
 const MAX_HEIGHT = 200
@@ -29,7 +38,7 @@ export default function AgentInputBox() {
   const text = useLocaleStore(s => s.text)
   const [inputText, setInputText] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const { sendMessage, cancelGeneration, getActiveConversation, setMode, setModelId, removeComposerCitation } = useAgentStore()
+  const { sendMessage, cancelGeneration, getActiveConversation, setModelId, setThinkingLevel, removeComposerCitation } = useAgentStore()
   const composerCitations = useAgentStore(s => s.composerCitations)
   const generating = useAgentStore(selectIsGenerating)
   const models = useLLMStore(s => s.models)
@@ -39,16 +48,19 @@ export default function AgentInputBox() {
   const chatModels = models.filter(m => !(m.purposes.length === 1 && m.purposes[0] === 'embedding'))
 
   const activeConv = getActiveConversation()
-  const currentMode = activeConv?.mode ?? 'planning'
   const currentModelId = activeConv?.modelId ?? defaultModelId
 
   // 找到当前模型信息
   const currentModel = models.find(m => m.id === currentModelId)
+  // 同一渠道（provider + 协议 + baseUrl）下的模型归成一组：菜单按「渠道 → 模型」两层展示。
+  const modelGroups = groupModelsByChannel(chatModels)
+  // 会话级思考等级；null = 不指定，走 Pi 默认。
+  const currentThinkingLevel = activeConv?.thinkingLevel ?? null
 
   // 下拉菜单状态
   const [showContextMenu, setShowContextMenu] = useState(false)
-  const [showModeMenu, setShowModeMenu] = useState(false)
-  const [showModelMenu, setShowModelMenu] = useState(false)
+  const [showModelSelectMenu, setShowModelSelectMenu] = useState(false)
+  const [selectPane, setSelectPane] = useState<'root' | 'model' | 'effort'>('root')
 
   // / 命令和 @ 提及菜单状态
   const [showSlashMenu, setShowSlashMenu] = useState(false)
@@ -114,8 +126,7 @@ export default function AgentInputBox() {
   }, [inputText])
 
   const contextRef = useRef<HTMLDivElement>(null)
-  const modeRef = useRef<HTMLDivElement>(null)
-  const modelRef = useRef<HTMLDivElement>(null)
+  const modelSelectRef = useRef<HTMLDivElement>(null)
 
   // 调整文本框高度的通用函数
   const adjustHeight = useCallback(() => {
@@ -152,10 +163,12 @@ export default function AgentInputBox() {
     adjustHeight()
   }, [inputText, adjustHeight])
 
-  // 点击外部关闭下拉（用 useOutsideClick 统一管理三个 ref）
+  // 点击外部关闭下拉（用 useOutsideClick 统一管理 ref）
   useOutsideClick(contextRef, () => setShowContextMenu(false), showContextMenu)
-  useOutsideClick(modeRef, () => setShowModeMenu(false), showModeMenu)
-  useOutsideClick(modelRef, () => setShowModelMenu(false), showModelMenu)
+  useOutsideClick(modelSelectRef, () => {
+    setShowModelSelectMenu(false)
+    setSelectPane('root')
+  }, showModelSelectMenu)
 
   /** 发送或停止 */
   const handleSendOrStop = useCallback(async () => {
@@ -325,8 +338,7 @@ export default function AgentInputBox() {
             <ToolbarIconBtn
               title={text('添加上下文', 'Add context')}
               onClick={() => {
-                setShowModeMenu(false)
-                setShowModelMenu(false)
+                setShowModelSelectMenu(false)
                 setShowContextMenu(v => !v)
               }}
             >
@@ -334,18 +346,24 @@ export default function AgentInputBox() {
             </ToolbarIconBtn>
           </div>
 
-          {/* 模式选择 */}
-          <div ref={modeRef} className="relative">
+          {/* DSH 风格模型与思考选择器：单个触发器 + 二级面板联动 */}
+          <div ref={modelSelectRef} className="relative min-w-0">
             <button
               onClick={() => {
                 setShowContextMenu(false)
-                setShowModelMenu(false)
-                setShowModeMenu(v => !v)
+                if (showModelSelectMenu) {
+                  setShowModelSelectMenu(false)
+                  setSelectPane('root')
+                } else {
+                  setShowModelSelectMenu(true)
+                  setSelectPane('root')
+                }
               }}
-              className="flex items-center gap-0.5 py-1 pl-1 pr-1.5 rounded-md text-xs transition-colors"
+              className="flex items-center gap-1 py-1 pl-1 pr-1.5 rounded-md text-xs min-w-0 transition-colors"
               style={{
                 color: 'var(--color-text-secondary)',
-                opacity: 0.75,
+                opacity: 0.85,
+                maxWidth: 200,
               }}
               onMouseEnter={e => {
                 e.currentTarget.style.backgroundColor = 'var(--color-hover)'
@@ -353,106 +371,183 @@ export default function AgentInputBox() {
               }}
               onMouseLeave={e => {
                 e.currentTarget.style.backgroundColor = 'transparent'
-                e.currentTarget.style.opacity = '0.75'
+                e.currentTarget.style.opacity = '0.85'
               }}
+              title={currentThinkingLevel ? `${currentModel?.modelName ?? currentModel?.name ?? text('选择模型', 'Select model')} · ${thinkingLevelLabel(text, currentThinkingLevel)}` : (currentModel?.modelName ?? currentModel?.name ?? text('选择模型', 'Select model'))}
             >
-              <ChevronDown size={13} strokeWidth={1.5} />
-              <span className="select-none">{currentMode === 'planning' ? text('深度', 'Deep') : text('快速', 'Fast')}</span>
-            </button>
-
-            {/* 模式选择下拉 */}
-            {showModeMenu && (
-              <div
-                className="absolute bottom-full left-0 mb-1 z-50 py-1 rounded-lg shadow-lg"
-                style={{
-                  width: 240,
-                  backgroundColor: 'var(--color-sidebar)',
-                  border: '1px solid var(--color-border)',
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
-                }}
-              >
-                <div className="text-[0.7rem] px-3 py-1" style={{ color: 'var(--color-text-muted)' }}>
-                  {text('对话模式', 'Conversation mode')}
-                </div>
-                <ModeMenuItem
-                  mode="planning"
-                  currentMode={currentMode}
-                  label={text('深度模式', 'Deep mode')}
-                  desc={text('先规划后执行，适合深度研究、复杂任务和协同创作', 'Plan before acting for research, complex tasks, and collaborative writing')}
-                  onClick={() => { setMode('planning'); setShowModeMenu(false) }}
-                />
-                <ModeMenuItem
-                  mode="fast"
-                  currentMode={currentMode}
-                  label={text('快速模式', 'Fast mode')}
-                  desc={text('直接执行，适合简单快速任务', 'Act directly for simple, quick tasks')}
-                  onClick={() => { setMode('fast'); setShowModeMenu(false) }}
-                />
-              </div>
-            )}
-          </div>
-
-          {/* 模型选择 */}
-          <div ref={modelRef} className="relative min-w-0">
-            <button
-              onClick={() => {
-                setShowContextMenu(false)
-                setShowModeMenu(false)
-                setShowModelMenu(v => !v)
-              }}
-              className="flex items-center gap-0.5 py-1 pl-0.5 pr-1.5 rounded-md text-xs min-w-0 transition-colors"
-              style={{
-                color: 'var(--color-text-secondary)',
-                opacity: 0.75,
-                maxWidth: 140,
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.backgroundColor = 'var(--color-hover)'
-                e.currentTarget.style.opacity = '1'
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.backgroundColor = 'transparent'
-                e.currentTarget.style.opacity = '0.75'
-              }}
-            >
-              <ChevronDown size={13} strokeWidth={1.5} className="flex-shrink-0" />
-              <span className="truncate select-none">
-                {currentModel?.name ?? (chatModels.length === 0 ? text('未配置模型', 'No model configured') : text('选择模型', 'Select model'))}
+              <Cpu size={13} strokeWidth={1.5} className="flex-shrink-0" />
+              <span className="truncate select-none font-medium">
+                {currentModel?.modelName
+                  ?? currentModel?.name
+                  ?? (chatModels.length === 0 ? text('未配置模型', 'No model configured') : text('选择模型', 'Select model'))}
               </span>
+              {currentThinkingLevel && (
+                <span
+                  className="text-[0.68rem] px-1 rounded flex-shrink-0 select-none font-normal"
+                  style={{ backgroundColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}
+                >
+                  {thinkingLevelLabel(text, currentThinkingLevel)}
+                </span>
+              )}
+              <ChevronDown size={13} strokeWidth={1.5} className="flex-shrink-0" />
             </button>
 
-            {/* 模型选择下拉 */}
-            {showModelMenu && (
+            {/* DSH 二级菜单 */}
+            {showModelSelectMenu && (
               <div
                 className="absolute bottom-full left-0 mb-1 z-50 py-1 rounded-lg shadow-lg"
                 style={{
-                  width: 220,
+                  width: 260,
                   backgroundColor: 'var(--color-sidebar)',
                   border: '1px solid var(--color-border)',
                   boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
-                  maxHeight: 280,
+                  maxHeight: 320,
                   overflowY: 'auto',
                 }}
               >
-                <div className="text-[0.7rem] px-3 py-1" style={{ color: 'var(--color-text-muted)' }}>
-                  {text('选择模型', 'Select model')}
-                </div>
-                {chatModels.length === 0 ? (
-                  <div className="px-3 py-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                    {text('请先在设置中配置模型', 'Configure a model in Settings first')}
+                {/* 根视图：模型 > 与 思考 > */}
+                {selectPane === 'root' && (
+                  <div className="py-0.5">
+                    <div className="text-[0.7rem] px-3 py-1 font-medium" style={{ color: 'var(--color-text-muted)' }}>
+                      {text('模型与思考', 'Model & Thinking')}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectPane('model')}
+                      className="w-full flex items-center justify-between px-3 py-2 text-xs transition-colors hover:bg-[var(--color-hover)] text-left"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Cpu size={14} className="text-[var(--color-text-muted)]" />
+                        <span className="font-medium text-[var(--color-text)]">{text('模型', 'Model')}</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-[var(--color-text-muted)] min-w-0">
+                        <span className="truncate max-w-[120px] text-[0.75rem]">
+                          {currentModel?.modelName ?? currentModel?.name ?? text('未选择', 'None')}
+                        </span>
+                        <ChevronRight size={13} className="flex-shrink-0" />
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectPane('effort')}
+                      className="w-full flex items-center justify-between px-3 py-2 text-xs transition-colors hover:bg-[var(--color-hover)] text-left"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Sparkles size={14} className="text-[var(--color-text-muted)]" />
+                        <span className="font-medium text-[var(--color-text)]">{text('思考', 'Thinking')}</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-[var(--color-text-muted)]">
+                        <span className="text-[0.75rem]">{thinkingLevelLabel(text, currentThinkingLevel)}</span>
+                        <ChevronRight size={13} className="flex-shrink-0" />
+                      </div>
+                    </button>
                   </div>
-                ) : (
-                  chatModels.map(model => (
-                    <ModelMenuItem
-                      key={model.id}
-                      model={model}
-                      isActive={model.id === currentModelId}
-                      onClick={() => {
-                        setModelId(model.id)
-                        setShowModelMenu(false)
-                      }}
-                    />
-                  ))
+                )}
+
+                {/* 模型选择子视图：按渠道分组 */}
+                {selectPane === 'model' && (
+                  <div>
+                    <div className="flex items-center gap-1 px-2 py-1.5 border-b border-[var(--color-border)] mb-1">
+                      <button
+                        type="button"
+                        onClick={() => setSelectPane('root')}
+                        className="flex items-center gap-0.5 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)] px-1.5 py-0.5 rounded hover:bg-[var(--color-hover)]"
+                      >
+                        <ChevronLeft size={13} />
+                        <span>{text('返回', 'Back')}</span>
+                      </button>
+                      <span className="text-xs font-medium ml-1 text-[var(--color-text)]">{text('选择模型', 'Select model')}</span>
+                    </div>
+                    {chatModels.length === 0 ? (
+                      <div className="px-3 py-2 text-xs text-[var(--color-text-muted)]">
+                        {text('请先在设置中配置模型', 'Configure a model in Settings first')}
+                      </div>
+                    ) : (
+                      modelGroups.map(group => (
+                        <div key={group.key} className="mb-2">
+                          <div
+                            className="px-3 py-1 text-[0.68rem] font-semibold text-[var(--color-text-muted)] truncate"
+                            data-model-channel={group.key}
+                          >
+                            {group.channelName || group.label}
+                          </div>
+                          {group.models.map(entry => {
+                            const isSelected = entry.profile.id === currentModelId
+                            return (
+                              <button
+                                key={entry.profile.id}
+                                type="button"
+                                onClick={() => {
+                                  setModelId(entry.profile.id)
+                                  setShowModelSelectMenu(false)
+                                  setSelectPane('root')
+                                }}
+                                className={cn(
+                                  'w-full flex items-center justify-between px-3 py-1.5 text-xs transition-colors text-left',
+                                  isSelected
+                                    ? 'bg-[var(--color-hover)] font-medium text-[var(--color-accent)]'
+                                    : 'hover:bg-[var(--color-hover)] text-[var(--color-text)]',
+                                )}
+                              >
+                                <span className="truncate">{entry.modelName}</span>
+                                {isSelected && <Check size={14} className="text-[var(--color-accent)] flex-shrink-0 ml-2" />}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+
+                {/* 思考等级子视图 */}
+                {selectPane === 'effort' && (
+                  <div>
+                    <div className="flex items-center gap-1 px-2 py-1.5 border-b border-[var(--color-border)] mb-1">
+                      <button
+                        type="button"
+                        onClick={() => setSelectPane('root')}
+                        className="flex items-center gap-0.5 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)] px-1.5 py-0.5 rounded hover:bg-[var(--color-hover)]"
+                      >
+                        <ChevronLeft size={13} />
+                        <span>{text('返回', 'Back')}</span>
+                      </button>
+                      <span className="text-xs font-medium ml-1 text-[var(--color-text)]">{text('思考等级', 'Thinking level')}</span>
+                    </div>
+                    <div className="py-0.5">
+                      {[
+                        { value: null, label: text('关（默认）', 'Off (default)'), desc: text('不指定等级，使用模型默认行为', 'Use model default behavior') },
+                        { value: 'low' as const, label: text('低', 'Low'), desc: text('最快，适合简单改写与问答', 'Fastest; simple rewrites and questions') },
+                        { value: 'medium' as const, label: text('中', 'Medium'), desc: text('平衡，适合常规创作与改稿', 'Balanced; everyday drafting and revision') },
+                        { value: 'high' as const, label: text('高', 'High'), desc: text('最慢，适合大纲与复杂推理', 'Slowest; outlines and complex reasoning') },
+                      ].map(item => {
+                        const isSelected = currentThinkingLevel === item.value
+                        return (
+                          <button
+                            key={item.value ?? 'default'}
+                            type="button"
+                            data-thinking-level={item.value ?? 'default'}
+                            onClick={() => {
+                              setThinkingLevel(item.value)
+                              setShowModelSelectMenu(false)
+                              setSelectPane('root')
+                            }}
+                            className={cn(
+                              'w-full flex items-center justify-between px-3 py-2 text-left text-xs transition-colors rounded-md mx-1',
+                              isSelected ? 'bg-[var(--color-hover)]' : 'hover:bg-[var(--color-hover)]',
+                            )}
+                            style={{ width: 'calc(100% - 8px)' }}
+                          >
+                            <div className="flex flex-col">
+                              <span className={cn('font-medium', isSelected ? 'text-[var(--color-accent)]' : 'text-[var(--color-text)]')}>{item.label}</span>
+                              <span className="text-[0.7rem] text-[var(--color-text-muted)]">{item.desc}</span>
+                            </div>
+                            {isSelected && <Check size={14} className="text-[var(--color-accent)] flex-shrink-0 ml-2" />}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
                 )}
               </div>
             )}
@@ -558,84 +653,19 @@ function ContextMenuItem({
   )
 }
 
-/** 模式菜单项 */
-function ModeMenuItem({
-  mode,
-  currentMode,
-  label,
-  desc,
-  onClick,
-}: {
-  mode: AgentMode
-  currentMode: AgentMode
-  label: string
-  desc: string
-  onClick: () => void
-}) {
-  const isActive = mode === currentMode
-
-  return (
-    <button
-      onClick={onClick}
-      className="w-full flex flex-col items-start gap-0.5 px-3 py-2 text-left text-xs transition-colors rounded-md mx-1"
-      style={{
-        width: 'calc(100% - 8px)',
-        backgroundColor: isActive ? 'var(--color-hover)' : 'transparent',
-      }}
-      onMouseEnter={e => {
-        if (!isActive) e.currentTarget.style.backgroundColor = 'var(--color-hover)'
-      }}
-      onMouseLeave={e => {
-        if (!isActive) e.currentTarget.style.backgroundColor = 'transparent'
-      }}
-    >
-      <div className="font-medium" style={{ color: 'var(--color-text)' }}>{label}</div>
-      <div className="text-left leading-relaxed" style={{ color: 'var(--color-text-muted)', fontSize: "0.75rem" }}>{desc}</div>
-    </button>
-  )
-}
-
-/** 模型菜单项 */
-function ModelMenuItem({
-  model,
-  isActive,
-  onClick,
-}: {
-  model: ModelProfile
-  isActive: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="w-full flex items-center justify-between px-3 py-1.5 text-xs transition-colors"
-      style={{
-        backgroundColor: isActive ? 'var(--color-hover)' : 'transparent',
-      }}
-      onMouseEnter={e => {
-        if (!isActive) e.currentTarget.style.backgroundColor = 'var(--color-hover)'
-      }}
-      onMouseLeave={e => {
-        if (!isActive) e.currentTarget.style.backgroundColor = 'transparent'
-      }}
-    >
-      <span
-        className="font-medium truncate"
-        style={{ color: 'var(--color-text)' }}
-      >
-        {model.name}
-      </span>
-      {model.provider && (
-        <span
-          className="ml-2 text-[0.7rem] px-1.5 py-0.5 rounded-full flex-shrink-0"
-          style={{
-            backgroundColor: 'var(--color-border)',
-            color: 'var(--color-text-muted)',
-          }}
-        >
-          {model.provider}
-        </span>
-      )}
-    </button>
-  )
+/** 思考等级在按钮上的短标签。 */
+function thinkingLevelLabel(
+  text: (zhCNText: string, enUSText: string) => string,
+  level: AssistantThinkingLevel | null,
+): string {
+  switch (level) {
+    case 'low':
+      return text('低', 'Low')
+    case 'medium':
+      return text('中', 'Medium')
+    case 'high':
+      return text('高', 'High')
+    default:
+      return text('关', 'Off')
+  }
 }
