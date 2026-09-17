@@ -26,6 +26,7 @@ afterEach(async () => {
   container.remove()
 })
 
+// eslint-disable-next-line react-refresh/only-export-components -- browser-only test shell
 function TestConsumer({
   chapterNumber,
   draftId,

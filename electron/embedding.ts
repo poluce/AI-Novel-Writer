@@ -229,13 +229,17 @@ function buildOpenAIEmbeddingUrl(baseUrl: string): string {
   try {
     const parsed = new URL(base)
     const pathname = parsed.pathname.replace(/\/+$/, '')
-    if (!pathname || pathname === '' || pathname === '/api') {
+    // 裸域名（用户没填路径）：按 OpenAI 兼容约定补 /v1/embeddings。
+    if (!pathname) {
       return `${parsed.protocol}//${parsed.host}/v1/embeddings`
     }
+    // 用户自己填了路径就照填的走，只补 /embeddings：/api、/openai 这类中转路径
+    // 是他那边的真实约定，替他改写成 /v1 只会打到不存在的地址，且失败是静默的。
+    return `${parsed.protocol}//${parsed.host}${pathname}/embeddings`
   } catch {
-    // fallback
+    // 解析不出 URL（例如缺协议的本地地址）：按 OpenAI 兼容约定追加。
+    return `${base}/v1/embeddings`
   }
-  return `${base}/v1/embeddings`
 }
 
 /** OpenAI Embedding API */

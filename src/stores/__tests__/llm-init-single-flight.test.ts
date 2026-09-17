@@ -32,12 +32,23 @@ const models = [
   { id: 'embedding-model', name: 'Embedding' },
 ]
 
+/**
+ * 初始化现在还会读一次全局配置：全局默认思考强度与各创作环节的模型调度。
+ * 这份配置跟着 init 的同一次 flight 落地，所以下面的 mock 与断言都要带上它。
+ */
+const runtimeConfig = {
+  defaultThinkingLevel: 'high',
+  taskModelRouting: { drafting: { modelId: 'generation-model', thinkingLevel: 'low' } },
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   useLLMStore.setState({
     models: [],
     defaultModelId: null,
     defaultEmbeddingModelId: null,
+    defaultThinkingLevel: 'low',
+    taskModelRouting: {},
     activeRequests: new Map(),
     loaded: false,
   })
@@ -52,6 +63,7 @@ describe('LLM store initialization seam', () => {
       if (channel === 'llm:list-models') return modelRead.promise
       if (channel === 'llm:get-default-model') return defaultRead.promise
       if (channel === 'llm:get-default-embedding-model') return embeddingRead.promise
+      if (channel === 'config:get') return Promise.resolve(runtimeConfig)
       throw new Error(`unexpected IPC ${channel}`)
     })
 
@@ -62,6 +74,7 @@ describe('LLM store initialization seam', () => {
       'llm:list-models',
       'llm:get-default-model',
       'llm:get-default-embedding-model',
+      'config:get',
     ])
 
     modelRead.resolve(models)
@@ -73,6 +86,8 @@ describe('LLM store initialization seam', () => {
       models,
       defaultModelId: 'generation-model',
       defaultEmbeddingModelId: 'embedding-model',
+      defaultThinkingLevel: 'high',
+      taskModelRouting: runtimeConfig.taskModelRouting,
       loaded: true,
     })
   })
@@ -84,6 +99,7 @@ describe('LLM store initialization seam', () => {
       if (channel === 'llm:list-models') return Promise.resolve(models)
       if (channel === 'llm:get-default-model') return defaultRead.promise
       if (channel === 'llm:get-default-embedding-model') return embeddingRead.promise
+      if (channel === 'config:get') return Promise.resolve(runtimeConfig)
       throw new Error(`unexpected IPC ${channel}`)
     })
     const observed = Array<ReturnType<typeof useLLMStore.getState>>()
@@ -119,6 +135,11 @@ describe('LLM store initialization seam', () => {
   })
 
   it('clears a rejected initialization flight so the next caller can retry', async () => {
+    // 基础实现先兜住 config:get（它在 flight 里排第 4 个），再让前三次调用按序失败/成功。
+    mocks.invoke.mockImplementation((channel: string) => {
+      if (channel === 'config:get') return Promise.resolve(runtimeConfig)
+      throw new Error(`unexpected IPC ${channel}`)
+    })
     mocks.invoke.mockImplementationOnce(() => Promise.reject(new Error('disk busy')))
       .mockResolvedValueOnce('generation-model')
       .mockResolvedValueOnce('embedding-model')
@@ -130,6 +151,7 @@ describe('LLM store initialization seam', () => {
       if (channel === 'llm:list-models') return Promise.resolve(models)
       if (channel === 'llm:get-default-model') return Promise.resolve('generation-model')
       if (channel === 'llm:get-default-embedding-model') return Promise.resolve('embedding-model')
+      if (channel === 'config:get') return Promise.resolve(runtimeConfig)
       throw new Error(`unexpected IPC ${channel}`)
     })
 
@@ -138,6 +160,7 @@ describe('LLM store initialization seam', () => {
       models,
       defaultModelId: 'generation-model',
       defaultEmbeddingModelId: 'embedding-model',
+      defaultThinkingLevel: 'high',
       loaded: true,
     })
     expect(mocks.invoke.mock.calls.filter(([channel]) => channel === 'llm:list-models')).toHaveLength(2)

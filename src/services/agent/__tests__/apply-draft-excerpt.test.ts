@@ -93,4 +93,37 @@ describe('applyDraftExcerptReplace', () => {
     expect(result.error).toContain('不止一次')
     expect(invokeWithProjectSession).not.toHaveBeenCalled()
   })
+
+  // 下面两条承接已删除的编辑器浮动条用例：以前由预览条的替换守卫把守，
+  // 现在这条链路才是真正写入正文的地方，守卫必须在这里被守住。
+  it('refuses to patch a finalized draft', async () => {
+    useEditorStore.setState(state => ({
+      tabs: state.tabs.map(tab => ({ ...tab, draftStatus: 'finalized' as const })),
+    }))
+    const result = await applyDraftExcerptReplace({
+      chapterNumber: 1,
+      oldText: '顾舟停在潮门口。',
+      newText: '顾舟在潮门口停了一停。',
+      draftId: 7,
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error('expected failure')
+    expect(result.error).toContain('只读')
+    expect(useEditorStore.getState().tabs[0]?.content).toBe('顾舟停在潮门口。风很大。')
+    expect(invokeWithProjectSession).not.toHaveBeenCalled()
+  })
+
+  it('refuses an excerpt that no longer matches the current body', async () => {
+    const result = await applyDraftExcerptReplace({
+      chapterNumber: 1,
+      oldText: '顾舟离开了潮门口。',
+      newText: '顾舟回到了潮门口。',
+      draftId: 7,
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error('expected failure')
+    expect(result.error).toContain('找不到')
+    expect(useEditorStore.getState().tabs[0]?.content).toBe('顾舟停在潮门口。风很大。')
+    expect(invokeWithProjectSession).not.toHaveBeenCalled()
+  })
 })

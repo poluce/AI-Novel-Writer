@@ -7,6 +7,31 @@ const cssPath = resolve(process.cwd(), 'src/index.css')
 const css = readFileSync(cssPath, 'utf8')
 const root = postcss.parse(css, { from: cssPath })
 
+/**
+ * 默认（:root）与 .light 共享的浅色运行时调色板。
+ * 2026-09-18 起默认浅色主题改为纯白冷灰 + 科技蓝，与 DSH 默认亮色主题对齐；
+ * 宣纸墨韵整套移到 .paper，两套皮肤各自完整、互不回落。
+ */
+const approvedLightPalette = {
+  '--color-bg': '#FFFFFF',
+  '--color-raised': '#FFFFFF',
+  '--color-sidebar': '#F9FAFB',
+  '--color-panel': '#F9FAFB',
+  '--color-titlebar': '#FFFFFF',
+  '--color-activity-bar': '#F3F4F6',
+  '--color-hover': '#F3F4F6',
+  '--color-active': '#E5E7EB',
+  '--color-text': '#0F1115',
+  '--color-text-secondary': '#4B5563',
+  '--color-text-muted': '#525866',
+  '--color-border': '#E5E7EB',
+  '--color-accent': '#4176E6',
+  '--color-accent-hover': '#3364CB',
+  '--color-editor-bg': '#FFFFFF',
+  '--color-statusbar': '#F9FAFB',
+  '--color-titlebar-text': '#0F1115',
+}
+
 const approvedPaperPalette = {
   '--color-bg': '#F7F3E8',
   '--color-raised': '#FCFAF3',
@@ -27,6 +52,11 @@ const approvedPaperPalette = {
   '--color-titlebar-text': '#2B2A26',
 }
 
+const approvedPaletteKeys = new Set([
+  ...Object.keys(approvedLightPalette),
+  ...Object.keys(approvedPaperPalette),
+])
+
 function declarationsFor(selector: string) {
   const declarations: Record<string, string> = {}
   root.walkRules((rule: Rule) => {
@@ -43,31 +73,37 @@ describe('runtime CSS token authority', () => {
     expect(existsSync(resolve(process.cwd(), 'src/tokens/index.ts'))).toBe(false)
   })
 
-  it('defines the paper palette once for the default, paper, and light theme selectors', () => {
-    const paperPaletteRules: Array<{ selectors: string[]; declarations: Record<string, string> }> = []
+  it('defines each runtime palette once, on its own theme selectors', () => {
+    const paletteRules: Array<{ selectors: string[]; declarations: Record<string, string> }> = []
     root.walkRules((rule: Rule) => {
       if (!rule.selectors.some(selector => selector === ':root' || selector === '.paper' || selector === '.light')) return
 
       const declarations = Object.fromEntries(
         rule.nodes
-          .filter((node): node is Declaration => node.type === 'decl' && node.prop in approvedPaperPalette)
+          .filter((node): node is Declaration => node.type === 'decl' && approvedPaletteKeys.has(node.prop))
           .map(declaration => [declaration.prop, declaration.value]),
       )
-      if (Object.keys(declarations).length > 0) paperPaletteRules.push({ selectors: rule.selectors, declarations })
+      if (Object.keys(declarations).length > 0) paletteRules.push({ selectors: rule.selectors, declarations })
     })
 
-    expect(paperPaletteRules).toEqual([
+    // 默认与 light 共用一套浅色；paper 自成一套。两边都必须定义完整，
+    // 否则缺失的变量会静默回落到另一套皮肤，出现"纸色底 + 白色面板"这类半套皮肤。
+    expect(paletteRules).toEqual([
       {
-        selectors: [':root', '.paper', '.light'],
+        selectors: [':root', '.light'],
+        declarations: approvedLightPalette,
+      },
+      {
+        selectors: ['.paper'],
         declarations: approvedPaperPalette,
       },
     ])
   })
 
   it.each([
-    [':root', approvedPaperPalette],
+    [':root', approvedLightPalette],
+    ['.light', approvedLightPalette],
     ['.paper', approvedPaperPalette],
-    ['.light', approvedPaperPalette],
     ['.galaxy', {
       '--color-bg': '#0A1628',
       '--color-raised': '#0E1B30',

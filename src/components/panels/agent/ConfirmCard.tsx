@@ -104,7 +104,7 @@ export default function ConfirmCard({ toolCall }: Props) {
               </button>
             </div>
             <div className="p-2 rounded border border-red-500/30 bg-red-500/10 text-[var(--color-error-text)]">
-              <div className="text-[10px] font-semibold text-red-500 mb-0.5">
+              <div className="text-[10px] font-semibold mb-0.5">
                 {text('将被替换的原文：', 'Original excerpt (to be removed):')}
               </div>
               <div className="line-through whitespace-pre-wrap select-text font-serif">
@@ -112,7 +112,7 @@ export default function ConfirmCard({ toolCall }: Props) {
               </div>
             </div>
             <div className="p-2 rounded border border-green-500/30 bg-green-500/10 text-[var(--color-success-text)]">
-              <div className="text-[10px] font-semibold text-green-500 mb-0.5">
+              <div className="text-[10px] font-semibold mb-0.5">
                 {text('替换后的新文：', 'New excerpt (to be inserted):')}
               </div>
               <div className="whitespace-pre-wrap select-text font-serif">

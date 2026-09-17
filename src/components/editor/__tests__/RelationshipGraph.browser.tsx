@@ -90,8 +90,10 @@ describe('RelationshipGraph readable theme text', () => {
     expect(container.textContent).not.toContain('暂无角色数据')
   })
 
+  // 默认（light）皮肤 2026-09-18 起改为纯白冷灰：正文炭黑、次级冷灰；
+  // paper 皮肤仍是墨色一套，两者不再共用同一组值。
   it.each([
-    ['light', 'rgb(43, 42, 38)'],
+    ['light', 'rgb(15, 17, 21)'],
     ['paper', 'rgb(43, 42, 38)'],
     ['galaxy', 'rgb(224, 236, 244)'],
     ['dark', 'rgb(212, 212, 212)'],
@@ -119,7 +121,7 @@ describe('RelationshipGraph readable theme text', () => {
   })
 
   it.each([
-    ['light', '#6E6A5F'],
+    ['light', '#4B5563'],
     ['paper', '#6E6A5F'],
     ['galaxy', '#8BA4BE'],
     ['dark', '#A0A0A0'],

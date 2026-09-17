@@ -123,7 +123,9 @@ describe('embedding registration entry', () => {
 
     await renderEmbeddingSettings([])
     await act(async () => {
-      await page.getByRole('button', { name: '添加向量模型', exact: true }).click()
+      // 没有已配置模型时只有一个入口：空态的「添加第一个向量模型」。
+      // 改版后顶部那颗「添加」只在已有模型的分支里渲染，不再和空态重复两颗按钮。
+      await page.getByRole('button', { name: '添加第一个向量模型', exact: true }).click()
     })
 
     await expect.element(page.getByText('向量化高级参数', { exact: true })).toBeVisible()

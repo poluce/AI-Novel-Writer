@@ -211,7 +211,7 @@ function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
     if (!ok) return
     if (!isProjectSessionCurrent(projectSession)) return
 
-    update(fieldKey as any, '')
+    update(fieldKey, '')
     toast.success(text(`已清除「${fieldLabel}」`, `Cleared "${fieldLabel}"`))
   }
 

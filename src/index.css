@@ -230,7 +230,9 @@
 
     /* 编辑器 */
     --color-editor-bg: #FFFFFF;
-    --color-editor-caret: #4176E6;
+    /* 光标不跟强调色走：强调蓝在白底只有 4.2:1，1px 细线会明显发飘。
+       取调色板里已有的深蓝，6.7:1，与纸色皮肤的朱砂（9.3:1）同为高对比一档。 */
+    --color-editor-caret: #1D4ED8;
     --color-editor-line-highlight: rgba(65, 118, 230, 0.04);
     --color-editor-selection: rgba(65, 118, 230, 0.15);
 

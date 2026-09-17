@@ -11,6 +11,7 @@ import type { ProjectSessionContext } from '../../shared/ipc-channels'
 import { appErrorMessage } from '../../i18n/app-errors'
 import { captureProjectSession, isProjectSessionCurrent, isProjectSessionPath } from '../project-session-gate'
 import { Button } from '../ui/Button'
+import { confirm } from '../ui/Confirm'
 import { toast } from '../ui/Toast'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../ui/Dialog'
 
@@ -118,6 +119,17 @@ function SessionImportButton({ session, compact, disabled }: Props & { session: 
         toast.warning(text('模型配置已改变，请重新确认后发送。', 'The model configuration changed. Confirm again before sending.'))
         return
       }
+      // 发送前披露：粘贴的正文与经授权读取的文件全文都会发往用户配置的第三方端点，
+      // 必须先告知模型与端点并取得同意，不同意则一个字节都不发。创作资料入口
+      // （KnowledgeOverview）对同一个操作有同一约束，这里保持一致。
+      // confirm 自带模态，先让出本组件的 focus trap，问完再收回；草稿保持原样。
+      setOpen(false)
+      const allowed = await confirm(text(
+        `本次粘贴及选中文件的全部文本将发送到以下模型端点，用于提取角色卡。提取后需预览并确认，才会写入角色名单；不会直接覆盖角色图谱。\n\n模型：${model.name} (${model.modelName})\n端点：${model.baseUrl}\n\n是否发送并提取？`,
+        `All pasted text and selected files will be sent to the following model endpoint to extract character cards. Preview and confirmation are required before saving to the roster; the character graph will not be overwritten directly.\n\nModel: ${model.name} (${model.modelName})\nEndpoint: ${model.baseUrl}\n\nSend and extract?`,
+      ), { title: text('AI 提取角色卡', 'AI character-card extraction'), confirmText: text('发送并提取', 'Send and extract') })
+      setOpen(true)
+      if (!allowed || !isProjectSessionCurrent(session)) return
       const workflow = createPlanningMaterialCharacterExtractionWorkflow({ projectSession: session, materials, generationModelId: model.id }, locale)
       const conflict = useWorkflowStore.getState().getResourceConflict(workflow)
       if (conflict) {

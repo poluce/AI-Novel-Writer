@@ -6,7 +6,7 @@
  * - 提议替换/新增的新文（newText）：以 Widget 形式显示为绿色背景 (.cm-diff-insertion)
  * - 行内操作按钮：提供 [合并] 与 [放弃] 按钮，点击直接批准或拒绝该修改提案
  */
-import { WidgetType, Decoration, type DecorationSet, type EditorView } from '@codemirror/view'
+import { WidgetType, Decoration, type DecorationSet } from '@codemirror/view'
 
 export interface DraftDiffProposal {
   id: string
@@ -41,7 +41,7 @@ export class DiffInsertionWidget extends WidgetType {
     )
   }
 
-  toDOM(_view: EditorView): HTMLElement {
+  toDOM(): HTMLElement {
     const wrap = document.createElement('span')
     wrap.className = 'cm-diff-widget-wrap'
     wrap.dataset.diffId = this.proposal.id
@@ -94,7 +94,7 @@ export class DiffInsertionWidget extends WidgetType {
     return wrap
   }
 
-  ignoreEvent(_event: Event): boolean {
+  ignoreEvent(): boolean {
     // 允许 Widget 内的按钮点击事件由 DOM 自身处理，不被 CodeMirror 劫持为光标选区事件
     return true
   }

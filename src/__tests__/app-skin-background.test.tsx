@@ -135,10 +135,14 @@ describe('App image-skin background seam', () => {
   })
 
   it('keeps classic skin surfaces inside the active color theme instead of leaking the paper palette', () => {
-    const paperPaletteCss = css.slice(css.indexOf('/* ===== CSS 变量'), css.indexOf('/* 星空主题'))
+    const paletteCss = css.slice(css.indexOf('/* ===== CSS 变量'), css.indexOf('/* 星空主题'))
     const writerCss = css.slice(css.indexOf('/* Writer console visual system'), css.indexOf('/* ===== 图片皮肤'))
 
-    expect(paperPaletteCss).toContain(':root,\n  .paper,\n  .light {')
+    // 默认与 light 共用一套浅色皮肤；纸色皮肤自成一节，不再与默认共享选择器。
+    // classic 走默认选择器，因此不会拿到 --color-bg: #F7F3E8 之类的纸色。
+    expect(paletteCss).toContain(':root,\n  .light {')
+    expect(paletteCss).toContain('\n  .paper {')
+    expect(paletteCss).not.toContain(':root,\n  .paper,\n  .light {')
     expect(writerCss).toContain(':root,\n  .paper,\n  .light,\n  .dark,\n  .galaxy')
     expect(writerCss).not.toContain("[data-theme='light']")
     expect(writerCss).toContain(".app-skin-root[data-skin='classic'][data-theme='galaxy']")

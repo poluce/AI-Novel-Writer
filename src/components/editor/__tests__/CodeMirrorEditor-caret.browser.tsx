@@ -51,6 +51,7 @@ describe('CodeMirror writing caret', () => {
 
     container.className = 'app-skin-root light'
     container.dataset.theme = 'light'
-    expect(getComputedStyle(caret!).borderLeftColor).toBe('rgb(122, 31, 18)')
+    // 浅色主题的光标不复用强调蓝（白底只有 4.2:1），改用调色板里的深蓝，6.7:1。
+    expect(getComputedStyle(caret!).borderLeftColor).toBe('rgb(29, 78, 216)')
   })
 })

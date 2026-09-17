@@ -19,8 +19,10 @@ afterEach(async () => {
 })
 
 describe('readable warning copy', () => {
+  // 默认（light）皮肤 2026-09-18 起改为纯白冷灰调色板：警示 / 成功 / 错误文字
+  // 取新的一套高对比值（6.9:1 / 7.1:1 / 6.5:1），paper 仍是墨色一套。
   it.each([
-    ['light', 'rgb(122, 84, 20)'],
+    ['light', 'rgb(133, 77, 14)'],
     ['paper', 'rgb(122, 84, 20)'],
     ['galaxy', 'rgb(251, 191, 36)'],
     ['dark', 'rgb(204, 167, 0)'],
@@ -55,7 +57,7 @@ describe('readable warning copy', () => {
   })
 
   it.each([
-    ['light', 'rgb(56, 96, 66)', 'rgb(143, 48, 32)'],
+    ['light', 'rgb(22, 101, 52)', 'rgb(185, 28, 28)'],
     ['paper', 'rgb(56, 96, 66)', 'rgb(143, 48, 32)'],
     ['galaxy', 'rgb(74, 222, 128)', 'rgb(251, 113, 133)'],
     ['dark', 'rgb(137, 209, 133)', 'rgb(255, 138, 138)'],
