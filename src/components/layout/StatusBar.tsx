@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react'
-import { Wifi, BookOpen, CheckCircle2, FolderOpen } from 'lucide-react'
+import { Wifi, CheckCircle2, FolderOpen } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
 import { useLLMStore } from '../../stores/llm-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
-import { APP_BRAND } from '../../shared/brand'
 import { useLocaleStore } from '../../stores/locale-store'
 
 /** 底部状态栏 — JetBrains 风格：22px、深灰底、多分段、hover 可点击感 */
@@ -29,22 +28,12 @@ export default function StatusBar() {
     >
       {/* 左侧 */}
       <div className="flex items-center h-full">
-        <StatusBarSegment title={text(APP_BRAND.zhName, APP_BRAND.enName)}>
-          <BookOpen size={11} />
-          <span className="font-medium brand-gradient">{text(APP_BRAND.shortName, APP_BRAND.enName)}</span>
-          <span className="opacity-80 brand-gradient">v{__APP_VERSION__}</span>
-        </StatusBarSegment>
-
         {currentProject && (
-          <>
-            <StatusBarDivider />
-            <StatusBarSegment title={currentProject.path}>
-              <FolderOpen size={11} style={{ opacity: 0.7 }} />
-              <span className="opacity-80 max-w-[180px] truncate">{currentProject.name}</span>
-            </StatusBarSegment>
-          </>
+          <StatusBarSegment title={currentProject.path}>
+            <FolderOpen size={11} style={{ opacity: 0.7 }} />
+            <span className="opacity-80 max-w-[180px] truncate">{currentProject.name}</span>
+          </StatusBarSegment>
         )}
-
       </div>
 
       {/* 右侧：AI 胶囊 + 模型名 */}
@@ -55,7 +44,7 @@ export default function StatusBar() {
         {defaultModel ? (
           <StatusBarSegment
             title={text(`当前模型：${defaultModel.name}`, `Current model: ${defaultModel.name}`)}
-            onClick={openSettings}
+            onClick={() => openSettings('llm')}
           >
             <Wifi size={11} />
             <span className="opacity-80 max-w-[120px] truncate">{defaultModel.name}</span>
@@ -63,7 +52,7 @@ export default function StatusBar() {
         ) : (
           <StatusBarSegment
             title={text('点击配置模型', 'Click to configure a model')}
-            onClick={openSettings}
+            onClick={() => openSettings('llm')}
           >
             <span className="opacity-50">{text('未配置模型', 'No model configured')}</span>
           </StatusBarSegment>
@@ -220,12 +209,5 @@ function StatusBarSegment({
     >
       {children}
     </div>
-  )
-}
-
-/** 状态栏分隔符 */
-function StatusBarDivider() {
-  return (
-    <span style={{ opacity: 0.25, fontSize: "0.75rem", userSelect: 'none' }}>|</span>
   )
 }

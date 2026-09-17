@@ -166,9 +166,123 @@
   /* Logo 核心色：深邃蓝 #0A1628 · 冰蓝 #7EC8E3 · 星空蓝 #5B9ED6
      薰衣草紫 #9B8EC8 · 星辰金 #C9A76C */
   :root,
-  .paper,
   .light {
-    /* 浅色主题 — 书卷墨韵（宣纸底、墨色字、朱砂印） */
+    /* 现代浅色主题 — 纯白与冷灰简约科技风格（与 DSH 默认亮色主题一致） */
+
+    /* 背景层次（纯白底 → 模块底 → 侧栏/面板底） */
+    --color-bg: #FFFFFF;
+    --color-raised: #FFFFFF;
+    --color-sidebar: #F9FAFB;
+    --color-panel: #F9FAFB;
+    --color-titlebar: #FFFFFF;
+    --color-activity-bar: #F3F4F6;
+    --color-hover: #F3F4F6;
+    --color-active: #E5E7EB;
+
+    /* 文字层次（深邃炭黑 → 次级深灰 → 弱化中灰） */
+    --color-text: #0F1115;
+    --color-text-secondary: #4B5563;
+    --color-text-muted: #525866;
+
+    /* 边框（细致灰阶） */
+    --color-border: #E5E7EB;
+
+    /* 强调色（DeepSeek 科技蓝） */
+    --color-accent: #4176E6;
+    --color-accent-hover: #3364CB;
+    --color-accent-rgb: 65, 118, 230;
+
+    /* 品牌金色 → 科技蓝 */
+    --color-gold: #4176E6;
+
+    /* 语义色（清新绿 / 琥珀橙 / 警示红 / 信息蓝） */
+    --color-success: #15803D;
+    --color-success-text: #166534;
+    --color-success-foreground: #FFFFFF;
+    --color-warning: #F59E0B;
+    --color-warning-text: #854D0E;
+    --color-error: #EF4444;
+    --color-error-text: #B91C1C;
+    --color-error-foreground: #FFFFFF;
+    --color-info: #4176E6;
+
+    /* 类别标签文字 */
+    --color-category-progress-text: #1D4ED8;
+    --color-category-review-text: #6D28D9;
+
+    /* Tab 系统 */
+    --color-tab-bg: transparent;
+    --color-tab-active: #FFFFFF;
+    --color-tab-border: transparent;
+    --color-tab-indicator: #4176E6;
+
+    /* 状态栏 */
+    --color-statusbar: #F9FAFB;
+    --color-statusbar-text: #4B5563;
+
+    /* 标题栏文字 */
+    --color-titlebar-text: #0F1115;
+
+    /* 活动栏图标颜色 */
+    --color-activity-icon: #6B7280;
+    --color-activity-icon-active: #4176E6;
+    --color-activity-indicator: #4176E6;
+
+    /* 编辑器 */
+    --color-editor-bg: #FFFFFF;
+    --color-editor-caret: #4176E6;
+    --color-editor-line-highlight: rgba(65, 118, 230, 0.04);
+    --color-editor-selection: rgba(65, 118, 230, 0.15);
+
+    /* 分割条 Sash */
+    --color-sash: transparent;
+    --color-sash-hover: rgba(65, 118, 230, 0.2);
+
+    /* ===== 语义令牌 ===== */
+    --color-focus-ring: rgba(65, 118, 230, 0.35);
+    --color-backdrop: rgba(15, 17, 21, 0.4);
+    --color-tooltip-bg: #0F1115;
+    --color-tooltip-text: #FFFFFF;
+    --color-skeleton: rgba(15, 17, 21, 0.06);
+    --color-badge-bg: rgba(65, 118, 230, 0.1);
+    --color-badge-text: #4176E6;
+
+    /* ===== 尺寸规范 ===== */
+    --height-titlebar: 40px;
+    --height-statusbar: 28px;
+    --height-tab: 36px;
+    --height-panel-header: 36px;
+    --width-left-bar: 72px;
+    --width-right-bar: 44px;
+    --width-bottom-bar: 32px;
+
+    /* 圆角 */
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
+    --radius-xl: 12px;
+    --radius-2xl: 16px;
+
+    /* 阴影 */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+    --shadow-popover: 0 4px 20px rgba(0, 0, 0, 0.1);
+    --shadow-tooltip: 0 2px 8px rgba(0, 0, 0, 0.15);
+
+    /* 过渡 */
+    --transition-fast: 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+    --transition-normal: 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    --transition-spring: 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+
+    /* 字体 */
+    --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+    --font-mono: 'Fira Code', Consolas, ui-monospace, monospace;
+    --font-writing: 'Noto Sans SC', system-ui, sans-serif;
+  }
+
+  .paper {
+    /* 纸卷主题 — 书卷墨韵（宣纸底、墨色字、朱砂印） */
 
     /* 背景层次（宣纸 → 绢面 → 沉绢） */
     --color-bg: #F7F3E8;
@@ -206,6 +320,7 @@
     --color-error-text: #8F3020;
     --color-error-foreground: #FFFFFF;
     --color-info: #54666E;
+
     /* 类别标签文字：保持类别区分，同时在纸色表面达到 AA。 */
     --color-category-progress-text: #355B72;
     --color-category-review-text: #634A72;
@@ -777,6 +892,19 @@
   .writer-left-rail .left-nav-button:hover {
     background: var(--writer-left-rail-hover);
     color: var(--writer-left-rail-active-text);
+  }
+
+  .writer-left-rail .left-nav-button:disabled,
+  .writer-left-rail .left-nav-button.is-disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  .writer-left-rail .left-nav-button:disabled:hover,
+  .writer-left-rail .left-nav-button.is-disabled:hover {
+    background: transparent;
+    color: var(--writer-left-rail-text);
   }
 
   .writer-left-rail .left-nav-button.is-active,

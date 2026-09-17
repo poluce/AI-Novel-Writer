@@ -185,7 +185,7 @@ export default function ProjectTree() {
             className="text-xs text-center mt-0.5"
             style={{ color: 'var(--color-text-muted)' }}
           >
-            {text('新建或打开一个小说项目开始创作', 'Create or open a novel project to begin.')}
+            {text('新建或打开一个项目', 'Create or open a project to begin.')}
           </span>
           {/* 操作按钮 */}
           <div className="flex flex-col gap-2 mt-3 w-full">

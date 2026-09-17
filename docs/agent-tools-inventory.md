@@ -18,14 +18,13 @@
 | `read_file` | 项目目录里用户自己的文本文件 | 安全文件系统能力 | 否 |
 | `search_knowledge` | 知识库语义检索 | `knowledgeBaseLoader` + embedding 配置 | 否 |
 | `inspect_writing_skill` | 只读检查公开 GitHub 上的提示词型 Skill | 网络只读 | 否 |
-| `write_file` | 写项目内物理文件（保留语义文件名会被拒绝） | 安全文件系统能力（原子写 + 提交态） | 是 |
 | `read`（harness） | 读执行环境内的文件 | `ConfinedExecutionEnv`（项目根 / 助手 workspace） | 否 |
-| `write` / `edit`（harness） | 覆盖写、按唯一原文精确替换 | 同上；与 `write_file` 同一条原子写与提交态语义 | 是 |
+| `write` / `edit`（harness） | 覆盖写、按唯一原文精确替换 | 同上；走安全文件系统原子写与提交态语义 | 是 |
 | `bash`（harness） | 在固定 cwd 执行命令（默认 120s 超时） | 同上；写行为不在提交态保护内 | 是 |
 | `replace_draft_excerpt` | 按唯一原文精确替换草稿片段 | `DraftRepository` | 是 |
 | `open_editor` | 打开内置页面（config/blueprints/characters/architecture/synopsis）或只读查看项目文件 | 渲染层动作 | 是 |
-| `start_workflow` | 启动创作工作流 | 渲染层动作（等回执） | 是 |
-| `propose_novel_config` | 小说配置字段差异提案 | `ProjectCoreRepository` | 是 |
+| `novel_config` | 读取或直接填充修改小说配置各个字段（大纲/世界观/金手指/人设等） | `ProjectCoreRepository` | 是（修改时） |
+| `story_architecture` | 读取或直接填充修改故事架构三大核心文档（premise/worldbuilding/synopsis） | `ProjectCoreRepository` | 是（修改时） |
 | `propose_chapter_blueprint` | 章节蓝图字段差异提案 | `BlueprintRepository` | 是 |
 | `install_writing_skill` / `bind_writing_skill` | 安装 / 绑定写作 Skill | 网络 + 项目配置 | 是 |
 | `mcp__<server>__<tool>` | 已连接 MCP 服务提供的工具 | MCP manager | 由 MCP 决定 |

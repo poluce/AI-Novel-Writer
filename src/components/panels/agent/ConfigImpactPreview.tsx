@@ -142,7 +142,7 @@ export function useConfigImpactPreview(
     .map(diff => diff.field)
     .filter(field => STORY_FACT_FIELDS.has(field)), [proposalPreview.diffs])
   const immediate = useMemo<ConfigImpactPreviewState | null>(() => {
-    if (toolCall.toolName !== 'propose_novel_config' || changedFields.length === 0) {
+    if (toolCall.toolName !== 'novel_config' || changedFields.length === 0) {
       return { kind: 'none', changedFields }
     }
     if (proposalPreview.kind !== 'valid' || !currentProject || !toolCall.projectSession

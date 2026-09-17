@@ -105,13 +105,13 @@ describe('readable theme text contrast contract', () => {
   })
 
   it.each([
-    ['default light', ':root'],
-    ['paper', '.paper'],
-    ['explicit light', '.light'],
-  ] as const)('keeps %s information-bearing muted text at WCAG AA on content surfaces', (_theme, selector) => {
+    ['default light', ':root', '#525866'],
+    ['paper', '.paper', '#655F55'],
+    ['explicit light', '.light', '#525866'],
+  ] as const)('keeps %s information-bearing muted text at WCAG AA on content surfaces', (_theme, selector, expectedMuted) => {
     const declarations = declarationsFor(selector)
     const mutedText = declarations.get('--color-text-muted')
-    expect(mutedText).toBe('#655F55')
+    expect(mutedText).toBe(expectedMuted)
 
     for (const surfaceToken of [
       '--color-bg',
@@ -135,9 +135,9 @@ describe('readable theme text contrast contract', () => {
   })
 
   it.each([
-    ['default light', ':root', '#386042', '#8F3020', '#FFFFFF'],
+    ['default light', ':root', '#166534', '#B91C1C', '#FFFFFF'],
     ['paper', '.paper', '#386042', '#8F3020', '#FFFFFF'],
-    ['explicit light', '.light', '#386042', '#8F3020', '#FFFFFF'],
+    ['explicit light', '.light', '#166534', '#B91C1C', '#FFFFFF'],
     ['galaxy', '.galaxy', '#4ade80', '#fb7185', '#0A1628'],
     ['dark', '.dark', '#89D185', '#FF8A8A', '#181818'],
   ] as const)('keeps %s success and error status copy readable on interactive agent headers', (_theme, selector, expectedSuccess, expectedError, expectedSuccessForeground) => {
@@ -185,9 +185,9 @@ describe('readable theme text contrast contract', () => {
   })
 
   it.each([
-    ['default light', ':root', '#7A5414', '#C68A3A'],
+    ['default light', ':root', '#854D0E', '#F59E0B'],
     ['paper', '.paper', '#7A5414', '#C68A3A'],
-    ['explicit light', '.light', '#7A5414', '#C68A3A'],
+    ['explicit light', '.light', '#854D0E', '#F59E0B'],
     ['galaxy', '.galaxy', '#fbbf24', '#fbbf24'],
     ['dark', '.dark', '#CCA700', '#CCA700'],
   ] as const)('keeps %s warning copy readable without changing the decorative warning color', (_theme, selector, expectedText, expectedDecoration) => {

@@ -33,10 +33,10 @@ export type BuiltinEditorTarget =
 export type RendererAction =
   | { type: 'open_editor'; target: 'builtin'; editor: BuiltinEditorTarget }
   | { type: 'open_editor'; target: 'file'; filePath: string; content: string; fileName: string }
-  | { type: 'start_workflow'; workflow: string; chapterNumber?: number }
   | { type: 'replace_draft_excerpt'; chapterNumber: number; oldText: string; newText: string; draftId?: number }
   | { type: 'refresh_project_config' }
   | { type: 'refresh_blueprint' }
+  | { type: 'refresh_architecture'; section?: string }
 
 /** 工作流启动收据：产物卡片与工具 details 都用它，避免再解析摘要文本。 */
 export interface WorkflowLaunchReceipt {

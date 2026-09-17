@@ -12,4 +12,14 @@ describe('settings appearance navigation seam', () => {
       labelEn: 'Appearance',
     })
   })
+
+  it('exposes Presets alongside the existing settings areas', () => {
+    const presets = SETTINGS_SECTIONS.find((section) => section.id === 'presets')
+
+    expect(presets).toMatchObject({
+      id: 'presets',
+      label: '预设',
+      labelEn: 'Presets',
+    })
+  })
 })

@@ -28,14 +28,125 @@ const NOVEL_CONFIG_ENUM_FIELDS: Partial<Record<keyof NovelConfig, readonly strin
   writingLanguage: ['zh-CN', 'en-US'],
 }
 
+const NOVEL_CONFIG_FIELD_ALIASES: Record<string, keyof NovelConfig> = {
+  genre: 'genre',
+  '类型': 'genre',
+  '小说类型': 'genre',
+  '题材': 'genre',
+
+  subGenre: 'subGenre',
+  sub_genre: 'subGenre',
+  '细分类型': 'subGenre',
+  '子类型': 'subGenre',
+
+  targetAudience: 'targetAudience',
+  target_audience: 'targetAudience',
+  '目标读者': 'targetAudience',
+  '目标受众': 'targetAudience',
+  '受众': 'targetAudience',
+
+  totalChapters: 'totalChapters',
+  total_chapters: 'totalChapters',
+  '总章节数': 'totalChapters',
+  '总章数': 'totalChapters',
+
+  wordsPerChapter: 'wordsPerChapter',
+  words_per_chapter: 'wordsPerChapter',
+  '每章字数': 'wordsPerChapter',
+  '单章字数': 'wordsPerChapter',
+
+  plotStructure: 'plotStructure',
+  plot_structure: 'plotStructure',
+  '情节结构': 'plotStructure',
+  '故事结构': 'plotStructure',
+
+  narrativePOV: 'narrativePOV',
+  narrativePov: 'narrativePOV',
+  narrative_pov: 'narrativePOV',
+  '叙事视角': 'narrativePOV',
+  '视角': 'narrativePOV',
+
+  coreOutline: 'coreOutline',
+  core_outline: 'coreOutline',
+  '核心大纲': 'coreOutline',
+  '大纲': 'coreOutline',
+
+  worldSetting: 'worldSetting',
+  world_setting: 'worldSetting',
+  '世界设定': 'worldSetting',
+  '世界观设定': 'worldSetting',
+  '世界观': 'worldSetting',
+
+  goldenFinger: 'goldenFinger',
+  golden_finger: 'goldenFinger',
+  '金手指': 'goldenFinger',
+  '核心卖点': 'goldenFinger',
+  '卖点': 'goldenFinger',
+
+  protagonistProfile: 'protagonistProfile',
+  protagonist_profile: 'protagonistProfile',
+  '主角设定': 'protagonistProfile',
+  '主角人设': 'protagonistProfile',
+  '主角档案': 'protagonistProfile',
+
+  globalGuidance: 'globalGuidance',
+  global_guidance: 'globalGuidance',
+  '全局指导': 'globalGuidance',
+  '创作指导': 'globalGuidance',
+  '全局写作要求': 'globalGuidance',
+
+  writingStyle: 'writingStyle',
+  writing_style: 'writingStyle',
+  '写作风格': 'writingStyle',
+  '文风': 'writingStyle',
+  '文风配置': 'writingStyle',
+
+  referenceWorks: 'referenceWorks',
+  reference_works: 'referenceWorks',
+  '参考作品': 'referenceWorks',
+  '参考书目': 'referenceWorks',
+
+  writingLanguage: 'writingLanguage',
+  writing_language: 'writingLanguage',
+  '写作语言': 'writingLanguage',
+}
+
+const PLOT_STRUCTURE_VALUE_ALIASES: Record<string, string> = {
+  '三幕结构': 'three_act',
+  '英雄之旅': 'heros_journey',
+  '节拍表': 'save_the_cat',
+  '起承转合': 'kishotenketsu',
+  '多线叙事': 'multi_thread',
+  '自由结构': 'freeform',
+}
+
+const NARRATIVE_POV_VALUE_ALIASES: Record<string, string> = {
+  '第一人称': 'first_person',
+  '第三人称有限视角': 'third_limited',
+  '第三人称全知视角': 'third_omniscient',
+  '多视角轮换': 'multi_pov',
+}
+
 export type NovelConfigProposal =
   | { valid: true; changes: Partial<NovelConfig>; diffs: ProposalFieldDiff[] }
   | { valid: false; error: string }
 
 function plainChanges(args: Record<string, unknown>): Record<string, unknown> | undefined {
   const value = args.changes
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
-  return value as Record<string, unknown>
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>
+  }
+  if (args.field && (args.content !== undefined || args.value !== undefined || args.text !== undefined)) {
+    return { [String(args.field)]: args.content ?? args.value ?? args.text }
+  }
+  const IGNORED_META_KEYS = new Set(['action', 'field', 'content', 'value', 'text', 'blueprint_changes'])
+  const rest: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(args)) {
+    if (!IGNORED_META_KEYS.has(k) && v !== undefined) {
+      rest[k] = v
+    }
+  }
+  return Object.keys(rest).length > 0 ? rest : undefined
 }
 
 /**
@@ -53,10 +164,21 @@ export function buildNovelConfigProposal(
   }
   const changes: Record<string, unknown> = {}
   for (const [field, proposed] of Object.entries(candidate)) {
-    const canonicalField = field === 'narrativePov' ? 'narrativePOV' : field
-    const normalizedValue = canonicalField === 'writingLanguage'
+    const canonicalField = NOVEL_CONFIG_FIELD_ALIASES[field] ?? (field === 'narrativePov' ? 'narrativePOV' : field)
+    let normalizedValue = canonicalField === 'writingLanguage'
       ? proposed === '简体中文' ? 'zh-CN' : proposed === 'English' ? 'en-US' : proposed
       : proposed
+    if (canonicalField === 'plotStructure' && typeof normalizedValue === 'string') {
+      normalizedValue = PLOT_STRUCTURE_VALUE_ALIASES[normalizedValue] ?? normalizedValue
+    }
+    if (canonicalField === 'narrativePOV' && typeof normalizedValue === 'string') {
+      normalizedValue = NARRATIVE_POV_VALUE_ALIASES[normalizedValue] ?? normalizedValue
+    }
+    if (NOVEL_CONFIG_NUMBER_FIELDS.has(canonicalField as keyof NovelConfig)) {
+      if (typeof normalizedValue === 'string' && /^\d+$/.test(normalizedValue.trim())) {
+        normalizedValue = parseInt(normalizedValue.trim(), 10)
+      }
+    }
     if (NOVEL_CONFIG_STRING_FIELDS.has(canonicalField as keyof NovelConfig)) {
       if (typeof normalizedValue !== 'string') {
         return { valid: false, error: text(`字段 ${field} 必须是文本`, `Field ${field} must be text`) }

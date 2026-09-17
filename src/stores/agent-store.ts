@@ -28,6 +28,7 @@ import {
   type DraftPassageCitation,
 } from '../shared/draft-excerpt'
 import { ipc } from '../services/ipc-client'
+import { globalEventBus } from '../shared/event-bus'
 import { logFailure, logInfo } from '../shared/fail-log'
 import { describeProviderFailure } from '../shared/provider-error-message'
 import { describeAgentTurnRefusal } from '../shared/agent-turn-refusal'
@@ -821,47 +822,6 @@ export async function handleRendererAction(action: RendererAction): Promise<Rend
       })
       return
     }
-    case 'start_workflow': {
-      const project = useProjectStore.getState().currentProject
-      const session = projectSessionContextFromProject(project)
-      const uiText = useLocaleStore.getState().text
-      if (!session) {
-        const error = uiText('未打开项目，工作流未启动。', 'No project is open, so the workflow was not started.')
-        logFailure('Agent', 'start_workflow skipped: no open project', undefined, {
-          workflow: action.workflow,
-        })
-        return { ok: false, error }
-      }
-      try {
-        const { launchCreativeWorkflow } = await import('../services/workflows/creative-workflow-launcher')
-        const chapterWorkflows = new Set(['generate_draft', 'review', 'refine', 'finalize'])
-        const intent = chapterWorkflows.has(action.workflow)
-          ? { workflow: action.workflow, chapterNumber: action.chapterNumber as number }
-          : { workflow: action.workflow }
-        const receipt = await launchCreativeWorkflow(
-          intent as import('../services/workflows/creative-workflow-launcher').CreativeIntent,
-          session,
-        )
-        const workflowLabel = `${action.workflow}${action.chapterNumber != null ? uiText(`（第 ${action.chapterNumber} 章）`, ` (Chapter ${action.chapterNumber})`) : ''}`
-        return {
-          ok: true,
-          summary: uiText(
-            `已启动「${action.workflow}${action.chapterNumber != null ? `（第 ${action.chapterNumber} 章）` : ''}」工作流（运行 ID：${receipt.runId}，状态：${receipt.status}）。`,
-            `Started the ${action.workflow}${action.chapterNumber != null ? ` (Chapter ${action.chapterNumber})` : ''} workflow (run ID: ${receipt.runId}; status: ${receipt.status}).`,
-          ),
-          workflow: { runId: receipt.runId, status: receipt.status, name: workflowLabel },
-        }
-      } catch (error) {
-        logFailure('Agent', 'start_workflow launch failed', error, {
-          workflow: action.workflow,
-          chapterNumber: action.chapterNumber,
-        })
-        return {
-          ok: false,
-          error: error instanceof Error ? error.message : String(error),
-        }
-      }
-    }
     case 'replace_draft_excerpt': {
       const { applyDraftExcerptReplace } = await import('../services/agent/apply-draft-excerpt')
       try {
@@ -881,13 +841,45 @@ export async function handleRendererAction(action: RendererAction): Promise<Rend
         }
       }
     }
-    case 'refresh_project_config':
+    case 'refresh_project_config': {
+      const project = useProjectStore.getState().currentProject
+      if (!project) return
+      void useProjectStore.getState().reloadNovelConfig().catch((error) => {
+        logFailure('Agent', 'reloadNovelConfig failed', error)
+      })
+      void useProjectStore.getState().refreshFileTree(project.path).catch((error) => {
+        logFailure('Agent', `${action.type} refresh failed`, error)
+      })
+      return
+    }
     case 'refresh_blueprint': {
       const project = useProjectStore.getState().currentProject
       if (!project) return
       void useProjectStore.getState().refreshFileTree(project.path).catch((error) => {
         logFailure('Agent', `${action.type} refresh failed`, error)
       })
+      return
+    }
+    case 'refresh_architecture': {
+      const project = useProjectStore.getState().currentProject
+      if (!project) return
+      const projectSession = projectSessionContextFromProject(project)
+      if (!projectSession) return
+      const files = action.section === 'premise'
+        ? ['premise.md']
+        : action.section === 'worldbuilding'
+          ? ['worldbuilding.md']
+          : action.section === 'synopsis'
+            ? ['synopsis.md']
+            : ['premise.md', 'worldbuilding.md', 'synopsis.md']
+      for (const fileName of files) {
+        globalEventBus.emit('ARCH_FILE_UPDATED', {
+          fileName,
+          projectPath: project.path,
+          projectSession,
+          runId: `agent-${Date.now()}`,
+        })
+      }
       return
     }
   }

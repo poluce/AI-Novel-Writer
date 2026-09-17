@@ -37,6 +37,7 @@ function LeftNavButton({
   label,
   active,
   pulse,
+  disabled,
   onClick,
   title,
 }: {
@@ -44,20 +45,27 @@ function LeftNavButton({
   label: string
   active?: boolean
   pulse?: boolean
+  disabled?: boolean
   onClick: () => void
   title?: string
 }) {
+  const text = useLocaleStore(s => s.text)
+  const resolvedTitle = disabled
+    ? `${title ?? label} (${text('请先打开项目', 'Open a project first')})`
+    : (title ?? label)
+
   return (
     <div className="relative w-full px-1">
       <button
         onClick={onClick}
-        title={title ?? label}
-        className={`left-nav-button${active ? ' is-active' : ''}`}
+        disabled={disabled}
+        title={resolvedTitle}
+        className={`left-nav-button${active ? ' is-active' : ''}${disabled ? ' is-disabled opacity-35 cursor-not-allowed pointer-events-none' : ''}`}
       >
         <Icon size={22} strokeWidth={active ? 2 : 1.75} />
         <span className="left-nav-label">{label}</span>
       </button>
-      {pulse && (
+      {pulse && !disabled && (
         <span
           className="absolute top-[5px] right-[5px] w-[5px] h-[5px] rounded-full animate-pulse pointer-events-none"
           style={{ backgroundColor: 'var(--color-accent)' }}
@@ -123,14 +131,17 @@ export default function LeftToolWindowBar() {
         {sidebarActivities.map(({ id, icon: Icon, zh, en }) => {
           const label = text(zh, en)
           const isActive = activeRailItem === id
+          const isDisabled = id === 'characters' && !hasOpenProject
           return (
             <LeftNavButton
               key={id}
               icon={Icon}
               label={label}
               active={isActive}
+              disabled={isDisabled}
               title={label}
               onClick={() => {
+                if (isDisabled) return
                 if (id === 'project') openProjectWorkspace()
                 else setSidebarView(id)
               }}
@@ -144,10 +155,11 @@ export default function LeftToolWindowBar() {
           icon={ListTree}
           label={text('蓝图', 'Plot')}
           active={activeRailItem === 'blueprint'}
+          disabled={!hasOpenProject}
           title={text('章节蓝图', 'Chapter blueprint')}
           onClick={() => {
-            setSidebarView('project', 'blueprint')
             if (!hasOpenProject) return
+            setSidebarView('project', 'blueprint')
             openBuiltinEditor('chapter-card-editor', text('章节蓝图', 'Chapter blueprint'), 'chapter-card')
           }}
         />
@@ -155,10 +167,11 @@ export default function LeftToolWindowBar() {
           icon={Globe2}
           label={text('架构', 'Architecture')}
           active={activeRailItem === 'world'}
+          disabled={!hasOpenProject}
           title={text('故事架构', 'Story architecture')}
           onClick={() => {
-            setSidebarView('project', 'world')
             if (!hasOpenProject) return
+            setSidebarView('project', 'world')
             openBuiltinEditor('world-building-editor', text('故事架构', 'Story architecture'), 'world-building')
           }}
         />
@@ -166,10 +179,11 @@ export default function LeftToolWindowBar() {
           icon={Map}
           label={text('大纲', 'Outline')}
           active={activeRailItem === 'synopsis'}
+          disabled={!hasOpenProject}
           title={text('情节大纲', 'Plot outline')}
           onClick={() => {
-            setSidebarView('project', 'synopsis')
             if (!hasOpenProject) return
+            setSidebarView('project', 'synopsis')
             openBuiltinEditor('synopsis-editor', text('情节大纲', 'Plot outline'), 'synopsis')
           }}
         />
@@ -177,10 +191,11 @@ export default function LeftToolWindowBar() {
           icon={GitBranch}
           label={text('剧情', 'Plot tree')}
           active={plotTreeActive}
+          disabled={!hasOpenProject}
           title={text('剧情树', 'Plot tree')}
           onClick={() => {
-            setSidebarView('project', 'plot-tree')
             if (!hasOpenProject) return
+            setSidebarView('project', 'plot-tree')
             openBuiltinEditor(
               'narrative-thread-editor',
               text('剧情树与叙事线索', 'Plot tree & narrative threads'),
@@ -193,8 +208,12 @@ export default function LeftToolWindowBar() {
           icon={BookOpen}
           label={text('知识库', 'Knowledge')}
           active={activeRailItem === 'knowledge'}
+          disabled={!hasOpenProject}
           title={text('知识库', 'Knowledge base')}
-          onClick={() => setSidebarView('knowledge')}
+          onClick={() => {
+            if (!hasOpenProject) return
+            setSidebarView('knowledge')
+          }}
         />
       </div>
 
@@ -230,7 +249,7 @@ export default function LeftToolWindowBar() {
           icon={Settings}
           label={text('设置', 'Settings')}
           active={activeRailItem === 'settings'}
-          onClick={openSettings}
+          onClick={() => openSettings()}
         />
       </div>
     </div>

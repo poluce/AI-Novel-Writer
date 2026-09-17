@@ -1116,13 +1116,12 @@ function ConfirmedRevisionDialog({ snapshot, writingLanguage, onClose, onStart }
   const text = useLocaleStore(s => s.text)
   const models = useLLMStore(s => s.models)
   const defaultModelId = useLLMStore(s => s.defaultModelId)
-  const [generationModelId, setGenerationModelId] = useState<string | null>(() => (
-    preferredGenerationModelId(models, defaultModelId)
-  ))
+  const reviewModelId = useLLMStore(s => s.resolveTaskModelId('review'))
+  const fallbackGenerationModelId = reviewModelId ?? preferredGenerationModelId(models, defaultModelId)
+  const [generationModelId, setGenerationModelId] = useState<string | null>(() => fallbackGenerationModelId)
   const [starting, setStarting] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
   const generationModels = models.filter(isGenerationModel)
-  const fallbackGenerationModelId = preferredGenerationModelId(models, defaultModelId)
   const selectedGenerationModelId = generationModelId ?? fallbackGenerationModelId
   const selectedGenerationModel = generationModels.find(model => model.id === selectedGenerationModelId)
   const modelSelectionError = generationModels.length === 0

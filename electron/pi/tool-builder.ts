@@ -4,21 +4,20 @@ import type { RendererActionSink } from '../../src/shared/agent-events'
 import type { AgentScope } from '../../src/shared/agent-scope'
 
 import { createReadArchitectureTool } from './tools/read-architecture.tool'
+import { createNovelConfigTool } from './tools/novel-config.tool'
+import { createStoryArchitectureTool } from './tools/story-architecture.tool'
 import { createReadCharactersTool } from './tools/read-characters.tool'
 import { createReadBlueprintTool } from './tools/read-blueprint.tool'
 import { createReadDraftsTool } from './tools/read-drafts.tool'
 import { createReadProjectStateTool } from './tools/read-project-state.tool'
 import { createSearchKnowledgeTool } from './tools/search-knowledge.tool'
 import { createReadFileTool } from './tools/read-file.tool'
-import { createWriteFileTool } from './tools/write-file.tool'
 import { createInspectWritingSkillTool } from './tools/inspect-writing-skill.tool'
 import { createLoadWritingSkillTool } from './tools/load-writing-skill.tool'
 import { createInstallWritingSkillTool } from './tools/install-writing-skill.tool'
 import { createBindWritingSkillTool } from './tools/bind-writing-skill.tool'
 import { createOpenEditorTool } from './tools/open-editor.tool'
-import { createStartWorkflowTool } from './tools/start-workflow.tool'
 import { createReplaceDraftExcerptTool } from './tools/replace-draft-excerpt.tool'
-import { createProposeNovelConfigTool } from './tools/propose-novel-config.tool'
 import { createProposeChapterBlueprintTool } from './tools/propose-chapter-blueprint.tool'
 import { buildMcpAgentTools } from './tools/mcp.tool'
 import type { AnyAgentTool } from './tool-types'
@@ -49,6 +48,8 @@ export function buildAgentTools(
 ): AnyAgentTool[] {
   const projectTools: AnyAgentTool[] = scope === 'project'
     ? [
+      createNovelConfigTool(language, rendererAction),
+      createStoryArchitectureTool(language, rendererAction),
       createReadArchitectureTool(language),
       createReadCharactersTool(language),
       createReadBlueprintTool(language),
@@ -56,13 +57,10 @@ export function buildAgentTools(
       createReadProjectStateTool(language),
       createSearchKnowledgeTool(language),
       createReadFileTool(language),
-      createWriteFileTool(language),
       createInstallWritingSkillTool(language),
       createBindWritingSkillTool(language),
       createOpenEditorTool(language, rendererAction),
-      createStartWorkflowTool(language, rendererAction),
       createReplaceDraftExcerptTool(language, rendererAction),
-      createProposeNovelConfigTool(language, rendererAction),
       createProposeChapterBlueprintTool(language),
     ]
     : []
@@ -86,11 +84,10 @@ export function confirmationToolNames(): ReadonlySet<string> {
     'write',
     'edit',
     'bash',
-    'write_file',
     'open_editor',
-    'start_workflow',
     'replace_draft_excerpt',
-    'propose_novel_config',
+    'novel_config',
+    'story_architecture',
     'propose_chapter_blueprint',
     'install_writing_skill',
     'bind_writing_skill',

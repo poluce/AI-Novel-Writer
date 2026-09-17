@@ -128,6 +128,9 @@ export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
   editorFontSize: 16,
   editorFontFamily: 'Noto Serif SC',
   autoSaveInterval: 30,
+  creativeStrategy: 'auto',
+  defaultThinkingLevel: 'low',
+  taskModelRouting: {},
   proxy: {
     enabled: false,
     type: 'http',

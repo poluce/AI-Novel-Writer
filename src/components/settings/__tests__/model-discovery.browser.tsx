@@ -534,7 +534,6 @@ describe('model discovery settings flow', () => {
     // Should only have 1 channel card
     const editButtons = Array.from(document.querySelectorAll('button[title="编辑"]'))
     expect(editButtons).toHaveLength(1)
-    await expect.element(page.getByText('已配置 1 个渠道 (3 个生成模型)')).toBeVisible()
 
     // Clicking edit opens the form which lists all 3 models in ModelListEditor
     await act(async () => {
@@ -544,5 +543,78 @@ describe('model discovery settings flow', () => {
     expect(Array.from(document.querySelectorAll('input')).some(input => input.value === 'gemini-3.8-flash')).toBe(true)
     expect(Array.from(document.querySelectorAll('input')).some(input => input.value === 'gemini-3.1-pro-low')).toBe(true)
     expect(Array.from(document.querySelectorAll('input')).some(input => input.value === 'gemini-3.7-flash')).toBe(true)
+  })
+
+  it('allows deleting any model including the first model with no primary model lock', async () => {
+    const common = { channelName: 'hajimi', apiKey: 'test-key', baseUrl: 'https://relay.example/v1' }
+    const modelA = savedProfile({ id: 'model-1', ...common, modelName: 'gemini-3.8-flash' })
+    const modelB = savedProfile({ id: 'model-2', ...common, modelName: 'gemini-3.1-pro-low' })
+    const discoverModels = vi.fn()
+    const deleteModel = vi.fn(async () => true)
+    useLLMStore.setState({ deleteModel })
+    const { saveModel } = await renderSettings(modelA, discoverModels, 'zh-CN', [modelB])
+
+    await act(async () => {
+      await page.getByRole('button', { name: '编辑', exact: true }).click()
+    })
+
+    // Assert that every model has a delete button (no disabled/primary un-deletable lock)
+    const deleteButtons = Array.from(document.querySelectorAll('button[title="删除模型"]'))
+    expect(deleteButtons).toHaveLength(2)
+
+    // Delete the first model
+    await act(async () => {
+      (deleteButtons[0] as HTMLButtonElement).click()
+    })
+
+    // Now only 1 model remains
+    expect(Array.from(document.querySelectorAll('button[title="删除模型"]'))).toHaveLength(1)
+    expect(Array.from(document.querySelectorAll('input')).some(input => input.value === 'gemini-3.8-flash')).toBe(false)
+    expect(Array.from(document.querySelectorAll('input')).some(input => input.value === 'gemini-3.1-pro-low')).toBe(true)
+
+    // Save configuration
+    await act(async () => {
+      await page.getByRole('button', { name: '保存配置', exact: true }).click()
+    })
+
+    await vi.waitFor(() => expect(saveModel).toHaveBeenCalledTimes(1))
+    expect(deleteModel).toHaveBeenCalledWith('model-1')
+    const saved = (saveModel.mock.calls[0] as unknown as [ModelProfile])[0]
+    expect(saved).toMatchObject({
+      id: 'model-2',
+      modelName: 'gemini-3.1-pro-low',
+    })
+  })
+
+  it('allows deleting all models to have 0 models and saves channel configuration', async () => {
+    const modelA = savedProfile({ id: 'model-single', modelName: 'only-model' })
+    const discoverModels = vi.fn()
+    const deleteModel = vi.fn(async () => true)
+    useLLMStore.setState({ deleteModel })
+    const { saveModel } = await renderSettings(modelA, discoverModels, 'zh-CN')
+
+    await act(async () => {
+      await page.getByRole('button', { name: '编辑', exact: true }).click()
+    })
+
+    // Single model has a delete button
+    const deleteBtn = document.querySelector('button[title="删除模型"]')
+    if (!(deleteBtn instanceof HTMLButtonElement)) throw new Error('Missing delete button')
+    await act(async () => {
+      deleteBtn.click()
+    })
+
+    // Shows 0 models empty state notice
+    await expect.element(page.getByText('该渠道下暂无模型。点击下方「+ 添加模型」或右侧「获取模型列表」添加。')).toBeVisible()
+
+    // Save configuration with 0 models
+    await expect.element(page.getByRole('button', { name: '保存配置', exact: true })).toBeEnabled()
+    await act(async () => {
+      await page.getByRole('button', { name: '保存配置', exact: true }).click()
+    })
+
+    await vi.waitFor(() => expect(saveModel).toHaveBeenCalledTimes(1))
+    const saved = (saveModel.mock.calls[0] as unknown as [ModelProfile])[0]
+    expect(saved.modelName).toBe('')
   })
 })

@@ -11,12 +11,27 @@ import {
  * 全书设定与大纲。角色图谱不在这里返回：角色只有 `read_characters`
  * 一个来源（权威角色名单），避免两个工具对同一事实给出不同口径。
  */
+const SECTION_ALIASES: Record<string, 'all' | 'premise' | 'worldbuilding' | 'synopsis'> = {
+  all: 'all',
+  premise: 'premise',
+  worldbuilding: 'worldbuilding',
+  synopsis: 'synopsis',
+  '全部': 'all',
+  '所有': 'all',
+  '故事前提': 'premise',
+  '前提': 'premise',
+  '世界观': 'worldbuilding',
+  '设定': 'worldbuilding',
+  '情节大纲': 'synopsis',
+  '大纲': 'synopsis',
+}
+
 const Section = Type.Union([
-  Type.Literal('all'),
-  Type.Literal('premise'),
-  Type.Literal('worldbuilding'),
-  Type.Literal('synopsis'),
-])
+  Type.Literal('all', { description: '读取全部三大架构文档（默认）' }),
+  Type.Literal('premise', { description: '故事前提：一句话前提、核心冲突链、金手指定位、悬念骨架' }),
+  Type.Literal('worldbuilding', { description: '世界观：核心规则与漏洞、阶层与资源战场、深层危机' }),
+  Type.Literal('synopsis', { description: '情节大纲：全书宏观故事线与分卷剧情脉络' }),
+], { description: '要读取的故事架构模块，不传时默认读取全部' })
 
 const Schema = Type.Object({
   section: Type.Optional(Section),
@@ -47,7 +62,8 @@ export function createReadArchitectureTool(
         throw new Error(text('项目架构未初始化', 'The project architecture has not been initialized'))
       }
 
-      const requested = params.section ?? 'all'
+      const rawSection = params.section ?? 'all'
+      const requested = SECTION_ALIASES[rawSection] ?? 'all'
       const wanted: Array<keyof typeof SECTION_LABELS> = requested === 'all'
         ? ['premise', 'worldbuilding', 'synopsis']
         : [requested]

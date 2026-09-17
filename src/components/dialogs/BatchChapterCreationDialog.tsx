@@ -92,15 +92,14 @@ function BatchChapterCreationDialogSession({ isOpen, startChapterNumber, onClose
   const [authorityError, setAuthorityError] = useState<string | null>(null)
   const [authorityLoading, setAuthorityLoading] = useState(false)
   const [consistencyPreflight, setConsistencyPreflight] = useState<ConsistencyPreflightResult | null>(null)
-  const [generationModelId, setGenerationModelId] = useState<string | null>(() => (
-    preferredGenerationModelId(models, defaultModelId)
-  ))
+  const draftingModelId = useLLMStore(s => s.resolveTaskModelId('drafting'))
+  const fallbackGenerationModelId = draftingModelId ?? preferredGenerationModelId(models, defaultModelId)
+  const [generationModelId, setGenerationModelId] = useState<string | null>(() => fallbackGenerationModelId)
 
   const normalizedCount = normalizeBatchChapterCount(chapterCount)
   const start = authoritativeStart ?? startChapterNumber ?? 1
   const end = start + normalizedCount - 1
   const generationModels = models.filter(isGenerationModel)
-  const fallbackGenerationModelId = preferredGenerationModelId(models, defaultModelId)
   const selectedGenerationModelId = generationModelId ?? fallbackGenerationModelId
   const selectedGenerationModel = generationModels.find(model => model.id === selectedGenerationModelId)
   const modelSelectionError = generationModels.length === 0

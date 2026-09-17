@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createOpenEditorTool } from '../open-editor.tool'
-import { createStartWorkflowTool } from '../start-workflow.tool'
 import { createReplaceDraftExcerptTool } from '../replace-draft-excerpt.tool'
 import type { RendererAction } from '../../renderer-action'
 
@@ -63,43 +62,14 @@ describe('open_editor', () => {
     const tool = createOpenEditorTool('zh-CN', () => {})
     await expect(tool.execute('c1', { target: 'file' })).rejects.toThrow('file_path')
   })
-})
 
-describe('start_workflow', () => {
-  it('reports success only after the renderer confirms registration', async () => {
+  it('accepts Chinese target aliases and normalizes to builtin editor targets', async () => {
     const actions: RendererAction[] = []
-    const tool = createStartWorkflowTool('zh-CN', async (a) => {
-      actions.push(a)
-      return { ok: true, summary: '已启动「写稿（第 1 章）」工作流（运行 ID：run-1，状态：running）。' }
-    })
-    const result = await tool.execute('c1', { workflow: 'generate_draft', chapter_number: 1 })
+    const tool = createOpenEditorTool('zh-CN', (a) => { actions.push(a) })
+    const result = await tool.execute('c1', { target: '故事架构' as never })
 
-    expect(actions).toHaveLength(1)
-    expect(actions[0]).toMatchObject({ type: 'start_workflow', workflow: 'generate_draft', chapterNumber: 1 })
-    expect(result.content[0]).toMatchObject({
-      type: 'text',
-      text: '已启动「写稿（第 1 章）」工作流（运行 ID：run-1，状态：running）。',
-    })
-  })
-
-  it('returns the renderer launch error to the model', async () => {
-    const tool = createStartWorkflowTool('zh-CN', async () => ({
-      ok: false,
-      error: 'refine 需要明确的草稿 ID 和不可变正文快照；请先打开目标草稿后从编辑器启动',
-    }))
-    await expect(tool.execute('c1', { workflow: 'refine', chapter_number: 1 }))
-      .rejects.toThrow('草稿 ID')
-  })
-
-  it('does not report success when the renderer never returns a receipt', async () => {
-    const tool = createStartWorkflowTool('zh-CN', () => {})
-    await expect(tool.execute('c1', { workflow: 'generate_architecture' }))
-      .rejects.toThrow('未能注册到任务中心')
-  })
-
-  it('requires a chapter number for chapter workflows', async () => {
-    const tool = createStartWorkflowTool('zh-CN', async () => ({ ok: true, summary: 'no' }))
-    await expect(tool.execute('c1', { workflow: 'generate_draft' })).rejects.toThrow('chapter_number')
+    expect(actions).toEqual([{ type: 'open_editor', target: 'builtin', editor: 'architecture' }])
+    expect(result.content[0]).toMatchObject({ type: 'text', text: '已打开「故事架构」页面' })
   })
 })
 

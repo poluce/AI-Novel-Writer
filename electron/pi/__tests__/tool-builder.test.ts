@@ -34,10 +34,11 @@ describe('buildAgentTools', () => {
     const names = buildAgentTools('zh-CN', () => {}, 'global').map(tool => tool.name)
     // 没有项目时项目读写工具只会失败，一律不挂。
     for (const projectTool of [
+      'novel_config', 'story_architecture',
       'read_architecture', 'read_characters', 'read_blueprint', 'read_drafts',
-      'read_project_state', 'search_knowledge', 'read_file', 'write_file',
+      'read_project_state', 'search_knowledge', 'read_file',
       'install_writing_skill', 'bind_writing_skill', 'open_editor',
-      'start_workflow', 'replace_draft_excerpt', 'propose_novel_config',
+      'replace_draft_excerpt',
       'propose_chapter_blueprint',
     ]) {
       expect(names).not.toContain(projectTool)
@@ -53,12 +54,12 @@ describe('buildAgentTools', () => {
 
   it('marks write and MCP tools sequential so reads can run in parallel', () => {
     const tools = buildAgentTools('zh-CN', () => {})
-    const write = tools.find(tool => tool.name === 'write_file')
+    const novelConfig = tools.find(tool => tool.name === 'novel_config')
     const replace = tools.find(tool => tool.name === 'replace_draft_excerpt')
     const mcp = tools.find(tool => tool.name === 'mcp__docs__search')
     const read = tools.find(tool => tool.name === 'read_file')
     const drafts = tools.find(tool => tool.name === 'read_drafts')
-    expect(write?.executionMode).toBe('sequential')
+    expect(novelConfig?.executionMode).toBe('sequential')
     expect(replace?.executionMode).toBe('sequential')
     expect(mcp?.executionMode).toBe('sequential')
     expect(read?.executionMode).toBeUndefined()
@@ -93,13 +94,12 @@ describe('buildAgentTools', () => {
       'bind_writing_skill',
       'edit',
       'install_writing_skill',
+      'novel_config',
       'open_editor',
       'propose_chapter_blueprint',
-      'propose_novel_config',
       'replace_draft_excerpt',
-      'start_workflow',
+      'story_architecture',
       'write',
-      'write_file',
     ])
   })
 })

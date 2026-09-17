@@ -13,7 +13,7 @@ export type RightView = 'agent' | 'ai-output'
 export type LeftRailItem = SidebarView | 'blueprint' | 'world' | 'synopsis' | 'plot-tree' | BottomTab
 
 /** 设置弹窗分类 */
-export type SettingsSection = 'llm' | 'embedding' | 'proxy' | 'editor' | 'prompts' | 'skills' | 'about'
+export type SettingsSection = 'appearance' | 'llm' | 'embedding' | 'presets' | 'proxy' | 'editor' | 'prompts' | 'skills' | 'about'
 
 /** 章节创建对话框的预填参数 */
 export type ChapterCreationPrefill = Record<string, unknown> | null
@@ -97,7 +97,7 @@ export const useLayoutStore = create<LayoutState>()((set) => ({
 
   // 全局弹窗默认关闭
   settingsOpen: false,
-  settingsSection: 'llm',
+  settingsSection: 'appearance',
   newProjectOpen: false,
   exportOpen: false,
   importNovelOpen: false,
@@ -138,8 +138,27 @@ export const useLayoutStore = create<LayoutState>()((set) => ({
   openBottomTab: (tab) => set({ bottomPanelOpen: true, bottomTab: tab, activeRailItem: tab }),
 
   // 全局弹窗 Actions
-  openSettings: (section = 'llm', activeRailItem = 'settings') =>
-    set({ settingsOpen: true, settingsSection: section, activeRailItem }),
+  openSettings: (section?: SettingsSection | unknown, activeRailItem?: LeftRailItem) => {
+    const validSections: SettingsSection[] = [
+      'appearance',
+      'llm',
+      'embedding',
+      'presets',
+      'proxy',
+      'editor',
+      'prompts',
+      'skills',
+      'about',
+    ]
+    const resolvedSection: SettingsSection =
+      typeof section === 'string' && validSections.includes(section as SettingsSection)
+        ? (section as SettingsSection)
+        : 'appearance'
+    const resolvedRailItem: LeftRailItem =
+      typeof activeRailItem === 'string' ? activeRailItem : 'settings'
+
+    set({ settingsOpen: true, settingsSection: resolvedSection, activeRailItem: resolvedRailItem })
+  },
   closeSettings: () => set({ settingsOpen: false }),
   openNewProject: () => set({ newProjectOpen: true }),
   closeNewProject: () => set({ newProjectOpen: false }),

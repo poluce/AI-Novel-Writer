@@ -352,9 +352,9 @@ function ArchFileViewerSession({
     }
   }, [])
 
-  // 监听架构生成完成事件，自动刷新当前页面
+  // 监听架构生成完成或工具直接更新事件，自动刷新当前页面
   useEffect(() => {
-    return globalEventBus.on('WORKFLOW_COMPLETE', (payload) => {
+    const unsubWorkflow = globalEventBus.on('WORKFLOW_COMPLETE', (payload) => {
       const projectSession = captureProjectSession(useProjectStore.getState().currentProject)
       if (!projectSession || !isProjectSessionCurrent(projectSession)) return
       if (!shouldRefreshArchOnWorkflowComplete(
@@ -366,6 +366,17 @@ function ArchFileViewerSession({
       void handleReload()
       void loadCharacterRosterStatus()
     })
+    const unsubArchUpdated = globalEventBus.on('ARCH_FILE_UPDATED', (payload) => {
+      const projectSession = captureProjectSession(useProjectStore.getState().currentProject)
+      if (!projectSession || !isProjectSessionCurrent(projectSession)) return
+      if (payload.projectPath !== projectKey) return
+      void handleReload()
+      void loadCharacterRosterStatus()
+    })
+    return () => {
+      unsubWorkflow()
+      unsubArchUpdated()
+    }
   }, [handleReload, loadCharacterRosterStatus, projectKey])
 
   /** 确认后启动架构生成工作流 */

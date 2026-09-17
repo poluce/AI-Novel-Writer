@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react'
-import { ChevronDown, Loader2, Sparkles } from 'lucide-react'
+import { ChevronDown, Loader2, Sparkles, Trash2 } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { useLocaleStore } from '../../stores/locale-store'
 
@@ -18,7 +18,7 @@ export function SettingDocument({ children }: { children: ReactNode }) {
   )
 }
 
-/** 带折叠 + 可选「AI 生成」按钮的设置区块。 */
+/** 带折叠 + 可选「清除」/「AI 生成」按钮的设置区块。 */
 export function SettingSection({
   title,
   collapsed,
@@ -28,6 +28,10 @@ export function SettingSection({
   generateHidden = false,
   generateTitle,
   onGenerate,
+  onClear,
+  clearDisabled = false,
+  clearHidden = false,
+  clearTitle,
   children,
 }: {
   title: string
@@ -38,6 +42,10 @@ export function SettingSection({
   generateHidden?: boolean
   generateTitle?: string
   onGenerate?: () => void
+  onClear?: () => void
+  clearDisabled?: boolean
+  clearHidden?: boolean
+  clearTitle?: string
   children: ReactNode
 }) {
   const text = useLocaleStore(s => s.text)
@@ -58,18 +66,33 @@ export function SettingSection({
           <ChevronDown size={14} style={{ transform: collapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 120ms' }} />
         </button>
         <h3 className="text-sm font-semibold m-0" style={{ color: 'var(--color-text)' }}>{title}</h3>
-        {onGenerate && !generateHidden && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="ml-auto shrink-0"
-            onClick={onGenerate}
-            disabled={generateDisabled}
-            title={generateTitle ?? (generating ? text('正在生成...', 'Generating...') : text('AI 生成', 'Generate with AI'))}
-          >
-            {generating ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
-            {generating ? text('生成中...', 'Generating...') : text('AI 生成', 'Generate with AI')}
-          </Button>
+        {(Boolean(onClear && !clearHidden) || Boolean(onGenerate && !generateHidden)) && (
+          <div className="ml-auto flex items-center gap-2 shrink-0">
+            {onClear && !clearHidden && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onClear}
+                disabled={clearDisabled || generating}
+                title={clearTitle ?? text('清除内容', 'Clear content')}
+              >
+                <Trash2 size={11} />
+                {text('清除', 'Clear')}
+              </Button>
+            )}
+            {onGenerate && !generateHidden && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onGenerate}
+                disabled={generateDisabled}
+                title={generateTitle ?? (generating ? text('正在生成...', 'Generating...') : text('AI 生成', 'Generate with AI'))}
+              >
+                {generating ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
+                {generating ? text('生成中...', 'Generating...') : text('AI 生成', 'Generate with AI')}
+              </Button>
+            )}
+          </div>
         )}
       </div>
       {!collapsed && children}

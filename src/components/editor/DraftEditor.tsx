@@ -32,6 +32,7 @@ import { captureFinalizationSnapshot } from '../../services/finalization-snapsho
 import { DRAFT_STATUS_LABEL, DRAFT_STATUS_COLOR } from '../../shared/draft-status'
 import { countDraftUnits } from '../../shared/draft-units'
 import { type DraftAnnotation } from '../../shared/draft-annotation'
+import { useDraftDiffProposals } from './use-draft-diff-proposals'
 import { PostProcessStatusPanel } from '../ui/PostProcessStatusPanel'
 import { getChapterFinalizeScope } from '../../services/workflows/workflow-utils'
 import { guardRepairPostProcess } from '../../services/workflow-guards'
@@ -100,6 +101,10 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
 
   // 后处理失败状态（用于控制是否展示修复按钮）
   const [hasProcessFailure, setHasProcessFailure] = useState(false)
+
+  // 监听当前草稿所属章节的 AI 行内修改待确认提案
+  const aiDiffProposals = useDraftDiffProposals(meta?.chapterNumber, meta?.id)
+  const [scrollToDiffRequest, setScrollToDiffRequest] = useState<number | undefined>(undefined)
 
   useEffect(() => {
     let cancelled = false
@@ -801,6 +806,20 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
               </Button>
             )}
 
+            {/* AI 草稿局部修改差异待合并 */}
+            {aiDiffProposals.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-[var(--color-accent)] text-[var(--color-accent)] bg-[var(--color-accent)]/10 hover:bg-[var(--color-accent)]/20 animate-pulse font-medium"
+                onClick={() => setScrollToDiffRequest(Date.now())}
+                title={text('AI 提议了正文修改，点击在正文中定位差异位置', 'AI proposed draft changes. Click to jump to the diff location.')}
+              >
+                <Sparkles size={12} />
+                {text(`AI 修改待确认 (${aiDiffProposals.length})`, `AI Diff (${aiDiffProposals.length})`)}
+              </Button>
+            )}
+
             {/* Review report */}
             {reviewCount > 0 && (
               <Button
@@ -951,6 +970,8 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
           enableAnnotations={!isReadonly && !isChapterBusy}
           annotations={annotations}
           onAnnotationsChange={setAnnotations}
+          diffProposals={aiDiffProposals}
+          scrollToDiffRequestId={scrollToDiffRequest}
           showLineNumbers
           chapterNumber={meta?.chapterNumber}
           draftId={meta?.id}

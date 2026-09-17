@@ -2,11 +2,12 @@ import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react'
 import {
   X, Plus, Trash2, Check, Save, Globe, Cpu, Database,
   Type, Settings2, Zap, Eye, EyeOff, ChevronDown, MessageSquare,
-  Info, Palette, ExternalLink, RefreshCw, RotateCcw, BookOpen, Search,
+  Info, Palette, ExternalLink, RefreshCw, BookOpen, Search, Sliders, ArrowLeft,
 } from 'lucide-react'
 import PromptSettings from './PromptSettings'
 import SkillSettings from './SkillSettings'
 import AppearanceSettings from './AppearanceSettings'
+import PresetsSettings from './PresetsSettings'
 import { useLLMStore } from '../../stores/llm-store'
 import { useThemeStore, FONT_OPTIONS, type FontId } from '../../stores/theme-store'
 import type {
@@ -35,10 +36,7 @@ import { generationModelLacksToolCalling, toolCallingRequiredMessage } from '../
 import { logFailure } from '../../shared/fail-log'
 import type { Locale } from '../../i18n/types'
 import { alertError } from '../ui/AlertDialog'
-import {
-  ModelReasoningOverrideSettings,
-  ProjectCreativeStrategySettings,
-} from './ReasoningPolicySettings'
+import { toast } from '../ui/Toast'
 
 // ==================== 分类定义 ====================
 
@@ -58,6 +56,7 @@ export const SETTINGS_SECTIONS: SectionItem[] = [
   { id: 'appearance', label: '外观', labelEn: 'Appearance', icon: <Palette size={16} />, description: '主题与界面皮肤彼此独立，可随时切换', descriptionEn: 'Themes and interface skins can be changed independently' },
   { id: 'llm', label: 'AI 生成模型', labelEn: 'Generation models', icon: <Cpu size={16} />, description: '配置用于文章生成、改写、摘要的语言模型', descriptionEn: 'Models used for writing, rewriting, and summarization' },
   { id: 'embedding', label: '向量模型', labelEn: 'Embedding model', icon: <Database size={16} />, description: '配置用于知识库检索的 Embedding 模型', descriptionEn: 'Embedding model used for knowledge retrieval' },
+  { id: 'presets', label: '预设', labelEn: 'Presets', icon: <Sliders size={16} />, description: '配置小说创作各阶段（起草、规划、审稿）的思考预设与策略', descriptionEn: 'Configure reasoning presets across writing stages' },
   { id: 'proxy', label: '网络代理', labelEn: 'Network proxy', icon: <Globe size={16} />, description: '配置 HTTP / SOCKS5 代理，用于访问受限 API', descriptionEn: 'HTTP / SOCKS5 proxy for restricted APIs' },
   { id: 'editor', label: '编辑器', labelEn: 'Editor', icon: <Type size={16} />, description: '字体大小、自动保存等编辑器偏好设置', descriptionEn: 'Fonts and other editor preferences' },
   { id: 'prompts', label: '提示词模板', labelEn: 'Prompt templates', icon: <MessageSquare size={16} />, description: '自定义 AI 创作各环节使用的提示词模板', descriptionEn: 'Customize guidance for each AI writing stage' },
@@ -75,7 +74,10 @@ interface SettingsModalProps {
 /** 全屏设置弹窗 */
 export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   const text = useLocaleStore(s => s.text)
-  const requestedSection = useLayoutStore(s => s.settingsSection)
+  const rawSection = useLayoutStore(s => s.settingsSection)
+  const requestedSection: SettingsModalSection = SETTINGS_SECTIONS.some(s => s.id === rawSection)
+    ? (rawSection as SettingsModalSection)
+    : (SETTINGS_SECTIONS[0]?.id ?? 'appearance')
   const [section, setSection] = useState<SettingsModalSection>(requestedSection)
 
   useEffect(() => {
@@ -162,6 +164,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
             {section === 'appearance' && <AppearanceSettings />}
             {section === 'llm' && <LLMSection purposes={['generation', 'refinement', 'summary']} purposeLabel={text('生成模型', 'generation models')} />}
             {section === 'embedding' && <LLMSection purposes={['embedding']} purposeLabel={text('向量模型', 'embedding models')} />}
+            {section === 'presets' && <PresetsSettings />}
             {section === 'proxy' && <ProxySection />}
             {section === 'editor' && <EditorSection />}
             {section === 'prompts' && <PromptSettings />}
@@ -271,13 +274,14 @@ function LLMSection({
         }
       }
 
-      // 新增模型后，如果该分类还没有默认则自动设为默认
+      // 新增模型后，如果该分类还没有默认且保存的模型中有非空模型，则自动设为默认
       const countBefore = filtered.length
-      if (countBefore === 0) {
+      if (countBefore === 0 && targets.some(t => t.modelName.trim())) {
+        const defaultCandidate = targets.find(t => t.modelName.trim())?.id || firstSavedId
         if (isEmbeddingSection) {
-          await setDefaultEmbeddingModel(firstSavedId)
+          await setDefaultEmbeddingModel(defaultCandidate)
         } else {
-          await setDefaultModel(firstSavedId)
+          await setDefaultModel(defaultCandidate)
         }
       }
       setEditingModel(null)
@@ -308,16 +312,6 @@ function LLMSection({
       {/* 模型列表 */}
       {!editingModel && (
         <>
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
-              {text(`已配置 ${channelGroups.length} 个渠道 (${filtered.length} 个${purposeLabel})`, `${channelGroups.length} channel(s) (${filtered.length} ${purposeLabel}) configured`)}
-            </span>
-            <Button size="sm" onClick={handleAdd}>
-              <Plus size={13} />
-              {text(`添加${purposeLabel}`, `Add ${purposeLabel}`)}
-            </Button>
-          </div>
-
           {isEmbeddingSection && !editingModel && (
             <div
               className="flex items-center justify-between gap-4 rounded-xl px-4 py-3"
@@ -364,19 +358,34 @@ function LLMSection({
                   }}
                   onDelete={async () => {
                     const channelTitle = group.channelName || group.representative.name || group.label
+                    const modelCount = group.models.length
                     const confirmed = window.confirm(
                       text(
-                        `确定要删除渠道「${channelTitle}」吗？该渠道下的 ${group.models.length} 个模型配置都将被删除。`,
-                        `Are you sure you want to delete channel "${channelTitle}"? All ${group.models.length} models will be deleted.`
-                      )
+                        `确定要删除渠道「${channelTitle}」吗？${modelCount > 0 ? `该渠道下的 ${modelCount} 个模型配置都将被删除。` : ''}`,
+                        `Are you sure you want to delete channel "${channelTitle}"?${modelCount > 0 ? ` All ${modelCount} models will be deleted.` : ''}`,
+                      ),
                     )
                     if (!confirmed) return
-                    for (const m of group.models) {
-                      await deleteModel(m.profile.id)
+                    const idsToDelete = new Set(group.models.map(m => m.profile.id))
+                    idsToDelete.add(group.representative.id)
+                    for (const id of idsToDelete) {
+                      await deleteModel(id)
                     }
                   }}
                 />
               ))}
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full py-2 border-dashed hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] transition-colors"
+                onClick={handleAdd}
+                aria-label={text('添加', 'Add')}
+              >
+                <Plus size={13} />
+                {text('添加', 'Add')}
+              </Button>
             </div>
           )}
         </>
@@ -428,11 +437,6 @@ function ChannelCard({
           <span className="text-[0.68rem] px-1.5 py-0.5 rounded bg-[var(--color-hover)] text-[var(--color-text-muted)] flex-shrink-0 font-mono">
             {rep.protocol}
           </span>
-          {hasDefault && (
-            <span className="text-[0.68rem] px-1.5 py-0.5 rounded bg-[var(--color-accent)] text-white flex-shrink-0 font-medium">
-              {text('默认', 'Default')}
-            </span>
-          )}
         </div>
         <p className="text-xs truncate mt-0.5 font-mono" style={{ color: 'var(--color-text-muted)' }}>
           {rep.baseUrl}
@@ -677,31 +681,101 @@ function ModelForm({
   const text = useLocaleStore(s => s.text)
   const locale = useLocaleStore(s => s.locale)
   const [showKey, setShowKey] = useState(false)
-  const [advancedOpen, setAdvancedOpen] = useState(false)
-  // 标记"模型标识"是否使用自定义输入模式
-  const [customModelName, setCustomModelName] = useState(false)
   const [showDiscoveryModal, setShowDiscoveryModal] = useState(false)
 
-  // 查找属于此渠道的其他已保存模型（第一条模型即当前表单的 model）
-  const initialOtherModels = useMemo(() => {
-    return existingModels.filter(m => (
+  // 查找属于此渠道的所有已保存模型
+  const initialChannelProfiles = useMemo(() => {
+    const list: ModelProfile[] = []
+    if (model.modelName && model.modelName.trim()) {
+      list.push(model)
+    }
+    const others = existingModels.filter(m => (
       m.id !== model.id &&
       m.provider === model.provider &&
       m.protocol === model.protocol &&
       m.baseUrl.replace(/\/+$/, '').toLowerCase() === model.baseUrl.replace(/\/+$/, '').toLowerCase() &&
       m.apiKey === model.apiKey
-    )).map(m => ({
-      id: m.id,
-      modelName: m.modelName || '',
-      name: m.name && m.name !== m.modelName && m.name !== model.name ? m.name : '',
-    }))
-  }, [existingModels, model.id, model.provider, model.protocol, model.baseUrl, model.apiKey, model.name])
+    ))
+    for (const o of others) {
+      if (o.modelName && o.modelName.trim()) {
+        list.push(o)
+      }
+    }
+    return list
+  }, [existingModels, model])
 
-  const [primaryModelAlias, setPrimaryModelAlias] = useState('')
-  const [extraModels, setExtraModels] = useState<Array<{ id: string; modelName: string; name: string }>>(initialOtherModels)
+  const initialModelIds = useMemo(() => new Set(initialChannelProfiles.map(p => p.id)), [initialChannelProfiles])
+
+  const isEmbedding = model.purposes?.includes('embedding')
+  const embeddingOptions = normalizeEmbeddingOptions(model.embeddingOptions)
+  // 将预设数组转换为以 provider 为键的 Map 方便查找
+  const presetMap = new Map(presets.map((p) => [p.provider, p]))
+  const preset = presetMap.get(model.provider)
+  const capabilitiesForPresetModel = (modelName: string) => isEmbedding
+    ? preset?.embeddingModelCapabilities?.[modelName]
+    : preset?.models.find((candidate) => candidate.name === modelName)?.capabilities
+
+  const initialChannelName = useMemo(() => {
+    return model.channelName?.trim()
+      || initialChannelProfiles.find(p => p.channelName?.trim())?.channelName?.trim()
+      || (model.name && model.name.trim() !== model.modelName.trim() ? model.name.trim() : '')
+  }, [initialChannelProfiles, model])
+
+  const [channelName, setChannelName] = useState(initialChannelName)
+
+  const [channelModels, setChannelModels] = useState<Array<{
+    id: string
+    modelName: string
+    name: string
+    temperature?: number
+    contextWindowTokens?: number | null
+    maxOutputTokens?: number
+  }>>(() => {
+    if (initialChannelProfiles.length > 0) {
+      return initialChannelProfiles.map(p => {
+        const presetCaps = capabilitiesForPresetModel(p.modelName)
+        const isChannelTitle = p.name && (
+          p.name.trim() === (p.channelName?.trim() || '') ||
+          p.name.trim() === initialChannelName ||
+          p.name.trim() === (model.channelName?.trim() || '')
+        )
+        const customAlias = p.name && p.name.trim() !== p.modelName.trim() && !isChannelTitle ? p.name.trim() : ''
+
+        return {
+          id: p.id,
+          modelName: p.modelName || '',
+          name: customAlias,
+          temperature: typeof p.temperature === 'number' ? p.temperature : 0.7,
+          contextWindowTokens: p.capabilities?.contextWindowTokens ?? presetCaps?.contextWindowTokens ?? null,
+          maxOutputTokens: p.capabilities?.maxOutputTokens ?? p.maxTokens ?? presetCaps?.maxOutputTokens ?? 4096,
+        }
+      })
+    }
+    if (model.modelName && model.modelName.trim()) {
+      const presetCaps = capabilitiesForPresetModel(model.modelName)
+      const isChannelTitle = model.name && (
+        model.name.trim() === (model.channelName?.trim() || '') ||
+        model.name.trim() === initialChannelName
+      )
+      const customAlias = model.name && model.name.trim() !== model.modelName.trim() && !isChannelTitle ? model.name.trim() : ''
+
+      return [{
+        id: model.id,
+        modelName: model.modelName.trim(),
+        name: customAlias,
+        temperature: typeof model.temperature === 'number' ? model.temperature : 0.7,
+        contextWindowTokens: model.capabilities?.contextWindowTokens ?? presetCaps?.contextWindowTokens ?? null,
+        maxOutputTokens: model.capabilities?.maxOutputTokens ?? model.maxTokens ?? presetCaps?.maxOutputTokens ?? 4096,
+      }]
+    }
+    return []
+  })
+
+  const [expandedModelId, setExpandedModelId] = useState<string | null>(null)
 
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean, error?: string } | null>(null)
+  const [modelTestStatuses, setModelTestStatuses] = useState<Record<string, { status: 'idle' | 'testing' | 'success' | 'error'; error?: string }>>({})
   const testConnection = useLLMStore(s => s.testConnection)
   const discoverModels = useLLMStore(s => s.discoverModels)
   const [discovering, setDiscovering] = useState(false)
@@ -730,6 +804,17 @@ function ModelForm({
     discoveryRevision.current += 1
   }, [])
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !showDiscoveryModal) {
+        e.stopPropagation()
+        onCancel()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onCancel, showDiscoveryModal])
+
   const invalidateDiscovery = () => {
     discoveryRevision.current += 1
     setDiscovering(false)
@@ -738,63 +823,12 @@ function ModelForm({
     setShowDiscoveryModal(false)
   }
 
-  const isEmbedding = model.purposes?.includes('embedding')
-  const embeddingOptions = normalizeEmbeddingOptions(model.embeddingOptions)
-  // 将预设数组转换为以 provider 为键的 Map 方便查找
-  const presetMap = new Map(presets.map((p) => [p.provider, p]))
-  const preset = presetMap.get(model.provider)
-  const capabilitiesForPresetModel = (modelName: string) => isEmbedding
-    ? preset?.embeddingModelCapabilities?.[modelName]
-    : preset?.models.find((candidate) => candidate.name === modelName)?.capabilities
-  // 生成模型列表为 ModelPreset[]，embedding 模型为 string列表转换过来的 ModelPreset
-  const presetModels: import('../../shared/provider-presets').ModelPreset[] = isEmbedding
-    ? (preset?.embeddingModels ?? []).map((name) => ({
-        name,
-        maxTokens: 0,
-        capabilities: capabilitiesForPresetModel(name),
-      }))
-    : (preset?.models ?? [])
-
   /** 更新单个字段 */
   const up = <K extends keyof ModelProfile>(key: K, val: ModelProfile[K]) => {
     if (key === 'provider' || key === 'protocol' || key === 'baseUrl' || key === 'apiKey') {
       invalidateDiscovery()
     }
     onChange({ ...model, [key]: val })
-  }
-
-  const currentCapabilities: ModelCapabilities = {
-    contextWindowTokens: model.capabilities?.contextWindowTokens ?? null,
-    maxOutputTokens: model.capabilities?.maxOutputTokens ?? model.maxTokens,
-    reasoning: model.capabilities?.reasoning ?? false,
-    structuredOutput: model.capabilities?.structuredOutput ?? false,
-    usage: model.capabilities?.usage ?? false,
-  }
-  const contextOutputConflict = !isEmbedding
-    && currentCapabilities.contextWindowTokens !== null
-    && currentCapabilities.contextWindowTokens > 0
-    && currentCapabilities.maxOutputTokens >= currentCapabilities.contextWindowTokens
-
-  const updateCapabilities = (next: Partial<ModelCapabilities>) => {
-    const capabilities = { ...currentCapabilities, ...next }
-    onChange({ ...model, capabilities, maxTokens: capabilities.maxOutputTokens })
-  }
-
-  const resetAdvancedSettings = () => {
-    const presetModel = presetModels.find(candidate => candidate.name === model.modelName)
-    const defaultMaxOutputTokens = presetModel?.capabilities?.maxOutputTokens
-      ?? presetModel?.maxTokens
-      ?? 4096
-    onChange({
-      ...model,
-      temperature: 0.7,
-      maxTokens: defaultMaxOutputTokens,
-      capabilities: {
-        ...currentCapabilities,
-        maxOutputTokens: defaultMaxOutputTokens,
-      },
-      reasoningOverride: 'auto',
-    })
   }
 
   /**
@@ -810,7 +844,6 @@ function ModelForm({
     const capabilities = isEmbedding
       ? p?.embeddingModelCapabilities?.[defaultModelName]
       : firstModel?.capabilities
-    setCustomModelName(false)
     invalidateDiscovery()
     onChange({
       ...model,
@@ -823,39 +856,87 @@ function ModelForm({
     })
   }
 
-  /** 选择预设模型或切换到自定义输入 */
-  const handleModelSelect = (val: string) => {
-    if (val === '__custom__') {
-      setCustomModelName(true)
-      up('modelName', '')
-    } else {
-      setCustomModelName(false)
-      // 找到对应的 ModelPreset，同时更新 modelName 和 maxTokens
-      const matched = presetModels.find((m) => m.name === val)
-      const capabilities = matched?.capabilities
-      onChange({
+  const handleTestSingleModel = async (targetId: string) => {
+    const target = channelModels.find(m => m.id === targetId)
+    if (!target || !target.modelName.trim()) {
+      setModelTestStatuses(prev => ({
+        ...prev,
+        [targetId]: { status: 'error', error: text('模型 ID 不能为空', 'Model ID cannot be empty') },
+      }))
+      return false
+    }
+
+    setModelTestStatuses(prev => ({
+      ...prev,
+      [targetId]: { status: 'testing' },
+    }))
+
+    try {
+      const result = await testConnection({
         ...model,
-        modelName: val,
-        maxTokens: capabilities?.maxOutputTokens ?? matched?.maxTokens ?? model.maxTokens,
-        capabilities: capabilities ? { ...capabilities } : undefined,
+        modelName: target.modelName.trim(),
+        name: target.name.trim() || target.modelName.trim(),
+        temperature: target.temperature ?? 0.7,
+        maxTokens: target.maxOutputTokens ?? 4096,
+        capabilities: {
+          reasoning: model.capabilities?.reasoning ?? false,
+          structuredOutput: model.capabilities?.structuredOutput ?? false,
+          usage: model.capabilities?.usage ?? false,
+          ...(model.capabilities?.toolCalling !== undefined ? { toolCalling: model.capabilities.toolCalling } : {}),
+          ...(model.capabilities?.reasoningAdapter ? { reasoningAdapter: model.capabilities.reasoningAdapter } : {}),
+          contextWindowTokens: target.contextWindowTokens ?? null,
+          maxOutputTokens: target.maxOutputTokens ?? 4096,
+        },
       })
+      setModelTestStatuses(prev => ({
+        ...prev,
+        [targetId]: {
+          status: result.success ? 'success' : 'error',
+          error: result.error,
+        },
+      }))
+      return result.success
+    } catch (err) {
+      setModelTestStatuses(prev => ({
+        ...prev,
+        [targetId]: {
+          status: 'error',
+          error: err instanceof Error ? err.message : String(err),
+        },
+      }))
+      return false
     }
   }
 
+  const handleTestAllModels = async () => {
+    const validModels = channelModels.filter(m => m.modelName.trim() !== '')
+    if (validModels.length === 0) {
+      toast.warning(text('请先输入至少一个模型 ID', 'Please enter at least one model ID'))
+      return
+    }
 
-  // 当前模型名是否在预设列表里（决定下拉框显示）
-  const isPresetValue = presetModels.some((m) => m.name === model.modelName)
-  const selectValue = customModelName || (!isPresetValue && presetModels.length > 0)
-    ? '__custom__'
-    : model.modelName
-
-  const handleTest = async () => {
     setTesting(true)
     setTestResult(null)
-    const result = await testConnection(model)
-    setTestResult(result)
+
+    const results = await Promise.all(
+      channelModels.map(m => handleTestSingleModel(m.id))
+    )
+
+    const passedCount = results.filter(Boolean).length
+    const totalCount = channelModels.length
     setTesting(false)
-    setTimeout(() => setTestResult(null), 3000)
+
+    if (passedCount === totalCount) {
+      setTestResult({ success: true })
+      toast.success(text(`全部 ${passedCount} 个模型测试通过！`, `All ${passedCount} models connected successfully!`))
+    } else if (passedCount > 0) {
+      setTestResult({ success: false, error: `${passedCount}/${totalCount} 可用` })
+      toast.warning(text(`部分通过：${passedCount}/${totalCount} 个模型连通可用，${totalCount - passedCount} 个失败`, `Partial: ${passedCount}/${totalCount} models available, ${totalCount - passedCount} failed`))
+    } else {
+      setTestResult({ success: false, error: text('所有模型均测试失败', 'All models failed') })
+      toast.error(text('所有模型均连接失败，请检查 API Key、Base URL 或网络代理', 'All models failed. Check your API Key, Base URL, or network'))
+    }
+    setTimeout(() => setTestResult(null), 4000)
   }
 
   const handleDiscoverModels = async () => {
@@ -912,9 +993,30 @@ function ModelForm({
       className="rounded-xl p-5 space-y-4"
       style={{ border: '1.5px solid var(--color-accent)', backgroundColor: 'var(--color-panel)' }}
     >
-      <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
-        {model.name ? text(`编辑：${model.name}`, `Edit: ${model.name}`) : text('新建模型配置', 'New model configuration')}
-      </h3>
+      {/* 顶部返回与导航栏 */}
+      <div className="flex items-center justify-between pb-3 border-b border-[var(--color-border)]">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex items-center gap-1.5 text-xs font-medium text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors cursor-pointer py-1 px-2 rounded-md hover:bg-[var(--color-hover)]"
+        >
+          <ArrowLeft size={14} />
+          <span>{text('返回列表', 'Back to list')}</span>
+        </button>
+        <span className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
+          {channelName ? text(`编辑渠道：${channelName}`, `Edit channel: ${channelName}`) : text('新建渠道配置', 'New channel configuration')}
+        </span>
+        <button
+          type="button"
+          onClick={onCancel}
+          title={text('取消并返回', 'Cancel and return')}
+          aria-label={text('返回', 'Back')}
+          className="p-1 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)] transition-colors cursor-pointer"
+        >
+          <X size={15} />
+        </button>
+      </div>
+
       {generationModelLacksToolCalling(model) && (
         <div className="text-xs rounded-lg px-3 py-2 bg-[var(--color-error)]/10 text-[var(--color-error-text)]">
           {toolCallingRequiredMessage(locale === 'en-US' ? 'en-US' : 'zh-CN')}
@@ -925,8 +1027,12 @@ function ModelForm({
       <div>
         <Label>{text('渠道名称', 'Channel name')}</Label>
         <Input
-          value={model.name}
-          onChange={(e) => up('name', e.target.value)}
+          value={channelName}
+          onChange={(e) => {
+            const val = e.target.value
+            setChannelName(val)
+            up('channelName', val)
+          }}
           placeholder={text('如：hajimi / 自定义中转', 'e.g. hajimi / Custom gateway')}
         />
       </div>
@@ -939,11 +1045,23 @@ function ModelForm({
             value={model.provider}
             onChange={(e) => handleProviderChange(e.target.value as ModelProfile['provider'])}
           >
-            {presets.map((p) => (
-              <option key={p.provider} value={p.provider}>
-                {p.displayName || p.provider}
-              </option>
-            ))}
+            {presets.length > 0 ? (
+              presets.map((p) => (
+                <option key={p.provider} value={p.provider}>
+                  {p.displayName || p.provider}
+                </option>
+              ))
+            ) : (
+              <>
+                <option value="openai">OpenAI</option>
+                <option value="deepseek">DeepSeek</option>
+                <option value="gemini">Google Gemini</option>
+                <option value="xai">xAI</option>
+                <option value="siliconflow">SiliconFlow</option>
+                <option value="ollama">Ollama</option>
+                <option value="bigmodel">BigModel</option>
+              </>
+            )}
             {!presets.some((p) => p.provider === 'custom') && (
               <option value="custom">{text('自定义', 'Custom')}</option>
             )}
@@ -960,62 +1078,6 @@ function ModelForm({
             <option value="anthropic">Anthropic</option>
           </NativeSelect>
         </div>
-      </div>
-
-      {/* 模型标识：有预设时显示下拉，否则纯输入 */}
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <Label className="mb-0">{text('model（模型名称）', 'model')}</Label>
-          {presetModels.length > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                if (customModelName) {
-                  // 切回预设列表
-                  const first = presetModels[0]
-                  const capabilities = first.capabilities
-                  setCustomModelName(false)
-                  onChange({
-                    ...model,
-                    modelName: first.name,
-                    maxTokens: capabilities?.maxOutputTokens ?? first.maxTokens ?? model.maxTokens,
-                    capabilities: capabilities ? { ...capabilities } : undefined,
-                  })
-                } else {
-                  // 切换到自定义输入
-                  setCustomModelName(true)
-                  up('modelName', '')
-                }
-              }}
-              className="text-xs transition-colors"
-              style={{ color: 'var(--color-accent)' }}
-            >
-              {customModelName ? text('从列表选择', 'Choose from list') : text('手动输入', 'Enter manually')}
-            </button>
-          )}
-        </div>
-
-        {/* 有预设模型 且 未切到手动输入 → 显示下拉 */}
-        {presetModels.length > 0 && !customModelName ? (
-          <NativeSelect
-            value={selectValue}
-            onChange={(e) => handleModelSelect(e.target.value)}
-          >
-            {presetModels.map((m) => (
-              <option key={m.name} value={m.name}>{m.name}</option>
-            ))}
-            <option value="__custom__">{text('手动输入', 'Enter manually')}</option>
-          </NativeSelect>
-        ) : (
-          <div>
-            <Input
-              value={model.modelName}
-              onChange={(e) => up('modelName', e.target.value)}
-              placeholder={isEmbedding ? 'text-embedding-3-small' : 'gpt-4o'}
-              autoFocus={customModelName}
-            />
-          </div>
-        )}
       </div>
 
       {/* Base URL */}
@@ -1054,40 +1116,98 @@ function ModelForm({
         </div>
       </div>
 
-      {/* DSH 风格模型列表 (ModelListEditor) */}
+      {isEmbedding && model.provider === 'siliconflow' && (
+        <div className="rounded-lg p-3 space-y-2" style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-hover)' }}>
+          <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+            {text('BAAI/bge-m3 当前在 SiliconFlow 提供免费调用。完成实名认证后可使用，仍受固定速率限制约束。', 'BAAI/bge-m3 is currently free on SiliconFlow. Verification is required; fixed rate limits still apply.')}
+          </p>
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+            <button type="button" onClick={() => void openModelProviderResource('siliconflow-invite', text)} className="text-[var(--color-accent)] hover:underline cursor-pointer">
+              {text('邀请注册链接', 'Invitation registration link')}
+            </button>
+            <button type="button" onClick={() => void openModelProviderResource('siliconflow-console', text)} className="text-[var(--color-accent)] hover:underline cursor-pointer">
+              {text('官方控制台', 'Official console')}
+            </button>
+            <button type="button" onClick={() => void openModelProviderResource('siliconflow-docs', text)} className="text-[var(--color-accent)] hover:underline cursor-pointer">
+              {text('官方文档', 'Official documentation')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 模型列表 (支持 0 到 N 个模型，全部模型平权均可删除) */}
       <div className="space-y-3 rounded-lg p-3" style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-hover)' }}>
         <div className="flex items-center justify-between gap-3">
-          <div>
-            <Label className="mb-0">{text('模型列表', 'Models')} ({1 + extraModels.length})</Label>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-              {text('该渠道下配置的可用模型列表。点击下方「+ 添加模型」可手填模型 ID，或点击右侧获取端点模型后一键导入。', 'Configured models for this channel. Click "+ Add model" or fetch from endpoint.')}
-            </p>
+          <Label className="mb-0">
+            {text('模型列表', 'Models')}
+          </Label>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={handleTestAllModels}
+              disabled={testing || channelModels.length === 0}
+            >
+              <Zap size={13} className={testing ? 'animate-pulse text-[var(--color-accent)]' : undefined} />
+              {testing ? text('测试中...', 'Testing...') : text('测试连接', 'Test connection')}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={handleDiscoverModels}
+              disabled={discovering}
+            >
+              <RefreshCw size={13} className={discovering ? 'animate-spin' : undefined} />
+              {discovering ? text('获取中...', 'Refreshing...') : text('获取模型列表', 'Refresh model list')}
+            </Button>
           </div>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={handleDiscoverModels}
-            disabled={discovering}
-          >
-            <RefreshCw size={13} className={discovering ? 'animate-spin' : undefined} />
-            {discovering ? text('获取中...', 'Refreshing...') : text('获取模型列表', 'Refresh model list')}
-          </Button>
         </div>
 
         {/* 端点模型下拉快捷选择（满足已有端点模型列表选择契约） */}
         {discoveredModels.length > 0 && (
           <NativeSelect
             aria-label={text('端点模型列表', 'Endpoint model list')}
-            value={discoveredModels.some(candidate => candidate.value === model.modelName) ? model.modelName : ''}
+            value=""
             onChange={(event) => {
               const value = event.target.value
               if (!value) return
-              setCustomModelName(true)
-              onChange({ ...model, modelName: value })
+              const presetCaps = capabilitiesForPresetModel(value)
+              setChannelModels(prev => {
+                if (prev.length <= 1) {
+                  const targetId = prev[0]?.id || model.id
+                  return [{
+                    id: targetId,
+                    modelName: value,
+                    name: prev[0]?.name || '',
+                    temperature: prev[0]?.temperature ?? model.temperature ?? 0.7,
+                    contextWindowTokens: prev[0]?.contextWindowTokens ?? model.capabilities?.contextWindowTokens ?? presetCaps?.contextWindowTokens ?? null,
+                    maxOutputTokens: prev[0]?.maxOutputTokens ?? model.capabilities?.maxOutputTokens ?? model.maxTokens ?? presetCaps?.maxOutputTokens ?? 4096,
+                  }]
+                }
+                const emptyIdx = prev.findIndex(m => !m.modelName.trim())
+                if (emptyIdx >= 0) {
+                  return prev.map((m, i) => i === emptyIdx ? {
+                    ...m,
+                    modelName: value,
+                    contextWindowTokens: m.contextWindowTokens ?? presetCaps?.contextWindowTokens ?? null,
+                    maxOutputTokens: m.maxOutputTokens ?? presetCaps?.maxOutputTokens ?? 4096,
+                  } : m)
+                }
+                if (prev.some(m => m.modelName === value)) return prev
+                return [...prev, {
+                  id: randomUUID(),
+                  modelName: value,
+                  name: '',
+                  temperature: 0.7,
+                  contextWindowTokens: presetCaps?.contextWindowTokens ?? null,
+                  maxOutputTokens: presetCaps?.maxOutputTokens ?? 4096,
+                }]
+              })
             }}
           >
-            <option value="">{text('选择端点返回的模型（快捷填入主模型）', 'Choose a model returned by the endpoint')}</option>
+            <option value="">{text('选择端点返回的模型（快捷填入）', 'Choose a model returned by the endpoint')}</option>
             {discoveredModels.map(candidate => (
               <option key={`${candidate.id}:${candidate.value}`} value={candidate.value}>
                 {candidate.name === candidate.id ? candidate.id : `${candidate.name} (${candidate.id})`}
@@ -1101,10 +1221,10 @@ function ModelForm({
           open={showDiscoveryModal}
           onClose={() => setShowDiscoveryModal(false)}
           discoveredModels={discoveredModels}
-          alreadyAddedModelNames={[model.modelName, ...extraModels.map(m => m.modelName)].filter(Boolean)}
+          alreadyAddedModelNames={channelModels.map(m => m.modelName).filter(Boolean)}
           onAddModels={(modelNames) => {
-            const toAdd = modelNames.filter(name => name !== model.modelName && !extraModels.some(m => m.modelName === name))
-            setExtraModels(prev => [
+            const toAdd = modelNames.filter(name => !channelModels.some(m => m.modelName === name))
+            setChannelModels(prev => [
               ...prev,
               ...toAdd.map(name => ({ id: randomUUID(), modelName: name, name }))
             ])
@@ -1118,178 +1238,216 @@ function ModelForm({
           </p>
         )}
 
-        {/* 模型行列表：第 1 行为主模型，后续行为本渠道添加的额外模型 */}
-        <div className="space-y-1.5 pt-1">
-          {/* 主模型行 */}
-          <div className="flex items-center gap-2 p-2 rounded-md bg-[var(--color-bg)] border border-[var(--color-border)]">
-            <Input
-              value={model.modelName}
-              placeholder={text('模型 ID (如 gemini-3.8-flash-high)', 'Model ID (e.g. gemini-3.8-flash-high)')}
-              className="flex-1 text-xs"
-              onChange={(e) => up('modelName', e.target.value)}
-            />
-            <Input
-              value={primaryModelAlias}
-              placeholder={text('模型别名 (可选，留空同模型 ID)', 'Model alias (optional, defaults to model ID)')}
-              className="flex-1 text-xs"
-              onChange={(e) => setPrimaryModelAlias(e.target.value)}
-            />
-            <span className="text-[0.68rem] px-1.5 py-0.5 rounded bg-[var(--color-hover)] text-[var(--color-text-muted)] flex-shrink-0">
-              {text('主模型', 'Primary')}
-            </span>
+        {/* 模型行列表：所有模型平权，均可删除，且均可独立设置参数 */}
+        {channelModels.length === 0 ? (
+          <div className="text-xs py-4 px-3 text-center rounded-md border border-dashed border-[var(--color-border)] text-[var(--color-text-muted)] bg-[var(--color-bg)]">
+            {text('该渠道下暂无模型。点击下方「+ 添加模型」或右侧「获取模型列表」添加。', 'No models in this channel. Click "+ Add model" or fetch from endpoint.')}
           </div>
+        ) : (
+          <div className="space-y-2 pt-1">
+            {channelModels.map((item, index) => (
+              <div key={item.id} className="rounded-md bg-[var(--color-bg)] border border-[var(--color-border)] p-2 transition-all">
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={item.modelName}
+                    placeholder={text('模型 ID (如 gemini-3.8-flash-high)', 'Model ID (e.g. gemini-3.8-flash-high)')}
+                    className="flex-1 text-xs"
+                    onChange={(e) => {
+                      const val = e.target.value
+                      const presetCaps = capabilitiesForPresetModel(val)
+                      setChannelModels(prev => prev.map((m, i) => i === index ? {
+                        ...m,
+                        modelName: val,
+                        ...(presetCaps?.contextWindowTokens ? { contextWindowTokens: presetCaps.contextWindowTokens } : {}),
+                        ...(presetCaps?.maxOutputTokens ? { maxOutputTokens: presetCaps.maxOutputTokens } : {}),
+                      } : m))
+                      setModelTestStatuses(prev => ({ ...prev, [item.id]: { status: 'idle' } }))
+                    }}
+                  />
+                  <Input
+                    value={item.name}
+                    placeholder={text('模型别名 (可选，留空同模型 ID)', 'Model alias (optional, defaults to model ID)')}
+                    className="flex-1 text-xs"
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setChannelModels(prev => prev.map((m, i) => i === index ? { ...m, name: val } : m))
+                    }}
+                  />
 
-          {/* 额外添加的模型行 */}
-          {extraModels.map((item, index) => (
-            <div key={item.id} className="flex items-center gap-2 p-2 rounded-md bg-[var(--color-bg)] border border-[var(--color-border)]">
-              <Input
-                value={item.modelName}
-                placeholder={text('模型 ID (如 gemini-3.8-flash-high)', 'Model ID (e.g. gemini-3.8-flash-high)')}
-                className="flex-1 text-xs"
-                onChange={(e) => {
-                  const val = e.target.value
-                  setExtraModels(prev => prev.map((m, i) => i === index ? { ...m, modelName: val } : m))
-                }}
-              />
-              <Input
-                value={item.name}
-                placeholder={text('模型别名 (可选，留空同模型 ID)', 'Model alias (optional, defaults to model ID)')}
-                className="flex-1 text-xs"
-                onChange={(e) => {
-                  const val = e.target.value
-                  setExtraModels(prev => prev.map((m, i) => i === index ? { ...m, name: val } : m))
-                }}
-              />
-              <button
-                type="button"
-                title={text('删除模型', 'Remove model')}
-                aria-label={`${text('删除模型', 'Remove model')} ${index + 2}`}
-                onClick={() => {
-                  setExtraModels(prev => prev.filter((_, i) => i !== index))
-                }}
-                className="p-1.5 rounded hover:bg-[var(--color-hover)] text-[var(--color-text-muted)] hover:text-[var(--color-error-text)] transition-colors"
-              >
-                <Trash2 size={13} />
-              </button>
-            </div>
-          ))}
-        </div>
+                  {/* 独立模型高级参数设置切换按钮 */}
+                  <button
+                    type="button"
+                    title={text('高级参数设置（上下文窗口、温度、最大 Token）', 'Advanced settings (Context window, temperature, max tokens)')}
+                    aria-label={text('高级设置', 'Advanced settings')}
+                    aria-expanded={expandedModelId === item.id}
+                    onClick={() => setExpandedModelId(cur => cur === item.id ? null : item.id)}
+                    className={cn(
+                      'flex items-center gap-1 px-2 py-1 rounded transition-colors cursor-pointer text-xs border border-[var(--color-border)]',
+                      expandedModelId === item.id
+                        ? 'bg-[var(--color-hover)] text-[var(--color-accent)] font-medium border-[var(--color-accent)]'
+                        : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)]'
+                    )}
+                  >
+                    <Settings2 size={13} style={expandedModelId === item.id ? { color: 'var(--color-accent)' } : undefined} />
+                    <span className="text-[0.72rem] hidden sm:inline">{text('高级设置', 'Advanced settings')}</span>
+                    <ChevronDown size={12} className={cn('transition-transform', expandedModelId === item.id && 'rotate-180')} />
+                  </button>
 
-        {/* + 添加模型按钮 (DSH 核心手动追加行按钮) */}
+                  {/* 状态圆点 */}
+                  {(() => {
+                    const testInfo = modelTestStatuses[item.id] || { status: 'idle' }
+                    let dotClass = 'bg-neutral-300 dark:bg-neutral-600'
+                    let statusText = text('未测试连通性（点击可单独测试）', 'Not tested (click to test)')
+
+                    if (testInfo.status === 'testing') {
+                      dotClass = 'bg-amber-400 animate-pulse ring-2 ring-amber-400/30'
+                      statusText = text('正在测试连接...', 'Testing...')
+                    } else if (testInfo.status === 'success') {
+                      dotClass = 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.7)]'
+                      statusText = text('测试通过：连接正常可用', 'Passed: Available')
+                    } else if (testInfo.status === 'error') {
+                      dotClass = 'bg-rose-500 shadow-[0_0_6px_rgba(239,68,68,0.7)]'
+                      statusText = text(`测试未通过：${testInfo.error || '无法连接'}`, `Failed: ${testInfo.error || 'Cannot connect'}`)
+                    }
+
+                    return (
+                      <button
+                        type="button"
+                        className="flex items-center justify-center p-1.5 rounded hover:bg-[var(--color-hover)] transition-colors cursor-pointer"
+                        title={statusText}
+                        aria-label={statusText}
+                        disabled={testInfo.status === 'testing'}
+                        onClick={() => void handleTestSingleModel(item.id)}
+                      >
+                        <span
+                          className={cn('w-2.5 h-2.5 rounded-full transition-all flex-shrink-0', dotClass)}
+                          data-test-status={testInfo.status}
+                        />
+                      </button>
+                    )
+                  })()}
+
+                  {/* 删除按钮 */}
+                  <button
+                    type="button"
+                    title={text('删除模型', 'Remove model')}
+                    aria-label={`${text('删除模型', 'Remove model')} ${index + 1}`}
+                    onClick={() => {
+                      setChannelModels(prev => prev.filter((_, i) => i !== index))
+                      setModelTestStatuses(prev => {
+                        const next = { ...prev }
+                        delete next[item.id]
+                        return next
+                      })
+                      if (expandedModelId === item.id) setExpandedModelId(null)
+                    }}
+                    className="p-1.5 rounded hover:bg-[var(--color-hover)] text-[var(--color-text-muted)] hover:text-[var(--color-error-text)] transition-colors cursor-pointer"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+
+                {/* 展开的单模型参数设置 */}
+                {expandedModelId === item.id && (
+                  <div className="mt-2.5 pt-2.5 border-t border-[var(--color-border)] space-y-2.5" data-model-advanced-settings>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <div>
+                        <Label className="text-[0.72rem] mb-1">{text('上下文窗口', 'Context Window')}</Label>
+                        <Input
+                          aria-label={text('上下文窗口', 'Context Window')}
+                          type="number"
+                          min={0}
+                          value={item.contextWindowTokens ?? ''}
+                          placeholder={text('可选 (Tokens)', 'Optional (Tokens)')}
+                          className="text-xs h-7"
+                          onChange={(e) => {
+                            const val = e.target.value === '' ? null : parseInt(e.target.value) || null
+                            setChannelModels(prev => prev.map((m, i) => i === index ? { ...m, contextWindowTokens: val } : m))
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[0.72rem] mb-1">{text('温度', 'Temperature')}</Label>
+                        <Input
+                          aria-label={text('温度', 'Temperature')}
+                          type="number"
+                          min={0}
+                          max={2}
+                          step={0.1}
+                          value={item.temperature ?? 0.7}
+                          className="text-xs h-7"
+                          onChange={(e) => {
+                            const val = e.target.value === '' ? 0.7 : parseFloat(e.target.value)
+                            setChannelModels(prev => prev.map((m, i) => i === index ? { ...m, temperature: val } : m))
+                          }}
+                          onBlur={() => {
+                            const val = Number(item.temperature)
+                            if (Number.isNaN(val)) {
+                              setChannelModels(prev => prev.map((m, i) => i === index ? { ...m, temperature: 0.7 } : m))
+                            }
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[0.72rem] mb-1">{text('最大输出 Token', 'Max output tokens')}</Label>
+                        <Input
+                          aria-label={text('最大输出 Token', 'Max output tokens')}
+                          type="number"
+                          min={0}
+                          value={item.maxOutputTokens ?? 4096}
+                          className="text-xs h-7"
+                          onChange={(e) => {
+                            const val = e.target.value === '' ? 4096 : parseInt(e.target.value) || 4096
+                            setChannelModels(prev => prev.map((m, i) => i === index ? { ...m, maxOutputTokens: val } : m))
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {item.contextWindowTokens && item.maxOutputTokens && item.maxOutputTokens >= item.contextWindowTokens && (
+                      <p
+                        role="status"
+                        className="rounded border px-2 py-1 text-[0.7rem] leading-normal"
+                        style={{
+                          borderColor: 'var(--color-warning)',
+                          backgroundColor: 'color-mix(in srgb, var(--color-warning) 8%, transparent)',
+                          color: 'var(--color-warning-text)',
+                        }}
+                      >
+                        {text(
+                          '最大输出接近或超过上下文窗口，建议预留足够的上下文空间给提示词与历史记录。',
+                          'Max output approaches or exceeds the context window. Reserving ample room for prompts is recommended.',
+                        )}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* + 添加模型按钮 */}
         <Button
           type="button"
           variant="outline"
           size="sm"
           className="w-full mt-2"
           onClick={() => {
-            setExtraModels(prev => [...prev, { id: randomUUID(), modelName: '', name: '' }])
+            setChannelModels(prev => [...prev, {
+              id: randomUUID(),
+              modelName: '',
+              name: '',
+              temperature: 0.7,
+              contextWindowTokens: null,
+              maxOutputTokens: 4096,
+            }])
           }}
         >
           <Plus size={13} />
           {text('添加模型', 'Add model')}
         </Button>
       </div>
-
-      <div>
-        <Label>{text('上下文窗口', 'Context Window')}</Label>
-        <Input
-          aria-label={text('上下文窗口', 'Context Window')}
-          type="number"
-          min={0}
-          value={model.capabilities?.contextWindowTokens ?? ''}
-          placeholder={text('可选', 'Optional')}
-          onChange={(e) => updateCapabilities({ contextWindowTokens: e.target.value === '' ? null : parseInt(e.target.value) || null })}
-        />
-      </div>
-
-      {!isEmbedding && (
-        <ProjectCreativeStrategySettings />
-      )}
-
-      {!isEmbedding && (
-        <div className="rounded-lg border border-[var(--color-border)]" data-model-advanced-settings>
-          <button
-            type="button"
-            aria-label={text('高级设置', 'Advanced settings')}
-            aria-expanded={advancedOpen}
-            onClick={() => setAdvancedOpen(open => !open)}
-            className="flex w-full items-center gap-2 p-3 text-left"
-          >
-            <Settings2 size={14} style={{ color: 'var(--color-accent)' }} />
-            <span className="flex-1">
-              <span className="block text-xs font-medium text-[var(--color-text)]">
-                {text('高级设置', 'Advanced settings')}
-              </span>
-              <span className="mt-0.5 block text-[0.7rem] text-[var(--color-text-muted)]">
-                {text('仅作用于当前模型；未调整时使用产品与服务商默认行为。', 'Applies only to this model. Unchanged values use product and provider defaults.')}
-              </span>
-            </span>
-            <ChevronDown size={14} className={cn('transition-transform', advancedOpen && 'rotate-180')} />
-          </button>
-
-          {advancedOpen && (
-            <div className="space-y-4 border-t border-[var(--color-border)] p-3">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-[0.7rem] text-[var(--color-text-muted)]">
-                  {text('这些值随当前模型保存，连接测试和生成会读取已保存配置。', 'These values are saved with this model and used by connection tests and generation.')}
-                </p>
-                <Button type="button" size="sm" variant="outline" onClick={resetAdvancedSettings}>
-                  <RotateCcw size={12} />
-                  {text('恢复默认值', 'Restore defaults')}
-                </Button>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label>{text('温度', 'Temperature')}</Label>
-                  <Input
-                    aria-label={text('温度', 'Temperature')}
-                    type="number" min={0} max={2} step={0.1}
-                    value={model.temperature}
-                    onChange={(e) => up('temperature', (e.target.value === '' ? '' : parseFloat(e.target.value)) as number)}
-                    onBlur={() => {
-                      const value = Number(model.temperature)
-                      if (Number.isNaN(value)) up('temperature', 0.7)
-                    }}
-                  />
-                  <p className="mt-1 text-[0.7rem] text-[var(--color-text-muted)]">
-                    {text('模型级采样偏好；固定温度模型不会收到此参数。', 'Model-level sampling preference. Fixed-temperature models do not receive this parameter.')}
-                  </p>
-                </div>
-                <div>
-                  <Label>{text('最大输出 Token', 'Max output tokens')}</Label>
-                  <Input
-                    aria-label={text('最大输出 Token', 'Max output tokens')}
-                    type="number"
-                    min={0}
-                    value={currentCapabilities.maxOutputTokens}
-                    onChange={(e) => updateCapabilities({ maxOutputTokens: e.target.value === '' ? 0 : parseInt(e.target.value) || 0 })}
-                  />
-                  <p className="mt-1 text-[0.7rem] text-[var(--color-text-muted)]">
-                    {text('限制当前模型单次响应；恢复默认会使用内置模型上限。', 'Limits one response from this model. Restore uses the built-in model limit.')}
-                  </p>
-                </div>
-              </div>
-              {contextOutputConflict && (
-                <p
-                  role="status"
-                  className="rounded-lg border px-3 py-2 text-xs leading-5"
-                  style={{
-                    borderColor: 'var(--color-warning)',
-                    backgroundColor: 'color-mix(in srgb, var(--color-warning) 8%, transparent)',
-                    color: 'var(--color-warning-text)',
-                  }}
-                >
-                  {text(
-                    '最大输出接近或超过上下文窗口，建议预留足够的上下文空间给提示词与历史记录。此提示不会阻止保存。',
-                    'Max output approaches or exceeds the context window. Reserving ample room for prompts and conversation history is recommended. This notice does not block saving.',
-                  )}
-                </p>
-              )}
-              <ModelReasoningOverrideSettings model={model} onModelChange={onChange} />
-            </div>
-          )}
-        </div>
-      )}
 
       {isEmbedding && (
         <div className="space-y-3 rounded-lg p-3" style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-hover)' }}>
@@ -1326,44 +1484,69 @@ function ModelForm({
 
       <div className="flex items-center gap-2 pt-1">
         <Button
-          variant="outline"
-          onClick={handleTest}
-          disabled={testing || !model.baseUrl || (!model.apiKey && model.provider !== 'ollama')}
-        >
-          <Zap size={13} />
-          {testing ? text('测试中...', 'Testing...') : text('测试连接', 'Test connection')}
-        </Button>
-        <Button
           className="flex-1"
           onClick={() => {
-            if (!model.modelName.trim()) {
-              onSave()
+            const validModels = channelModels.filter(m => m.modelName.trim() !== '')
+            const isMultiModelChannel = validModels.length > 1 || Boolean(model.channelName)
+            const finalChannelName = isMultiModelChannel ? (channelName.trim() || undefined) : (model.channelName ? (channelName.trim() || undefined) : undefined)
+
+            // 计算被用户删除的原有模型 ID
+            const currentIds = new Set(validModels.map(m => m.id))
+            const deletedIds = Array.from(initialModelIds).filter(id => !currentIds.has(id))
+
+            if (validModels.length === 0) {
+              // 渠道下模型数为 0：保存一个空模型渠道占位配置
+              const emptyChannelProfile: ModelProfile = {
+                ...model,
+                id: model.id,
+                name: finalChannelName || model.name || '',
+                channelName: finalChannelName,
+                modelName: '',
+              }
+              const filteredDeletedIds = deletedIds.filter(id => id !== model.id)
+              onSave([emptyChannelProfile], filteredDeletedIds)
               return
             }
-            const channelName = model.channelName || (extraModels.length > 0 ? (model.name.trim() || undefined) : undefined)
-            const validExtra = extraModels.filter(m => m.modelName.trim())
-            const extraProfiles: ModelProfile[] = validExtra.map(row => ({
-              ...model,
-              id: row.id,
-              ...(channelName ? { channelName } : {}),
-              modelName: row.modelName.trim(),
-              name: row.name.trim() || row.modelName.trim(),
-            }))
-            const currentExtraIds = new Set(validExtra.map(r => r.id))
-            const deletedIds = initialOtherModels
-              .filter(m => !currentExtraIds.has(m.id))
-              .map(m => m.id)
 
-            const savedPrimaryName = primaryModelAlias.trim() !== ''
-              ? primaryModelAlias.trim()
-              : model.name
+            // 保存所有有效模型（各自保存独立的温度、上下文窗口与最大输出 Token）
+            const profilesToSave: ModelProfile[] = validModels.map((row) => {
+              const maxOutputTokens = row.maxOutputTokens ?? model.maxTokens ?? 4096
+              const presetCaps = capabilitiesForPresetModel(row.modelName)
+              const hasCapabilities = Boolean(model.capabilities || presetCaps || (row.contextWindowTokens !== null && row.contextWindowTokens !== undefined))
+              const capabilities: ModelCapabilities | undefined = hasCapabilities ? {
+                reasoning: presetCaps?.reasoning ?? model.capabilities?.reasoning ?? false,
+                structuredOutput: presetCaps?.structuredOutput ?? model.capabilities?.structuredOutput ?? false,
+                usage: presetCaps?.usage ?? model.capabilities?.usage ?? false,
+                ...(presetCaps?.toolCalling !== undefined ? { toolCalling: presetCaps.toolCalling } : (model.capabilities?.toolCalling !== undefined ? { toolCalling: model.capabilities.toolCalling } : {})),
+                ...(presetCaps?.reasoningAdapter ? { reasoningAdapter: presetCaps.reasoningAdapter } : (model.capabilities?.reasoningAdapter ? { reasoningAdapter: model.capabilities.reasoningAdapter } : {})),
+                contextWindowTokens: row.contextWindowTokens !== undefined ? row.contextWindowTokens : (model.capabilities?.contextWindowTokens ?? null),
+                maxOutputTokens,
+              } : undefined
 
-            onSave([
-              { ...model, ...(channelName ? { channelName } : {}), name: savedPrimaryName },
-              ...extraProfiles
-            ], deletedIds)
+              let modelDisplayName: string
+              if (row.name.trim() !== '') {
+                modelDisplayName = row.name.trim()
+              } else if (isMultiModelChannel) {
+                modelDisplayName = row.modelName.trim()
+              } else {
+                modelDisplayName = model.name !== undefined ? model.name : row.modelName.trim()
+              }
+
+              return {
+                ...model,
+                id: row.id,
+                ...(finalChannelName ? { channelName: finalChannelName } : {}),
+                modelName: row.modelName.trim(),
+                name: modelDisplayName,
+                temperature: typeof row.temperature === 'number' ? row.temperature : (model.temperature ?? 0.7),
+                maxTokens: maxOutputTokens,
+                ...(capabilities ? { capabilities } : {}),
+              }
+            })
+
+            onSave(profilesToSave, deletedIds)
           }}
-          disabled={saving || !model.baseUrl.trim() || !model.modelName.trim() || (!model.apiKey.trim() && model.provider !== 'ollama')}
+          disabled={saving || !model.baseUrl.trim() || (!model.apiKey.trim() && model.provider !== 'ollama')}
         >
           <Save size={13} />
           {saving ? text('保存中...', 'Saving...') : text('保存配置', 'Save configuration')}
@@ -1728,12 +1911,26 @@ function AboutSection() {
   return (
     <div className="space-y-6 max-w-[600px] p-2">
       <div
-        className="flex flex-col items-center justify-center py-8 rounded-xl space-y-2"
+        className="flex flex-col items-center justify-center py-8 rounded-xl space-y-2.5"
         style={{ backgroundColor: 'var(--color-sidebar)', border: '1px solid var(--color-border)' }}
       >
         <h1 className="text-2xl font-bold brand-gradient tracking-wider">{text(APP_BRAND.zhName, APP_BRAND.enName)}</h1>
-        <p className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>{APP_BRAND.enName}</p>
-        <p className="text-sm opacity-80" style={{ color: 'var(--color-text)' }}>v{__APP_VERSION__}</p>
+        <p className="text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+          {text(APP_BRAND.tagline, APP_BRAND.taglineEn)}
+        </p>
+        <div className="pt-1">
+          <span
+            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-semibold"
+            style={{
+              backgroundColor: 'color-mix(in srgb, var(--color-accent) 15%, transparent)',
+              color: 'var(--color-accent)',
+              border: '1px solid color-mix(in srgb, var(--color-accent) 30%, transparent)',
+            }}
+          >
+            <span>{text('版本号', 'Version')}</span>
+            <span>v{__APP_VERSION__}</span>
+          </span>
+        </div>
       </div>
 
       <div className="space-y-3 pt-2">
@@ -1741,7 +1938,7 @@ function AboutSection() {
           className="text-sm font-semibold pb-2"
           style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text)' }}
         >
-          {text('本地写作工作台', 'Local writing workspace')}
+          {text('本地创作工作台', 'Local writing workspace')}
         </h3>
         <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
           {text('这是面向中文长篇小说、角色设定、章节蓝图和本地模型生成的桌面写作环境。默认优先使用本机模型与本地项目数据，适合离线创作、风格拆解、章节规划和长文续写。', 'A desktop writing environment for long-form fiction, character design, chapter blueprints, and local model generation. It prioritizes local models and project data for offline writing, style analysis, planning, and continuation.')}

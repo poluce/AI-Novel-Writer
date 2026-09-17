@@ -41,7 +41,7 @@ vi.mock('../pi-models', () => ({
 }))
 vi.mock('../tool-builder', () => ({
   buildAgentTools: vi.fn(() => []),
-  confirmationToolNames: vi.fn(() => new Set(['write_file'])),
+  confirmationToolNames: vi.fn(() => new Set(['write'])),
 }))
 
 import { createPiModels } from '../pi-models'

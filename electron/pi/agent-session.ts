@@ -238,8 +238,7 @@ export class AgentSession {
 
     // 写工具确认：harness 的钩子先于 tool_start 事件，卡片要在这里补发。
     this.unsubscribes.push(this.harness.hooks.on('before_tool', async (event) => {
-      const needsConfirm = this.confirmationNames.has(event.toolName)
-        || event.toolName.startsWith('mcp__')
+      const needsConfirm = this.isConfirmationRequired(event.toolName, event.args as Record<string, unknown> | undefined)
       if (!needsConfirm) return undefined
       const confirmed = await this.requestConfirmation(event.toolCallId, event.toolName, event.args)
       if (confirmed) return undefined
@@ -268,6 +267,52 @@ export class AgentSession {
         ...(commitOverride?.isError === undefined ? {} : { isError: commitOverride.isError }),
       }
     }))
+  }
+
+  private isConfirmationRequired(toolName: string, args?: Record<string, unknown>): boolean {
+    if (toolName.startsWith('mcp__')) return true
+    if (!this.confirmationNames.has(toolName)) return false
+    if (toolName === 'novel_config') {
+      const rawAction = String(args?.action ?? '').toLowerCase().trim()
+      const isExplicitRead = rawAction === 'read' || rawAction === '读取' || rawAction === '查看'
+      const isExplicitUpdate = rawAction === 'update' || rawAction === '修改' || rawAction === '更新' || rawAction === '填充'
+      const hasUpdatePayload = Boolean(
+        args?.changes
+        || args?.coreOutline
+        || args?.worldSetting
+        || args?.goldenFinger
+        || args?.protagonistProfile
+        || args?.genre
+        || args?.subGenre
+        || args?.targetAudience
+        || args?.totalChapters
+        || args?.wordsPerChapter
+        || args?.plotStructure
+        || args?.narrativePOV
+        || args?.globalGuidance
+        || args?.writingStyle
+        || args?.referenceWorks
+        || (args?.field && args?.content),
+      )
+      if (isExplicitRead || (!isExplicitUpdate && !hasUpdatePayload)) {
+        return false
+      }
+    }
+    if (toolName === 'story_architecture') {
+      const rawAction = String(args?.action ?? '').toLowerCase().trim()
+      const isExplicitRead = rawAction === 'read' || rawAction === '读取' || rawAction === '查看'
+      const isExplicitUpdate = rawAction === 'update' || rawAction === '修改' || rawAction === '更新' || rawAction === '填充'
+      const hasUpdatePayload = Boolean(
+        args?.content
+        || args?.premise
+        || args?.worldbuilding
+        || args?.synopsis,
+      )
+      if (isExplicitRead || (!isExplicitUpdate && !hasUpdatePayload)) {
+        return false
+      }
+    }
+    return true
   }
 
   /**

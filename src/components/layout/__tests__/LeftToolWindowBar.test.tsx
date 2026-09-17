@@ -4,6 +4,7 @@ import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import LeftToolWindowBar from '../LeftToolWindowBar'
 import { useLayoutStore } from '../../../stores/layout-store'
+import { useProjectStore } from '../../../stores/project-store'
 
 function countActiveRailButtons(html: string) {
   return [...html.matchAll(/<button\b[^>]*\bclass="([^"]*)"[^>]*>/g)]
@@ -61,5 +62,22 @@ describe('LeftToolWindowBar', () => {
     const sidebar = readFileSync(resolve(process.cwd(), 'src/components/panels/Sidebar.tsx'), 'utf8')
     expect(sidebar).toContain('workspaceNeedsProject')
     expect(sidebar).toContain("activeRailItem !== 'project'")
+  })
+
+  it('disables project-dependent navigation buttons when no project is open', () => {
+    useProjectStore.setState({ currentProject: null })
+
+    const html = renderToString(<LeftToolWindowBar />)
+    const projectDependentLabels = ['角色', '蓝图', '架构', '大纲', '剧情', '知识库']
+
+    for (const label of projectDependentLabels) {
+      // Button containing this label must have disabled attribute and is-disabled class
+      const pattern = new RegExp(`<button disabled=""[^>]*class="[^"]*is-disabled[^"]*"[^>]*>[\\s\\S]*?<span class="left-nav-label">${label}<\\/span>`, 'u')
+      expect(html).toMatch(pattern)
+    }
+
+    // Home must remain enabled
+    const homePattern = new RegExp(`<button(?! disabled)[^>]*>[\\s\\S]*?<span class="left-nav-label">首页<\\/span>`, 'u')
+    expect(html).toMatch(homePattern)
   })
 })

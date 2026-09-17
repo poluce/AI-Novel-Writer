@@ -6,6 +6,7 @@ import type { Locale } from '../i18n/types'
 import type {
   CreativeStrategy,
   GenerationReasoningStage,
+  ReasoningEffort,
   ReasoningOverride,
 } from './reasoning-types'
 import type { SubmitToolName } from './submit-contract'
@@ -179,16 +180,38 @@ export interface ModelProviderResourceChannels {
   }
 }
 
+export type CreationTaskKey =
+  | 'outline'     // 核心大纲与设定推演 (Core Outline & Novel Settings)
+  | 'planning'    // 故事规划与分卷蓝图 (Story Planning & Beat Sheets)
+  | 'drafting'    // 章节起草与正文扩写 (Chapter Drafting & Prose Expansion)
+  | 'review'      // 审稿质检与润色改写 (Review, Quality Control & Polishing)
+  | 'assistant'   // 创作助手日常对话 (Sidebar Creative Assistant)
+
+export interface TaskModelConfig {
+  /** 指定的模型 ID；为空或未配置时自动遵循全局默认生成模型。 */
+  modelId?: string | null
+  /** 指定的思考强度；'auto' 时使用该环节推荐的思考强度。 */
+  thinkingLevel?: 'auto' | ReasoningEffort
+}
+
+export type TaskModelRouting = Partial<Record<CreationTaskKey, TaskModelConfig>>
+
 export interface GlobalConfig {
   theme: string
   locale?: Locale
   defaultModelId: string | null
   defaultEmbeddingModelId?: string | null
+  /** 全局默认思考强度（关闭/低/中/高/最高），持久化到 ~/.vela/config.json */
+  defaultThinkingLevel?: ReasoningEffort
   /** 定稿与后处理成功后，打开下一章的创作窗口（默认关闭）。 */
   autoOpenNextChapterAfterFinalize?: boolean
   editorFontSize: number
   editorFontFamily: string
   autoSaveInterval: number
+  /** 全局创作策略预设（自动/一致性优先/深度规划），持久化到 ~/.vela/config.json */
+  creativeStrategy?: CreativeStrategy
+  /** 各创作环节专属模型与思考调度矩阵，持久化到 ~/.vela/config.json */
+  taskModelRouting?: TaskModelRouting
   /** 更新检查和提醒延后的本机偏好，持久化到 ~/.vela/config.json。 */
   updatePreferences?: UpdatePreferences
   proxy?: {
@@ -606,6 +629,10 @@ export interface LLMRequest {
   creativeStrategy?: CreativeStrategy
   /** Controlled semantic stage; never inferred from the diagnostic purpose label. */
   reasoningStage?: GenerationReasoningStage
+  /** 具体的创作环节标识，用于路由模型与思考强度 */
+  taskKey?: CreationTaskKey
+  /** 显式指定的思考强度；若指定则优先于宏观策略 */
+  reasoningEffort?: ReasoningEffort
   /** Frozen project lease. Missing/stale leases are never written to project statistics. */
   projectSession?: ProjectSessionContext
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>

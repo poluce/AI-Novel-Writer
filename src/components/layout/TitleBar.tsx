@@ -231,16 +231,11 @@ export default function TitleBar() {
       } as CSSProperties}
     >
       <div className="flex items-center gap-2 flex-shrink-0 min-w-0">
-        <div className="writer-brand-mark flex h-8 w-8 items-center justify-center rounded-md">
+        <div
+          className="writer-brand-mark flex h-8 w-8 items-center justify-center rounded-md"
+          title={locale === 'zh-CN' ? APP_BRAND.zhName : APP_BRAND.enName}
+        >
           <ScrollText size={18} strokeWidth={1.7} />
-        </div>
-        <div className="leading-tight min-w-[112px]">
-          <div className="text-sm font-semibold brand-gradient">
-            {locale === 'zh-CN' ? APP_BRAND.zhName : APP_BRAND.enName}
-          </div>
-          {locale === 'zh-CN' && (
-            <div className="text-[0.68rem] opacity-75">{APP_BRAND.enName}</div>
-          )}
         </div>
       </div>
 

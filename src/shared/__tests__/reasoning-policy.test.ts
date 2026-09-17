@@ -323,4 +323,62 @@ describe('reasoning policy', () => {
       },
     })
   })
+
+  it('honors requested taskKey and explicit requestedEffort overrides', () => {
+    const geminiThinking: ModelProfile = {
+      id: 'gemini-model',
+      name: 'Gemini 2.5 Flash',
+      provider: 'gemini',
+      protocol: 'gemini',
+      modelName: 'gemini-2.5-flash',
+      apiKey: 'k',
+      baseUrl: 'https://gemini',
+      temperature: 0.7,
+      maxTokens: 8192,
+      purposes: ['generation'],
+      capabilities: {
+        contextWindowTokens: 1_048_576,
+        maxOutputTokens: 8192,
+        reasoning: true,
+        structuredOutput: true,
+        usage: true,
+      },
+    }
+
+    // taskKey: 'outline' defaults to 'high' effort (thinkingBudget 24576 on Gemini)
+    const outlineRes = resolveReasoningPolicy({ model: geminiThinking, taskKey: 'outline' })
+    expect(outlineRes).toMatchObject({
+      requested: 'high',
+      effective: 'high',
+      status: 'mapped',
+      providerDirective: {
+        adapter: 'gemini-thinking-budget',
+        thinkingBudget: 24_576,
+      },
+    })
+
+    // explicit requestedEffort: 'low' uses low budget
+    const lowRes = resolveReasoningPolicy({ model: geminiThinking, taskKey: 'outline', requestedEffort: 'low' })
+    expect(lowRes).toMatchObject({
+      requested: 'low',
+      effective: 'low',
+      status: 'mapped',
+      providerDirective: {
+        adapter: 'gemini-thinking-budget',
+        thinkingBudget: 1_024,
+      },
+    })
+
+    // explicit requestedEffort: 'off' disables thinking
+    const offRes = resolveReasoningPolicy({ model: geminiThinking, taskKey: 'drafting', requestedEffort: 'off' })
+    expect(offRes).toMatchObject({
+      requested: 'off',
+      effective: 'off',
+      status: 'mapped',
+      providerDirective: {
+        adapter: 'gemini-thinking-budget',
+        thinkingBudget: 0,
+      },
+    })
+  })
 })

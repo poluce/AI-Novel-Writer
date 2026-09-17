@@ -5,10 +5,15 @@
  * 用户可以批准或拒绝操作。
  */
 import { useState } from 'react'
-import { ShieldAlert } from 'lucide-react'
+import { ShieldAlert, ExternalLink } from 'lucide-react'
 import type { ToolCallInfo } from '../../../shared/agent-ui-types'
 import { useAgentStore } from '../../../stores/agent-store'
+import { useEditorStore } from '../../../stores/editor-store'
+import { useProjectStore } from '../../../stores/project-store'
 import { useLocaleStore } from '../../../stores/locale-store'
+import { projectSessionContextFromProject } from '../../../shared/project-session-context'
+import { ipc } from '../../../services/ipc-client'
+import { openChapterFile } from '../sidebar/sidebar-file-openers'
 import ConfigImpactPreview, { useConfigImpactPreview } from './ConfigImpactPreview'
 import DomainProposalDiff, { useDomainProposalPreview } from './DomainProposalDiff'
 
@@ -26,6 +31,35 @@ export default function ConfirmCard({ toolCall }: Props) {
   const isDomainProposal = proposalPreview.kind !== 'none'
   const impactReady = impactPreview.kind === 'none' || impactPreview.kind === 'valid'
   const canApprove = (!isDomainProposal || proposalPreview.kind === 'valid') && impactReady
+
+  const handleViewInDraft = async () => {
+    const chapterNumber = typeof args.chapter_number === 'number'
+      ? args.chapter_number
+      : parseInt(String(args.chapter_number ?? ''), 10)
+    if (!Number.isInteger(chapterNumber) || chapterNumber < 1) return
+
+    const currentProject = useProjectStore.getState().currentProject
+    if (!currentProject) return
+
+    // 1. 检查当前是否已打开该章节草稿 Tab
+    const existingTab = useEditorStore.getState().tabs.find(
+      t => t.chapterNumber === chapterNumber && t.type === 'chapter' && t.projectKey === currentProject.path,
+    )
+    if (existingTab) {
+      useEditorStore.getState().setActiveTab(existingTab.id)
+      return
+    }
+
+    // 2. 否则从数据库读取最新草稿并打开
+    const session = projectSessionContextFromProject(currentProject)
+    if (!session) return
+
+    const latest = await ipc.invokeWithProjectSession(session, 'db:draft-get-latest', chapterNumber, currentProject.path)
+    if (latest && typeof latest === 'object' && 'id' in latest) {
+      const draftId = Number((latest as { id: number }).id)
+      await openChapterFile(`vela://draft/${draftId}`, `第 ${chapterNumber} 章`)
+    }
+  }
 
   // 生成操作描述
   const description = generateDescription(toolName, args, text)
@@ -52,7 +86,42 @@ export default function ConfirmCard({ toolCall }: Props) {
             return next
           })}
         />
-        {!isDomainProposal && Object.keys(args).length > 0 && (
+        {/* 草稿局部修改专属红绿对比与跳转按钮 */}
+        {toolName === 'replace_draft_excerpt' && (
+          <div className="mt-2 space-y-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[var(--color-text-secondary)] font-medium">
+                {text(`第 ${args.chapter_number ?? '？'} 章草稿修改对比`, `Chapter ${args.chapter_number ?? '?'} draft diff`)}
+              </span>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 text-[11px] text-[var(--color-accent)] hover:underline cursor-pointer"
+                onClick={() => void handleViewInDraft()}
+                title={text('在主编辑器中打开并定位到该处对比', 'Open in main editor and jump to this diff')}
+              >
+                <ExternalLink size={11} />
+                {text('在草稿中查看行内对比', 'View inline diff in draft')}
+              </button>
+            </div>
+            <div className="p-2 rounded border border-red-500/30 bg-red-500/10 text-[var(--color-error-text)]">
+              <div className="text-[10px] font-semibold text-red-500 mb-0.5">
+                {text('将被替换的原文：', 'Original excerpt (to be removed):')}
+              </div>
+              <div className="line-through whitespace-pre-wrap select-text font-serif">
+                {String(args.old_text ?? '')}
+              </div>
+            </div>
+            <div className="p-2 rounded border border-green-500/30 bg-green-500/10 text-[var(--color-success-text)]">
+              <div className="text-[10px] font-semibold text-green-500 mb-0.5">
+                {text('替换后的新文：', 'New excerpt (to be inserted):')}
+              </div>
+              <div className="whitespace-pre-wrap select-text font-serif">
+                {String(args.new_text ?? '')}
+              </div>
+            </div>
+          </div>
+        )}
+        {!isDomainProposal && toolName !== 'replace_draft_excerpt' && Object.keys(args).length > 0 && (
           <div
             style={{
               marginTop: 6,
@@ -123,20 +192,10 @@ function generateDescription(
   text: ReturnType<typeof useLocaleStore.getState>['text'],
 ): string {
   switch (toolName) {
-    case 'write_file':
-      return text(
-        `将写入文件：${args.file_path ?? '未知路径'}`,
-        `Will write file: ${args.file_path ?? 'Unknown path'}`,
-      )
     case 'open_editor':
       return text(
         `将在编辑器中打开：${args.file_path ?? '未知文件'}`,
         `Will open in the editor: ${args.file_path ?? 'Unknown file'}`,
-      )
-    case 'start_workflow':
-      return text(
-        `将启动工作流：${args.workflow ?? '未知工作流'}${args.chapter_number ? `（第 ${args.chapter_number} 章）` : ''}`,
-        `Will start workflow: ${args.workflow ?? 'Unknown workflow'}${args.chapter_number ? ` (Chapter ${args.chapter_number})` : ''}`,
       )
     case 'bash':
       // Pi harness 的执行工具：命令原文必须出现在确认卡上。
@@ -168,15 +227,20 @@ function generateDescription(
         `Will bind a skill to a workflow stage: ${args.skill_id ?? 'Unknown skill'} → ${args.stage ?? 'Unknown stage'}`,
       )
     case 'replace_draft_excerpt': {
-      const oldText = String(args.old_text ?? '')
-      const newText = String(args.new_text ?? '')
       return text(
-        `将替换第 ${args.chapter_number ?? '？'} 章草稿中的一段原文：\n「${preview(oldText)}」\n→「${preview(newText)}」`,
-        `Will replace one excerpt in chapter ${args.chapter_number ?? '?'} :\n"${preview(oldText)}"\n→ "${preview(newText)}"`,
+        `将替换第 ${args.chapter_number ?? '？'} 章草稿中的一段原文`,
+        `Will replace one excerpt in chapter ${args.chapter_number ?? '?'} draft`,
       )
     }
-    case 'propose_novel_config':
-      return text('小说配置变更提案', 'Novel configuration change proposal')
+    case 'novel_config':
+      return text('小说配置修改', 'Novel configuration update')
+    case 'story_architecture': {
+      const section = String(args.section ?? '故事架构')
+      return text(
+        `将填充/更新故事架构【${section}】`,
+        `Will update story architecture [${section}]`,
+      )
+    }
     case 'propose_chapter_blueprint':
       return text(
         `第 ${args.chapter_number ?? '？'} 章蓝图变更提案`,

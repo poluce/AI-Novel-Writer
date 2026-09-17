@@ -131,8 +131,37 @@ function buildL0ProjectContext(core: ProjectCoreData | null, language: WritingLa
   if (core.coreOutline) {
     parts.push(`${label('核心大纲', 'Core outline')}: ${core.coreOutline}`)
   }
+  if (core.goldenFinger) {
+    parts.push(`${label('金手指', 'Golden finger')}: ${core.goldenFinger}`)
+  }
+  if (core.worldSetting) {
+    parts.push(`${label('世界观设定', 'World setting')}: ${core.worldSetting}`)
+  }
+  if (core.protagonistProfile) {
+    parts.push(`${label('主角人设', 'Protagonist profile')}: ${core.protagonistProfile}`)
+  }
   if (core.writingStyle) {
     parts.push(`${label('写作风格', 'Writing style')}: ${core.writingStyle}`)
   }
+  parts.push('')
+  parts.push(writingLanguageText(
+    language,
+    [
+      '### 创作协同与直接填充规则：',
+      '- 写前先读原则（Read Before Write）：当作者要求对已有设定、大纲或架构进行修改、微调或润色时，必须先使用对应工具的读取操作（action: "read"）读取当前已有内容，在已有事实基础上增补修改，严禁盲目覆盖或丢失作者已有内容。',
+      '- 局部精准替换模式（Targeted Excerpt Replacement）：当大纲或长篇设定只需修改其中一段时，使用工具的 `old_text` 与 `new_text` 参数进行局部替换，避免将数千字长文本全量重写回传，确保未受影响的大纲内容完好无损。',
+      '- 章节正文修改与润色（Draft Modification）：当作者要求对某一章的正文草稿进行修改或润色时，必须先使用 `read_drafts` 工具读取该章最新正文，提取精确无误的原文片段作为 `old_text`，再调用 `replace_draft_excerpt` 进行替换，严禁凭记忆猜测原文。',
+      '- 当与作者探讨小说设定（基本信息、核心大纲、世界观、金手指、主角人设、创作指导等）时，请在对话中给出内容并调用 `novel_config` 工具直接填充或修改指定字段。',
+      '- 当与作者探讨故事架构（故事前提 premise、世界观 worldbuilding、情节大纲 synopsis）时，请在对话中给出内容并调用 `story_architecture` 工具直接填充或修改对应架构文档。',
+    ].join('\n'),
+    [
+      '### Creative Collaboration & Direct Fill Rules:',
+      '- Read Before Write Principle: When the author asks to modify, refine, or adjust existing settings or outlines, always inspect current content first via action: "read" before updating, preserving established author facts and avoiding blind overwrites.',
+      '- Targeted Excerpt Replacement: When modifying only one paragraph or scene within a long outline or setting, provide `old_text` and `new_text` to replace that excerpt precisely instead of rewriting thousands of words.',
+      '- Chapter Draft Modification: When modifying or polishing a chapter draft, always call `read_drafts` first to read the current text, extract the exact original prose as `old_text`, and then call `replace_draft_excerpt`. Never guess or hallucinate original text.',
+      '- When discussing novel settings (basic info, core outline, world setting, golden finger, protagonist profile, guidance, etc.), collaborate in chat and call the `novel_config` tool to directly read or fill/update the designated field.',
+      '- When discussing story architecture (premise, worldbuilding, synopsis), collaborate in chat and call the `story_architecture` tool to directly read or fill/update the designated architecture document.',
+    ].join('\n'),
+  ))
   return parts.join('\n')
 }

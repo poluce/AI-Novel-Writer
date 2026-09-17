@@ -9,10 +9,10 @@ import {
 } from '../../../src/shared/writing-language'
 
 const Schema = Type.Object({
-  chapter_number: Type.Number(),
-  old_text: Type.String(),
-  new_text: Type.String(),
-  draft_id: Type.Optional(Type.Number()),
+  chapter_number: Type.Integer({ minimum: 1, description: '目标章节序号（如 1 代表第 1 章）' }),
+  old_text: Type.String({ description: '要被替换的原文片段。必须与当前章节草稿正文一字不差且唯一存在。修改前必须先使用 read_drafts 读取确认。' }),
+  new_text: Type.String({ description: '替换后的新正文片段（修改、润色或扩写后的新段落）' }),
+  draft_id: Type.Optional(Type.Integer({ minimum: 1, description: '可选的草稿版本数据库 ID' })),
 })
 
 export function createReplaceDraftExcerptTool(

@@ -67,7 +67,7 @@ export function artifactFromToolResult(
   if (!context.projectSession) return null
   const record = details && typeof details === 'object' ? details as Record<string, unknown> : {}
 
-  if (toolName === 'write_file' || toolName === 'write' || toolName === 'edit') {
+  if (toolName === 'write' || toolName === 'edit') {
     if (record.commitState && record.commitState !== 'committed') return null
     const path = detailText(record, 'path') ?? detailText(record, 'file_path')
     const name = detailText(record, 'name') ?? (path ? path.split(/[/\\]/).pop() : undefined)
@@ -76,19 +76,6 @@ export function artifactFromToolResult(
       type: 'file_modified',
       name,
       path,
-      projectPath: context.projectPath,
-      projectSession: context.projectSession,
-    })
-  }
-
-  if (toolName === 'start_workflow') {
-    const runId = detailText(record, 'runId')
-    if (!runId) return null
-    return createToolArtifact({
-      type: 'workflow_started',
-      name: detailText(record, 'name') ?? runId,
-      runId,
-      status: (detailText(record, 'status') ?? 'running') as WorkflowStatus,
       projectPath: context.projectPath,
       projectSession: context.projectSession,
     })

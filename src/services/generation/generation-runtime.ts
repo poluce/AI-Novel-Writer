@@ -1,4 +1,5 @@
 import type {
+  CreationTaskKey,
   ModelExecutionCapabilityEvidence,
   ModelExecutionLeaseReceipt,
   ProjectSessionContext,
@@ -30,6 +31,7 @@ export interface LeaseCompletionRequest {
   purpose: string
   creativeStrategy: CreativeStrategy
   reasoningStage: GenerationReasoningStage
+  taskKey?: CreationTaskKey
   messages: readonly GenerationMessage[]
   plan: Readonly<PhysicalGenerationPlan>
   signal: AbortSignal
@@ -38,7 +40,7 @@ export interface LeaseCompletionRequest {
 
 /** Renderer adapter for the authoritative main-process model lease seam. */
 export interface GenerationRuntimeEnvironment {
-  snapshotDefaultModelId(): string | null
+  snapshotDefaultModelId(taskKey?: CreationTaskKey): string | null
   snapshotCreativeStrategy?(): CreativeStrategy
   beginModelExecution(modelId: string): Promise<ModelExecutionLeaseReceipt>
   completeWithLease(request: LeaseCompletionRequest): Promise<ProviderCompletion>
@@ -58,6 +60,8 @@ export interface CreateGenerationRuntimeOptions {
   budget: GenerationRuntimeBudget
   /** Optional semantic model identity; omitted means snapshot the renderer default once. */
   modelId?: string
+  /** Optional creation task key to route stage-specific models. */
+  taskKey?: CreationTaskKey
   /** Project identity captured by the caller before any asynchronous lease work. */
   projectSession?: ProjectSessionContext
   /** Project writing policy captured by the caller before asynchronous preparation. */
@@ -137,7 +141,16 @@ function validateLeaseFingerprint(value: string): void {
 function createDefaultEnvironment(): GenerationRuntimeEnvironment {
   const leaseModels = new Map<string, string>()
   return {
-    snapshotDefaultModelId: () => useLLMStore.getState().defaultModelId,
+    snapshotDefaultModelId: (taskKey?: CreationTaskKey) => {
+      const store = useLLMStore.getState()
+      if (taskKey) {
+        const candidate = store.resolveTaskModelId(taskKey)
+        if (candidate) return candidate
+      }
+      return store.defaultModelId
+        ?? store.models.find(m => m.purposes?.includes('generation'))?.id
+        ?? null
+    },
     snapshotCreativeStrategy: () => (
       useProjectStore.getState().currentProject?.novelConfig.creativeStrategy ?? 'auto'
     ),
@@ -201,6 +214,13 @@ function createDefaultEnvironment(): GenerationRuntimeEnvironment {
           return
         }
 
+        const effectiveTaskKey = request.taskKey
+          ?? (request.reasoningStage === 'drafting' ? 'drafting'
+              : request.reasoningStage === 'review' ? 'review'
+              : request.reasoningStage === 'general' ? 'assistant'
+              : request.purpose.includes('field') || request.purpose.includes('core-seed') || request.purpose.includes('world-building') ? 'outline'
+              : 'planning')
+
         llmStore.generateStream(
           [...request.messages],
           {
@@ -214,6 +234,7 @@ function createDefaultEnvironment(): GenerationRuntimeEnvironment {
             purpose: request.purpose,
             creativeStrategy: request.creativeStrategy,
             reasoningStage: request.reasoningStage,
+            taskKey: effectiveTaskKey,
             maxTokens: request.plan.maxOutputTokens,
             responseFormat: request.plan.responseFormat,
             ...(request.submitTool ? { submitTool: request.submitTool } : {}),
@@ -268,7 +289,7 @@ export async function createGenerationRuntime(
   if (Object.hasOwn(options, 'modelId') && !explicitModelId) {
     throw new GenerationRuntimeError('MODEL_NOT_FOUND', '指定的生成模型不存在或已被删除。')
   }
-  const frozenModelId = explicitModelId ?? environment.snapshotDefaultModelId()
+  const frozenModelId = explicitModelId ?? environment.snapshotDefaultModelId(options.taskKey)
   if (!frozenModelId) {
     throw new GenerationRuntimeError('NO_DEFAULT_MODEL', '未配置默认生成模型。')
   }

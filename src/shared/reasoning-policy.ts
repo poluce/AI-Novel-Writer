@@ -1,4 +1,4 @@
-import type { ModelProfile } from './ipc-channels'
+import type { CreationTaskKey, ModelProfile } from './ipc-channels'
 import { resolveModelProfileReasoningMapping } from './provider-presets'
 import type {
   CreativeStrategy,
@@ -10,6 +10,14 @@ import type {
   VerifiedReasoningMapping,
 } from './reasoning-types'
 import { CREATIVE_STRATEGIES, REASONING_EFFORTS } from './reasoning-types'
+
+export const TASK_DEFAULT_EFFORTS: Readonly<Record<CreationTaskKey, ReasoningEffort>> = {
+  outline: 'high',
+  planning: 'medium',
+  drafting: 'low',
+  review: 'high',
+  assistant: 'low',
+}
 
 const STAGE_REQUESTS: Readonly<Record<CreativeStrategy, Readonly<Record<GenerationReasoningStage, ReasoningEffort>>>> = {
   auto: { drafting: 'low', planning: 'medium', review: 'high', general: 'low' },
@@ -85,6 +93,8 @@ export function resolveReasoningPolicy(input: {
   model: ModelProfile
   creativeStrategy?: CreativeStrategy
   stage?: GenerationReasoningStage
+  taskKey?: CreationTaskKey
+  requestedEffort?: ReasoningEffort
 }): ReasoningPolicyResolution {
   const strategy = CREATIVE_STRATEGIES.includes(input.creativeStrategy as CreativeStrategy)
     ? input.creativeStrategy as CreativeStrategy
@@ -95,8 +105,9 @@ export function resolveReasoningPolicy(input: {
     ? persistedOverride ?? 'auto'
     : 'auto'
   const source = override === 'auto' ? 'project-strategy' : 'model-override'
+  const defaultTaskEffort = input.taskKey ? TASK_DEFAULT_EFFORTS[input.taskKey] : undefined
   const requested = override === 'auto'
-    ? STAGE_REQUESTS[strategy][input.stage ?? 'general']
+    ? (input.requestedEffort ?? defaultTaskEffort ?? STAGE_REQUESTS[strategy][input.stage ?? 'general'])
     : override
   const mapping = resolveModelProfileReasoningMapping(input.model)
   if (!mapping) return { requested, effective: null, status: 'unsupported', source }

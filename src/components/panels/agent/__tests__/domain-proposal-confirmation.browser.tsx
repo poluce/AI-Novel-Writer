@@ -69,7 +69,7 @@ describe('Agent domain proposal confirmation', () => {
     useLocaleStore.setState({ locale: 'en-US', initialized: true })
     await act(async () => root.render(<>
       <ConfirmCard toolCall={{
-        id: 'write-1', toolName: 'write_file', arguments: { file_path: 'chapter.md' },
+        id: 'write-1', toolName: 'write', arguments: { path: 'chapter.md' },
         status: 'waiting_confirm', source: 'builtin', projectSession: session,
       }} />
       <ArtifactCard artifact={{
@@ -109,7 +109,7 @@ describe('Agent domain proposal confirmation', () => {
   it('shows an English field diff instead of raw tool JSON and approves the existing gate', async () => {
     useLocaleStore.setState({ locale: 'en-US', initialized: true })
     await act(async () => root.render(<ConfirmCard toolCall={{
-      id: 'config-1', toolName: 'propose_novel_config', arguments: { changes: { genre: 'Science fiction' } },
+      id: 'config-1', toolName: 'novel_config', arguments: { changes: { genre: 'Science fiction' } },
       status: 'waiting_confirm', source: 'builtin', projectSession: session,
     }} />))
     await flushImpactReads()
@@ -148,7 +148,7 @@ describe('Agent domain proposal confirmation', () => {
     useLocaleStore.setState({ locale: 'en-US', initialized: true })
     useProjectStore.setState({ currentProject: { ...project, id: 'B', sessionLease: 'lease-B', path: 'C:\\novels\\B' } as never })
     await act(async () => root.render(<ConfirmCard toolCall={{
-      id: 'stale-1', toolName: 'propose_novel_config', arguments: { changes: { genre: 'Mystery' } },
+      id: 'stale-1', toolName: 'novel_config', arguments: { changes: { genre: 'Mystery' } },
       status: 'waiting_confirm', source: 'builtin', projectSession: session,
     }} />))
     await flushImpactReads()
@@ -159,7 +159,7 @@ describe('Agent domain proposal confirmation', () => {
   it('cancels the whole Agent task without executing a domain write', async () => {
     useLocaleStore.setState({ locale: 'en-US', initialized: true })
     await act(async () => root.render(<ConfirmCard toolCall={{
-      id: 'cancel-1', toolName: 'propose_novel_config', arguments: { changes: { genre: 'Mystery' } },
+      id: 'cancel-1', toolName: 'novel_config', arguments: { changes: { genre: 'Mystery' } },
       status: 'waiting_confirm', source: 'builtin', projectSession: session,
     }} />))
     await flushImpactReads()
@@ -198,7 +198,7 @@ describe('Agent domain proposal confirmation', () => {
     })
 
     await act(async () => root.render(<ConfirmCard toolCall={{
-      id: 'impact-1', toolName: 'propose_novel_config',
+      id: 'impact-1', toolName: 'novel_config',
       arguments: {
         changes: { coreOutline: 'The witness hid the blue key.' },
         blueprint_changes: [
@@ -244,7 +244,7 @@ describe('Agent domain proposal confirmation', () => {
     })
 
     await act(async () => root.render(<ConfirmCard toolCall={{
-      id: 'impact-cancel', toolName: 'propose_novel_config',
+      id: 'impact-cancel', toolName: 'novel_config',
       arguments: {
         changes: { worldSetting: '城市禁止公开使用魔法' },
         blueprint_changes: [{ chapter_number: 2, changes: { keyEvents: '主角隐藏魔法痕迹' } }],
@@ -258,5 +258,33 @@ describe('Agent domain proposal confirmation', () => {
     expect(cancelGeneration).toHaveBeenCalledOnce()
     expect(resolveToolConfirmation).not.toHaveBeenCalled()
     expect(invoke.mock.calls.every(([channel]) => channel !== 'db:blueprint-upsert')).toBe(true)
+  })
+
+  it('renders styled red/green diff preview for replace_draft_excerpt', async () => {
+    useLocaleStore.setState({ locale: 'zh-CN', initialized: true })
+
+    await act(async () => root.render(<ConfirmCard toolCall={{
+      id: 'draft-replace-1',
+      toolName: 'replace_draft_excerpt',
+      arguments: {
+        chapter_number: 1,
+        old_text: '原正文内容将被替换',
+        new_text: '这是修改后的全新句子',
+      },
+      status: 'waiting_confirm',
+      source: 'builtin',
+      projectSession: session,
+    }} />))
+
+    await expect.element(page.getByText('第 1 章草稿修改对比')).toBeVisible()
+    await expect.element(page.getByText('将被替换的原文：')).toBeVisible()
+    await expect.element(page.getByText('原正文内容将被替换')).toBeVisible()
+    await expect.element(page.getByText('替换后的新文：')).toBeVisible()
+    await expect.element(page.getByText('这是修改后的全新句子')).toBeVisible()
+    await expect.element(page.getByRole('button', { name: '在草稿中查看行内对比' })).toBeVisible()
+
+    // 批准按钮正常工作
+    await page.getByRole('button', { name: '批准执行' }).click()
+    expect(resolveToolConfirmation).toHaveBeenCalledWith('draft-replace-1', true)
   })
 })

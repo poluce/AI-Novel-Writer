@@ -92,3 +92,95 @@
   height: 2px;
   background: var(--color-sash-hover);  /* 白色微光，非蓝色 */
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CodeMirror 草稿行内差异对比样式 (Inline Draft Diff & Track Changes)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* 红色删除线：原正文将被删除/替换 */
+.cm-diff-deletion {
+  background-color: color-mix(in srgb, var(--color-error, #ef4444) 18%, transparent) !important;
+  color: var(--color-error-text, #dc2626) !important;
+  text-decoration: line-through !important;
+  text-decoration-color: var(--color-error, #ef4444) !important;
+  text-decoration-thickness: 1.5px !important;
+  border-radius: 2px;
+  padding: 1px 2px;
+}
+
+/* 行内差异 Widget 容器 */
+.cm-diff-widget-wrap {
+  display: inline;
+  vertical-align: baseline;
+}
+
+/* 绿色高亮：提议新增/修改后的正文 */
+.cm-diff-insertion {
+  background-color: color-mix(in srgb, var(--color-success, #22c55e) 18%, transparent) !important;
+  color: var(--color-success-text, #16a34a) !important;
+  border-bottom: 2px solid var(--color-success, #22c55e) !important;
+  border-radius: 2px;
+  padding: 1px 3px;
+  margin-left: 3px;
+  margin-right: 4px;
+  white-space: pre-wrap;
+  font-family: inherit;
+  font-weight: normal;
+}
+
+/* 行内操作按钮群（合并 / 放弃） */
+.cm-diff-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 4px;
+  margin-right: 6px;
+  vertical-align: middle;
+  user-select: none;
+}
+
+.cm-diff-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-weight: 500;
+  border-radius: 4px;
+  cursor: pointer;
+  line-height: 1.4;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.cm-diff-btn:active {
+  transform: scale(0.96);
+}
+
+/* 合并/应用按钮：绿色风格 */
+.cm-diff-btn-accept {
+  background-color: var(--color-success, #22c55e);
+  color: var(--color-success-foreground, #ffffff);
+  border: 1px solid var(--color-success, #22c55e);
+}
+
+.cm-diff-btn-accept:hover {
+  filter: brightness(1.1);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--color-success) 40%, transparent);
+}
+
+/* 放弃/拒绝按钮：微红弱化风格 */
+.cm-diff-btn-reject {
+  background-color: color-mix(in srgb, var(--color-error, #ef4444) 15%, transparent);
+  color: var(--color-error-text, #dc2626);
+  border: 1px solid color-mix(in srgb, var(--color-error, #ef4444) 30%, transparent);
+}
+
+.cm-diff-btn-reject:hover {
+  background-color: var(--color-error, #ef4444);
+  color: var(--color-error-foreground, #ffffff);
+  border-color: var(--color-error, #ef4444);
+}
+

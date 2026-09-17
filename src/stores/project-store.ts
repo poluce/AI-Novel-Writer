@@ -319,6 +319,8 @@ interface ProjectState {
   saveProject: (expectedProjectSession?: ProjectSessionContext) => Promise<boolean>
   /** 更新小说配置 */
   updateNovelConfig: (config: Partial<NovelConfig>, expectedProjectSession?: ProjectSessionContext) => void
+  /** 从数据库主台账重新加载小说配置并更新当前项目 */
+  reloadNovelConfig: () => Promise<void>
   /** 放弃指定项目的配置草稿并恢复到已保存基准。 */
   discardNovelConfigDraft: (
     projectPath: string,
@@ -699,6 +701,51 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       project.novelConfig,
       nextConfig,
     ))
+  },
+
+  reloadNovelConfig: async () => {
+    const project = get().currentProject
+    if (!project) return
+    const projectSession = projectSessionContextFromProject(project)
+    if (!projectSession) return
+    try {
+      const core = await ipc.invokeWithProjectSession(
+        projectSession,
+        'db:project-core-get',
+        project.path,
+      )
+      if (!core) return
+      const current = get().currentProject
+      if (!current || !sameProjectSessionContext(projectSession, projectSessionContextFromProject(current))) return
+      const nextConfig: NovelConfig = {
+        ...current.novelConfig,
+        genre: core.genre ?? current.novelConfig.genre,
+        subGenre: core.subGenre ?? current.novelConfig.subGenre,
+        targetAudience: core.targetAudience ?? current.novelConfig.targetAudience,
+        totalChapters: core.totalChapters ?? current.novelConfig.totalChapters,
+        wordsPerChapter: core.wordsPerChapter ?? current.novelConfig.wordsPerChapter,
+        writingLanguage: core.writingLanguage ?? current.novelConfig.writingLanguage,
+        creativeStrategy: core.creativeStrategy ?? current.novelConfig.creativeStrategy,
+        narrativeThreadDormantChapterThreshold: core.narrativeThreadDormantChapterThreshold ?? current.novelConfig.narrativeThreadDormantChapterThreshold,
+        plotStructure: (core.plotStructure || current.novelConfig.plotStructure) as NovelConfig['plotStructure'],
+        narrativePOV: ((core.narrativePov || (core as unknown as Record<string, unknown>).narrativePOV) || current.novelConfig.narrativePOV) as NovelConfig['narrativePOV'],
+        coreOutline: core.coreOutline ?? current.novelConfig.coreOutline,
+        worldSetting: core.worldSetting ?? current.novelConfig.worldSetting,
+        goldenFinger: core.goldenFinger ?? current.novelConfig.goldenFinger,
+        protagonistProfile: core.protagonistProfile ?? current.novelConfig.protagonistProfile,
+        globalGuidance: core.globalGuidance ?? current.novelConfig.globalGuidance,
+        writingStyle: core.writingStyle ?? current.novelConfig.writingStyle,
+        referenceWorks: core.referenceWorks ?? current.novelConfig.referenceWorks,
+      }
+      set({
+        currentProject: {
+          ...current,
+          novelConfig: nextConfig,
+        },
+      })
+    } catch (err) {
+      console.warn('[ProjectStore] reloadNovelConfig 失败:', err)
+    }
   },
 
   discardNovelConfigDraft: (projectPath, expectedProjectSession) => {

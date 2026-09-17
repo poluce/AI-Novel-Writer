@@ -4,6 +4,7 @@ import { useLLMStore } from '../../stores/llm-store'
 import { useWorkflowStore, workflowResourceConflictMessage } from '../../stores/workflow-store'
 
 import { useProjectStore } from '../../stores/project-store'
+import { useLayoutStore } from '../../stores/layout-store'
 import { createConfigGenerationWorkflow } from '../../services/workflows/architecture-workflow'
 import { confirm } from '../ui/Confirm'
 import { toast } from '../ui/Toast'
@@ -71,8 +72,11 @@ export default function GenerateConfigDialog({ isOpen, onClose, onGenerated }: P
     if (!idea.trim() || isSubmittingRef.current) return
     const projectSession = captureProjectSession(currentProject)
     if (!projectSession) return
-    if (!defaultModelId) {
-      addLog('error', text('请先在设置中配置 AI 模型', 'Configure an AI model in Settings first.'))
+    const models = useLLMStore.getState().models
+    const effectiveModelId = defaultModelId ?? models.find(m => m.purposes?.includes('generation'))?.id
+    if (!effectiveModelId) {
+      toast.warning(text('请先在「设置 → AI 生成模型」中配置默认模型', 'Configure an AI model in Settings first.'))
+      useLayoutStore.getState().openSettings('llm')
       return
     }
 

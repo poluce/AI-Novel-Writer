@@ -97,7 +97,6 @@ describe('assistant composer runtime pickers', () => {
 
     // 1. 点击触发器，打开 DSH 根菜单
     await click(buttonWithText('gemini-3.8-flash-low'))
-    expect(container.textContent).toContain('模型与思考')
     expect(buttonWithText('模型')).toBeDefined()
     expect(buttonWithText('思考')).toBeDefined()
 

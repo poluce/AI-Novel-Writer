@@ -3,7 +3,6 @@ import { ArrowDown, FileText, Info, Trash2, Workflow } from 'lucide-react'
 import { selectIsGenerating, useAgentStore } from '../../../stores/agent-store'
 import { useLayoutStore } from '../../../stores/layout-store'
 import { useProjectStore } from '../../../stores/project-store'
-import { APP_BRAND } from '../../../shared/brand'
 import { resolveWritingLanguage, type WritingLanguage } from '../../../shared/writing-language'
 import type { Locale } from '../../../i18n/types'
 import { captureAgentEditorSnapshot } from '../../../services/agent/editor-snapshot'
@@ -59,11 +58,8 @@ function EmptyState() {
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto px-4 py-4">
-        <div className="mb-1 pl-1 text-base font-semibold" style={{ color: 'var(--color-text)' }}>
-          {text(APP_BRAND.zhName, APP_BRAND.enName)}
-        </div>
         <div className="mb-3 pl-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-          {text('你的 AI 创作助手 — 支持', 'Your AI creative assistant — use')} <code className="px-1 py-0.5 rounded text-[0.68rem]" style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-accent)' }}>/</code> {text('命令和', 'commands and')} <code className="px-1 py-0.5 rounded text-[0.68rem]" style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-accent)' }}>@</code> {text('引用', 'mentions')}
+          {text('创作助手 — 支持', 'Creative assistant — use')} <code className="px-1 py-0.5 rounded text-[0.68rem]" style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-accent)' }}>/</code> {text('命令和', 'commands and')} <code className="px-1 py-0.5 rounded text-[0.68rem]" style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-accent)' }}>@</code> {text('引用', 'mentions')}
         </div>
 
         {recentConvs.length > 0 && (
@@ -92,10 +88,6 @@ function EmptyState() {
             )}
           </div>
         )}
-
-        <div className="pt-8 text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
-          {text('AI 生成内容仅供参考，重要信息请自行核实。', 'AI-generated content is for reference only. Verify important information.')}
-        </div>
       </div>
 
       <div

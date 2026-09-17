@@ -7,17 +7,29 @@ import {
   type WritingLanguage,
 } from '../../../src/shared/writing-language'
 
+const DRAFT_TYPE_ALIASES: Record<string, 'draft_v1' | 'revised' | 'latest'> = {
+  draft_v1: 'draft_v1',
+  revised: 'revised',
+  latest: 'latest',
+  '初稿': 'draft_v1',
+  '草稿': 'draft_v1',
+  '修订稿': 'revised',
+  '修订': 'revised',
+  '最新稿': 'latest',
+  '最新': 'latest',
+}
+
 const DraftType = Type.Union([
-  Type.Literal('draft_v1'),
-  Type.Literal('revised'),
-  Type.Literal('latest'),
-])
+  Type.Literal('latest', { description: '当前最新版本正文草稿（默认）' }),
+  Type.Literal('draft_v1', { description: '章节初稿（第 1 版正文草稿）' }),
+  Type.Literal('revised', { description: '修订润色稿' }),
+], { description: '读取的草稿版本：latest（最新稿，默认）、draft_v1（初稿）、revised（修订稿）' })
 
 const Schema = Type.Object({
-  chapter_number: Type.Number({ description: 'Chapter number to read' }),
+  chapter_number: Type.Integer({ minimum: 1, description: '要读取的章节序号（正整数，如 1）' }),
   draft_type: Type.Optional(DraftType),
-  offset: Type.Optional(Type.Number({ description: '1-based line number to start reading from' })),
-  limit: Type.Optional(Type.Number({ description: 'Maximum number of lines to read' })),
+  offset: Type.Optional(Type.Integer({ minimum: 1, description: '从第几行开始读取（行号从 1 开始）' })),
+  limit: Type.Optional(Type.Integer({ minimum: 1, description: '单次读取的最大行数' })),
 })
 
 export function createReadDraftsTool(
@@ -35,7 +47,8 @@ export function createReadDraftsTool(
     parameters: Schema,
     execute: async (_id, params) => {
       const chapterNum = params.chapter_number
-      const draftType = params.draft_type ?? 'latest'
+      const rawDraftType = params.draft_type ?? 'latest'
+      const draftType = DRAFT_TYPE_ALIASES[rawDraftType] ?? 'latest'
 
       const drafts = DraftRepository.listByChapter(chapterNum)
       if (drafts.length === 0) {

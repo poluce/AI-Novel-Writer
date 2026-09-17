@@ -94,7 +94,7 @@ describe('tool completion → artifact cards', () => {
   const session = { projectId: 'renderer-actions', leaseId: 'renderer-actions-lease', projectPath: PROJECT_PATH }
   const context = { projectPath: PROJECT_PATH, projectSession: session }
 
-  it('appends a workflow card and updates the tool call card in place', () => {
+  it('appends an editor tab card and updates the tool call card in place', () => {
     const message = {
       id: 'm1',
       role: 'assistant' as const,
@@ -102,8 +102,8 @@ describe('tool completion → artifact cards', () => {
       createdAt: 0,
       toolCalls: [{
         id: 'call-1',
-        toolName: 'start_workflow',
-        arguments: { workflow: 'generate_draft', chapter_number: 3 },
+        toolName: 'open_editor',
+        arguments: { target: 'synopsis' },
         status: 'running' as const,
       }],
       artifacts: [],
@@ -111,28 +111,28 @@ describe('tool completion → artifact cards', () => {
 
     const next = applyToolCallResult(message, {
       id: 'call-1',
-      toolName: 'start_workflow',
-      arguments: { workflow: 'generate_draft' },
+      toolName: 'open_editor',
+      arguments: { target: 'synopsis' },
       status: 'completed',
-      result: { runId: 'run-7', status: 'running', name: 'generate_draft（第 3 章）' },
+      result: { name: '情节大纲' },
     }, context)
 
     expect(next.toolCalls?.[0]).toMatchObject({ id: 'call-1', status: 'completed', source: 'builtin' })
     expect(next.artifacts).toEqual([
-      expect.objectContaining({ type: 'workflow_started', runId: 'run-7', name: 'generate_draft（第 3 章）' }),
+      expect.objectContaining({ type: 'tab_opened', name: '情节大纲' }),
     ])
   })
 
   it('carries Pi tool details into the renderer card model', () => {
     const message = {
       id: 'm2', role: 'assistant' as const, content: '', createdAt: 0,
-      toolCalls: [{ id: 'call-2', toolName: 'write_file', arguments: {}, status: 'running' as const }],
+      toolCalls: [{ id: 'call-2', toolName: 'write', arguments: {}, status: 'running' as const }],
       artifacts: [],
     }
 
     const next = applyToolCallResult(message, {
       id: 'call-2',
-      toolName: 'write_file',
+      toolName: 'write',
       arguments: {},
       status: 'completed',
       result: { path: `${PROJECT_PATH}\\notes.md`, name: 'notes.md', commitState: 'committed' },
@@ -155,7 +155,7 @@ describe('tool completion → artifact cards', () => {
     expect(readOnly.artifacts).toEqual([])
 
     const noSession = applyToolCallResult(base, {
-      id: 'call-3', toolName: 'write_file', arguments: {}, status: 'completed',
+      id: 'call-3', toolName: 'write', arguments: {}, status: 'completed',
       result: { name: 'notes.md', path: 'x', commitState: 'committed' },
     }, null)
     expect(noSession.artifacts).toEqual([])

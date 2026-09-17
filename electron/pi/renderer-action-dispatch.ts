@@ -21,7 +21,7 @@ export interface RendererActionDispatcher {
 }
 
 function isBlockingAction(action: RendererAction): boolean {
-  return action.type === 'start_workflow' || action.type === 'replace_draft_excerpt'
+  return action.type === 'replace_draft_excerpt'
 }
 
 /**

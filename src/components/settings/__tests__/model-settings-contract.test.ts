@@ -11,7 +11,7 @@ describe('model settings contract', () => {
     const settingsModal = source('src/components/settings/SettingsModal.tsx')
 
     for (const field of [
-      ['model（模型名称）', 'model'],
+      ['模型列表', 'Models'],
       ['base_url', 'base_url'],
       ['API Key', 'API Key'],
       ["上下文窗口", 'Context Window'],
@@ -22,7 +22,6 @@ describe('model settings contract', () => {
     expect(settingsModal).toContain("text('高级设置', 'Advanced settings')")
     expect(settingsModal).toContain("text('温度', 'Temperature')")
     expect(settingsModal).toContain("text('最大输出 Token', 'Max output tokens')")
-    expect(settingsModal).toContain("text('恢复默认值', 'Restore defaults')")
 
     for (const provider of ['xai', 'siliconflow']) {
       expect(settingsModal).toContain(`value="${provider}"`)
@@ -45,4 +44,12 @@ describe('model settings contract', () => {
     expect(resourceController).toContain('MODEL_PROVIDER_RESOURCE_URLS[resource]')
   })
 
+  it('exposes test connection button and per-model connectivity status indicators in the model list', () => {
+    const settingsModal = source('src/components/settings/SettingsModal.tsx')
+
+    expect(settingsModal).toContain("text('测试连接', 'Test connection')")
+    expect(settingsModal).toContain("data-test-status={testInfo.status}")
+    expect(settingsModal).toContain("handleTestSingleModel")
+    expect(settingsModal).toContain("handleTestAllModels")
+  })
 })

@@ -46,14 +46,6 @@ describe.skip('compile-time invalid artifact examples', () => {
 
 describe('artifactFromToolResult', () => {
   it('builds a file card only for a committed write', () => {
-    const committed = artifactFromToolResult('write_file', {
-      path: 'C:\\novels\\p\\notes.md',
-      name: 'notes.md',
-      characters: 12,
-      commitState: 'committed',
-    }, context)
-    expect(committed).toMatchObject({ type: 'file_modified', name: 'notes.md', path: 'C:\\novels\\p\\notes.md' })
-
     const writeArtifact = artifactFromToolResult('write', {
       path: 'C:\\novels\\p\\chapter1.md',
     }, context)
@@ -64,19 +56,7 @@ describe('artifactFromToolResult', () => {
     }, context)
     expect(editArtifact).toMatchObject({ type: 'file_modified', name: 'chapter2.md', path: 'C:\\novels\\p\\chapter2.md' })
 
-    expect(artifactFromToolResult('write_file', { name: 'notes.md', commitState: 'unknown' }, context)).toBeNull()
-    expect(artifactFromToolResult('write_file', { name: 'notes.md', commitState: 'not_committed' }, context)).toBeNull()
     expect(artifactFromToolResult('write', { path: 'notes.md', commitState: 'not_committed' }, context)).toBeNull()
-  })
-
-  it('builds a workflow card from the renderer launch receipt', () => {
-    expect(artifactFromToolResult('start_workflow', {
-      runId: 'run-1',
-      status: 'running',
-      name: 'generate_draft（第 3 章）',
-    }, context)).toMatchObject({ type: 'workflow_started', runId: 'run-1', status: 'running' })
-
-    expect(artifactFromToolResult('start_workflow', {}, context)).toBeNull()
   })
 
   it('builds a tab card for both builtin pages and project files', () => {
@@ -88,7 +68,7 @@ describe('artifactFromToolResult', () => {
   })
 
   it('never builds a card without a frozen project session or for read-only tools', () => {
-    expect(artifactFromToolResult('write_file', { name: 'notes.md', path: 'x', commitState: 'committed' }, {
+    expect(artifactFromToolResult('write', { name: 'notes.md', path: 'x', commitState: 'committed' }, {
       projectPath: session.projectPath,
       projectSession: null,
     })).toBeNull()

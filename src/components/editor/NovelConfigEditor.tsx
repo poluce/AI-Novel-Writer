@@ -4,7 +4,7 @@ import { Save, Sparkles, Info, RotateCcw } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
 import { registerEditorExitSaveHandler } from '../../stores/editor-store'
 import { useLLMStore } from '../../stores/llm-store'
-import { useWorkflowStore } from '../../stores/workflow-store'
+import { useWorkflowStore, type WorkflowContext } from '../../stores/workflow-store'
 import type { NovelConfig } from '../../shared/ipc-channels'
 import {
   DEFAULT_NARRATIVE_THREAD_DORMANT_THRESHOLD,
@@ -18,11 +18,12 @@ import {
 } from '../../shared/writing-language'
 import type { GeneratableField } from '../../services/workflows/commands/generate-field.command'
 import { Button } from '../ui/Button'
+import { confirm } from '../ui/Confirm'
 import { Input } from '../ui/Input'
 import { NativeSelect } from '../ui/NativeSelect'
+import { toast } from '../ui/Toast'
 import GenerateConfigDialog from '../dialogs/GenerateConfigDialog'
 import { useLocaleStore } from '../../stores/locale-store'
-import { useAgentStore } from '../../stores/agent-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import {
   captureProjectSession,
@@ -50,13 +51,13 @@ function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
   const currentProject = useProjectStore(s => s.currentProject)
   const updateNovelConfig = useProjectStore(s => s.updateNovelConfig)
   const saveProject = useProjectStore(s => s.saveProject)
-  const defaultModelId = useLLMStore(s => s.defaultModelId)
   // ✅ addLog 用 getState() 命令式调用，不订阅 workflow store
   //    避免 AI 流式生成时 globalLogs 高频更新导致本组件被动重渲染
   const addLog = useWorkflowStore.getState().addLog
   const [saving, setSaving] = useState(false)
   const [showGenerateConfig, setShowGenerateConfig] = useState(false)
   const text = useLocaleStore(s => s.text)
+  const locale = useLocaleStore(s => s.locale)
   const [generateSession, setGenerateSession] = useState<ReturnType<typeof captureProjectSession>>(null)
 
   // 各区块的独立生成状态
@@ -119,8 +120,10 @@ function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
   const handleAIGenerate = () => {
     const projectSession = captureProjectSession(currentProject)
     if (!projectSession || !isProjectSessionPath(projectSession, projectKey)) return
-    if (!defaultModelId) {
-      addLog('error', text('请先在设置中配置 AI 模型', 'Configure an AI model in Settings first.'))
+    const effectiveModelId = useLLMStore.getState().resolveTaskModelId('outline')
+    if (!effectiveModelId) {
+      toast.warning(text('请先在「设置 → AI 生成模型」中配置默认模型', 'Configure an AI model in Settings first.'))
+      useLayoutStore.getState().openSettings('llm')
       return
     }
     setGenerateSession(projectSession)
@@ -136,26 +139,80 @@ function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
     writingStyle: { zhCN: '写作风格', enUS: 'Writing style' },
   }
 
-  /** 单字段 AI 生成：通过 Agent 工具 propose_novel_config 触发调度 */
+  /** 单字段 AI 原地快速生成 */
   const handleFieldGenerate = async (fieldKey: GeneratableField) => {
     const projectSession = captureProjectSession(currentProject)
     if (!projectSession || !isProjectSessionPath(projectSession, projectKey)) return
-    if (!defaultModelId) {
-      addLog('error', text('请先在设置中配置 AI 模型', 'Configure an AI model in Settings first.'))
+    const effectiveModelId = useLLMStore.getState().resolveTaskModelId('outline')
+    if (!effectiveModelId) {
+      toast.warning(text('请先在「设置 → AI 生成模型」中配置默认模型', 'Configure an AI model in Settings first.'))
+      useLayoutStore.getState().openSettings('llm')
       return
     }
+    if (generatingField) return
 
     setCollapsedSections(current => ({ ...current, [fieldKey]: false }))
     setGeneratingField(fieldKey)
     const fieldInfo = FIELD_LABELS[fieldKey] ?? { zhCN: fieldKey, enUS: fieldKey }
     const fieldName = text(fieldInfo.zhCN, fieldInfo.enUS)
 
-    useLayoutStore.getState().openRightPanel('agent')
-    const promptMessage = text(
-      `请结合当前小说已有的类型、设定与大纲，使用 propose_novel_config 工具为【${fieldName}】字段生成具体、充实且符合故事风格的设定内容。`,
-      `Please use the propose_novel_config tool to generate detailed, fitting content for the "${fieldName}" field based on current novel settings.`,
+    toast.info(text(`正在生成【${fieldName}】...`, `Generating "${fieldName}"...`))
+    try {
+      addLog('info', text(`正在生成【${fieldName}】...`, `Generating "${fieldName}"...`))
+      const { GenerateFieldCommand } = await import('../../services/workflows/commands/generate-field.command')
+      const cmd = new GenerateFieldCommand(fieldKey)
+      const writingLanguage = resolveWritingLanguage(currentProject?.novelConfig?.writingLanguage)
+      const context: WorkflowContext = {
+        runId: `field-${Date.now()}`,
+        projectPath: projectSession.projectPath,
+        projectSession,
+        writingLanguage,
+        uiLocale: locale,
+        data: {},
+        cancelled: false,
+        generationModelId: effectiveModelId,
+      }
+      await cmd.execute({
+        step: { id: `step-${fieldKey}`, commandId: 'generate-field', name: fieldName, params: {} },
+        context,
+        callbacks: {
+          log: (msg: string) => addLog('info', msg),
+          setProgress: () => {},
+          appendText: () => {},
+        },
+      })
+      toast.success(text(`【${fieldName}】生成完成！`, `"${fieldName}" generated successfully!`))
+      addLog('info', text(`【${fieldName}】已生成并保存`, `"${fieldName}" was generated and saved.`))
+    } catch (e) {
+      console.error('[NovelConfigEditor] 字段生成失败:', e)
+      const errorMsg = e instanceof Error ? e.message : String(e)
+      toast.error(text(`生成失败：${errorMsg}`, `Generation failed: ${errorMsg}`))
+      addLog('error', text(`生成失败：${errorMsg}`, `Generation failed: ${errorMsg}`))
+    } finally {
+      setGeneratingField(null)
+    }
+  }
+
+  /** 单字段内容清除 */
+  const handleFieldClear = async (fieldKey: GeneratableField | 'referenceWorks', fieldLabel: string) => {
+    const projectSession = captureProjectSession(currentProject)
+    if (!projectSession || !isProjectSessionPath(projectSession, projectKey)) return
+    const currentVal = config[fieldKey]
+    if (typeof currentVal !== 'string' || !currentVal.trim()) return
+
+    const ok = await confirm(
+      text(`确认清除「${fieldLabel}」内容？`, `Are you sure you want to clear "${fieldLabel}"?`),
+      {
+        title: text('清除确认', 'Confirm Clear'),
+        confirmText: text('清除', 'Clear'),
+        danger: true,
+      },
     )
-    void useAgentStore.getState().sendMessage(promptMessage)
+    if (!ok) return
+    if (!isProjectSessionCurrent(projectSession)) return
+
+    update(fieldKey as any, '')
+    toast.success(text(`已清除「${fieldLabel}」`, `Cleared "${fieldLabel}"`))
   }
 
   const genres = ['玄幻', '仙侠', '都市', '科幻', '历史', '军事', '游戏', '末世', '悬疑', '灵异', '言情', '古言', '现言', '奇幻', '武侠', '轻小说', '同人', '职场']
@@ -369,6 +426,8 @@ function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
               generating={generatingField === 'coreOutline'}
               generateDisabled={generatingField != null}
               onGenerate={() => void handleFieldGenerate('coreOutline')}
+              clearDisabled={!config.coreOutline?.trim() || generatingField != null}
+              onClear={() => void handleFieldClear('coreOutline', text('核心大纲', 'Core outline'))}
             >
               <DocumentBody
                 value={config.coreOutline}
@@ -383,6 +442,8 @@ function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
               generating={generatingField === 'worldSetting'}
               generateDisabled={generatingField != null}
               onGenerate={() => void handleFieldGenerate('worldSetting')}
+              clearDisabled={!config.worldSetting?.trim() || generatingField != null}
+              onClear={() => void handleFieldClear('worldSetting', text('世界观 / 初始设定', 'World / initial setting'))}
             >
               <DocumentBody
                 value={config.worldSetting}
@@ -397,6 +458,8 @@ function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
               generating={generatingField === 'goldenFinger'}
               generateDisabled={generatingField != null}
               onGenerate={() => void handleFieldGenerate('goldenFinger')}
+              clearDisabled={!config.goldenFinger?.trim() || generatingField != null}
+              onClear={() => void handleFieldClear('goldenFinger', text('金手指 / 核心卖点', 'Protagonist advantage / core hook'))}
             >
               <DocumentBody
                 value={config.goldenFinger}
@@ -411,6 +474,8 @@ function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
               generating={generatingField === 'protagonistProfile'}
               generateDisabled={generatingField != null}
               onGenerate={() => void handleFieldGenerate('protagonistProfile')}
+              clearDisabled={!config.protagonistProfile?.trim() || generatingField != null}
+              onClear={() => void handleFieldClear('protagonistProfile', text('主角人设', 'Protagonist profile'))}
             >
               <DocumentBody
                 value={config.protagonistProfile}
@@ -425,6 +490,8 @@ function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
               generating={generatingField === 'globalGuidance'}
               generateDisabled={generatingField != null}
               onGenerate={() => void handleFieldGenerate('globalGuidance')}
+              clearDisabled={!config.globalGuidance?.trim() || generatingField != null}
+              onClear={() => void handleFieldClear('globalGuidance', text('全局写作要求', 'Global writing guidance'))}
             >
               <DocumentBody
                 value={config.globalGuidance}
@@ -439,6 +506,8 @@ function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
               generating={generatingField === 'writingStyle'}
               generateDisabled={generatingField != null}
               onGenerate={() => void handleFieldGenerate('writingStyle')}
+              clearDisabled={!config.writingStyle?.trim() || generatingField != null}
+              onClear={() => void handleFieldClear('writingStyle', text('文风配置', 'Writing style'))}
             >
               <DocumentBody
                 value={config.writingStyle || ''}
@@ -450,6 +519,8 @@ function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
               title={text('参考作品', 'Reference works')}
               collapsed={Boolean(collapsedSections.referenceWorks)}
               onToggle={() => setCollapsedSections(current => ({ ...current, referenceWorks: !current.referenceWorks }))}
+              clearDisabled={!config.referenceWorks?.trim() || generatingField != null}
+              onClear={() => void handleFieldClear('referenceWorks', text('参考作品', 'Reference works'))}
             >
               <DocumentBody
                 value={config.referenceWorks || ''}

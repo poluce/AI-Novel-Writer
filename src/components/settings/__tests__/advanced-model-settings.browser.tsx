@@ -104,12 +104,12 @@ describe('advanced model settings', () => {
     const maxOutputTokens = page.getByLabelText('最大输出 Token')
     await expect.element(temperature).toHaveValue(0.35)
     await expect.element(maxOutputTokens).toHaveValue(6000)
-    expect(document.querySelector('[data-reasoning-status="capped"]')?.textContent).toContain('最高 → 高')
+    // 业务阶段策略已移出模型高级设置
+    expect(document.querySelector('[aria-label="模型推理覆盖"]')).toBeNull()
 
     await act(async () => {
       await temperature.fill('0.9')
       await maxOutputTokens.fill('7000')
-      await page.getByLabelText('模型推理覆盖').selectOptions('low')
       await page.getByRole('button', { name: '保存配置', exact: true }).click()
     })
     await vi.waitFor(() => expect(saveModel).toHaveBeenCalledTimes(1))
@@ -119,19 +119,6 @@ describe('advanced model settings', () => {
     await act(async () => page.getByRole('button', { name: '高级设置', exact: true }).click())
     await expect.element(page.getByLabelText('温度')).toHaveValue(0.9)
     await expect.element(page.getByLabelText('最大输出 Token')).toHaveValue(7000)
-    await expect.element(page.getByLabelText('模型推理覆盖')).toHaveValue('low')
-
-    await act(async () => page.getByRole('button', { name: '恢复默认值', exact: true }).click())
-    await expect.element(page.getByLabelText('温度')).toHaveValue(0.7)
-    await expect.element(page.getByLabelText('最大输出 Token')).toHaveValue(8192)
-    await expect.element(page.getByLabelText('模型推理覆盖')).toHaveValue('auto')
-    await act(async () => page.getByRole('button', { name: '保存配置', exact: true }).click())
-
-    await clickEdit()
-    await act(async () => page.getByRole('button', { name: '高级设置', exact: true }).click())
-    await expect.element(page.getByLabelText('温度')).toHaveValue(0.7)
-    await expect.element(page.getByLabelText('最大输出 Token')).toHaveValue(8192)
-    await expect.element(page.getByLabelText('模型推理覆盖')).toHaveValue('auto')
   })
 
   it('exposes the advanced entry and effective reasoning state in English', async () => {
@@ -142,16 +129,15 @@ describe('advanced model settings', () => {
     await act(async () => page.getByRole('button', { name: 'Advanced settings', exact: true }).click())
     await expect.element(page.getByLabelText('Temperature')).toBeVisible()
     await expect.element(page.getByLabelText('Max output tokens')).toBeVisible()
-    await expect.element(page.getByLabelText('Model reasoning override')).toBeVisible()
-    await expect.element(page.getByLabelText('Effective reasoning effort')).toBeVisible()
+    expect(document.querySelector('[aria-label="Model reasoning override"]')).toBeNull()
   })
 
   it('warns when the configured output consumes the context window without blocking save', async () => {
     const { saveModel } = await renderSettings('en-US')
     await clickEdit('Edit')
     await act(async () => {
-      await page.getByLabelText('Context Window').fill('8192')
       await page.getByRole('button', { name: 'Advanced settings', exact: true }).click()
+      await page.getByLabelText('Context Window').fill('8192')
       await page.getByLabelText('Max output tokens').fill('8192')
     })
 

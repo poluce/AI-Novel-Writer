@@ -30,7 +30,7 @@ describe('AgentMessage copy action', () => {
     await act(async () => root.render(<AgentMessage message={{
       id: `${role}-1`, role, content: 'Visible message', createdAt: 1,
       ...(role === 'assistant' ? { toolCalls: [{
-        id: 'hidden-tool', toolName: 'write_file', arguments: { secret: 'do not copy' }, status: 'completed' as const,
+        id: 'hidden-tool', toolName: 'write', arguments: { secret: 'do not copy' }, status: 'completed' as const,
       }] } : {}),
     }} />))
 

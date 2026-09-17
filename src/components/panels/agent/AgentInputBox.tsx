@@ -8,8 +8,6 @@ import {
   AtSign,
   Workflow,
   X,
-  Cpu,
-  Sparkles,
   ChevronRight,
   ChevronLeft,
   Check,
@@ -127,6 +125,7 @@ export default function AgentInputBox() {
 
   const contextRef = useRef<HTMLDivElement>(null)
   const modelSelectRef = useRef<HTMLDivElement>(null)
+  const modelMenuRef = useRef<HTMLDivElement>(null)
 
   // 调整文本框高度的通用函数
   const adjustHeight = useCallback(() => {
@@ -165,10 +164,22 @@ export default function AgentInputBox() {
 
   // 点击外部关闭下拉（用 useOutsideClick 统一管理 ref）
   useOutsideClick(contextRef, () => setShowContextMenu(false), showContextMenu)
-  useOutsideClick(modelSelectRef, () => {
-    setShowModelSelectMenu(false)
-    setSelectPane('root')
-  }, showModelSelectMenu)
+  useEffect(() => {
+    if (!showModelSelectMenu) return
+    const listener = (e: MouseEvent) => {
+      const target = e.target as Node
+      if (
+        modelSelectRef.current?.contains(target) ||
+        modelMenuRef.current?.contains(target)
+      ) {
+        return
+      }
+      setShowModelSelectMenu(false)
+      setSelectPane('root')
+    }
+    document.addEventListener('mousedown', listener)
+    return () => document.removeEventListener('mousedown', listener)
+  }, [showModelSelectMenu])
 
   /** 发送或停止 */
   const handleSendOrStop = useCallback(async () => {
@@ -259,6 +270,159 @@ export default function AgentInputBox() {
             handleInputChange('/')
             textareaRef.current?.focus()
           }} />
+        </div>
+      )}
+
+      {/* 模型与思考选择菜单 */}
+      {showModelSelectMenu && (
+        <div
+          ref={modelMenuRef}
+          className="absolute bottom-[calc(100%+8px)] left-0 z-50 py-1 rounded-lg shadow-lg"
+          style={{
+            width: 240,
+            maxWidth: 'calc(100% - 8px)',
+            backgroundColor: 'var(--color-sidebar)',
+            border: '1px solid var(--color-border)',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+            maxHeight: 320,
+            overflowY: 'auto',
+          }}
+        >
+          {/* 根视图：模型 > 与 思考 > */}
+          {selectPane === 'root' && (
+            <div className="py-1">
+              <button
+                type="button"
+                onClick={() => setSelectPane('model')}
+                className="w-full flex items-center justify-between px-3 py-2 text-xs transition-colors hover:bg-[var(--color-hover)] text-left"
+              >
+                <span className="font-medium text-[var(--color-text)] shrink-0">{text('模型', 'Model')}</span>
+                <div className="flex items-center gap-1 text-[var(--color-text-muted)] min-w-0 ml-2">
+                  <span className="truncate text-[0.75rem]">
+                    {currentModel?.modelName ?? currentModel?.name ?? text('未选择', 'None')}
+                  </span>
+                  <ChevronRight size={13} className="flex-shrink-0" />
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectPane('effort')}
+                className="w-full flex items-center justify-between px-3 py-2 text-xs transition-colors hover:bg-[var(--color-hover)] text-left"
+              >
+                <span className="font-medium text-[var(--color-text)] shrink-0">{text('思考', 'Thinking')}</span>
+                <div className="flex items-center gap-1 text-[var(--color-text-muted)] min-w-0 ml-2">
+                  <span className="text-[0.75rem] truncate">{thinkingLevelLabel(text, currentThinkingLevel)}</span>
+                  <ChevronRight size={13} className="flex-shrink-0" />
+                </div>
+              </button>
+            </div>
+          )}
+
+          {/* 模型选择子视图：按渠道分组 */}
+          {selectPane === 'model' && (
+            <div>
+              <div className="flex items-center gap-1 px-2 py-1.5 border-b border-[var(--color-border)] mb-1">
+                <button
+                  type="button"
+                  onClick={() => setSelectPane('root')}
+                  className="flex items-center gap-0.5 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)] px-1.5 py-0.5 rounded hover:bg-[var(--color-hover)]"
+                >
+                  <ChevronLeft size={13} />
+                  <span>{text('返回', 'Back')}</span>
+                </button>
+                <span className="text-xs font-medium ml-1 text-[var(--color-text)]">{text('选择模型', 'Select model')}</span>
+              </div>
+              {chatModels.length === 0 ? (
+                <div className="px-3 py-2 text-xs text-[var(--color-text-muted)]">
+                  {text('请先在设置中配置模型', 'Configure a model in Settings first')}
+                </div>
+              ) : (
+                modelGroups.map(group => (
+                  <div key={group.key} className="mb-2">
+                    <div
+                      className="px-3 py-1 text-[0.68rem] font-semibold text-[var(--color-text-muted)] truncate"
+                      data-model-channel={group.key}
+                    >
+                      {group.channelName || group.label}
+                    </div>
+                    {group.models.map(entry => {
+                      const isSelected = entry.profile.id === currentModelId
+                      return (
+                        <button
+                          key={entry.profile.id}
+                          type="button"
+                          onClick={() => {
+                            setModelId(entry.profile.id)
+                            setShowModelSelectMenu(false)
+                            setSelectPane('root')
+                          }}
+                          className={cn(
+                            'w-full flex items-center justify-between px-3 py-1.5 text-xs transition-colors text-left',
+                            isSelected
+                              ? 'bg-[var(--color-hover)] font-medium text-[var(--color-accent)]'
+                              : 'hover:bg-[var(--color-hover)] text-[var(--color-text)]',
+                          )}
+                        >
+                          <span className="truncate">{entry.modelName}</span>
+                          {isSelected && <Check size={14} className="text-[var(--color-accent)] flex-shrink-0 ml-2" />}
+                        </button>
+                      )
+                    })}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {/* 思考等级子视图 */}
+          {selectPane === 'effort' && (
+            <div>
+              <div className="flex items-center gap-1 px-2 py-1.5 border-b border-[var(--color-border)] mb-1">
+                <button
+                  type="button"
+                  onClick={() => setSelectPane('root')}
+                  className="flex items-center gap-0.5 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)] px-1.5 py-0.5 rounded hover:bg-[var(--color-hover)]"
+                >
+                  <ChevronLeft size={13} />
+                  <span>{text('返回', 'Back')}</span>
+                </button>
+                <span className="text-xs font-medium ml-1 text-[var(--color-text)]">{text('思考等级', 'Thinking level')}</span>
+              </div>
+              <div className="py-0.5">
+                {[
+                  { value: null, label: text('关（默认）', 'Off (default)'), desc: text('不指定等级，使用模型默认行为', 'Use model default behavior') },
+                  { value: 'low' as const, label: text('低', 'Low'), desc: text('最快，适合简单改写与问答', 'Fastest; simple rewrites and questions') },
+                  { value: 'medium' as const, label: text('中', 'Medium'), desc: text('平衡，适合常规创作与改稿', 'Balanced; everyday drafting and revision') },
+                  { value: 'high' as const, label: text('高', 'High'), desc: text('最慢，适合大纲与复杂推理', 'Slowest; outlines and complex reasoning') },
+                ].map(item => {
+                  const isSelected = currentThinkingLevel === item.value
+                  return (
+                    <button
+                      key={item.value ?? 'default'}
+                      type="button"
+                      data-thinking-level={item.value ?? 'default'}
+                      onClick={() => {
+                        setThinkingLevel(item.value)
+                        setShowModelSelectMenu(false)
+                        setSelectPane('root')
+                      }}
+                      className={cn(
+                        'w-full flex items-center justify-between px-3 py-2 text-left text-xs transition-colors rounded-md mx-1',
+                        isSelected ? 'bg-[var(--color-hover)]' : 'hover:bg-[var(--color-hover)]',
+                      )}
+                      style={{ width: 'calc(100% - 8px)' }}
+                    >
+                      <div className="flex flex-col">
+                        <span className={cn('font-medium', isSelected ? 'text-[var(--color-accent)]' : 'text-[var(--color-text)]')}>{item.label}</span>
+                        <span className="text-[0.7rem] text-[var(--color-text-muted)]">{item.desc}</span>
+                      </div>
+                      {isSelected && <Check size={14} className="text-[var(--color-accent)] flex-shrink-0 ml-2" />}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -359,7 +523,7 @@ export default function AgentInputBox() {
                   setSelectPane('root')
                 }
               }}
-              className="flex items-center gap-1 py-1 pl-1 pr-1.5 rounded-md text-xs min-w-0 transition-colors"
+              className="flex items-center gap-1 py-1 px-1.5 rounded-md text-xs min-w-0 transition-colors"
               style={{
                 color: 'var(--color-text-secondary)',
                 opacity: 0.85,
@@ -375,7 +539,6 @@ export default function AgentInputBox() {
               }}
               title={currentThinkingLevel ? `${currentModel?.modelName ?? currentModel?.name ?? text('选择模型', 'Select model')} · ${thinkingLevelLabel(text, currentThinkingLevel)}` : (currentModel?.modelName ?? currentModel?.name ?? text('选择模型', 'Select model'))}
             >
-              <Cpu size={13} strokeWidth={1.5} className="flex-shrink-0" />
               <span className="truncate select-none font-medium">
                 {currentModel?.modelName
                   ?? currentModel?.name
@@ -391,166 +554,6 @@ export default function AgentInputBox() {
               )}
               <ChevronDown size={13} strokeWidth={1.5} className="flex-shrink-0" />
             </button>
-
-            {/* DSH 二级菜单 */}
-            {showModelSelectMenu && (
-              <div
-                className="absolute bottom-full left-0 mb-1 z-50 py-1 rounded-lg shadow-lg"
-                style={{
-                  width: 260,
-                  backgroundColor: 'var(--color-sidebar)',
-                  border: '1px solid var(--color-border)',
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
-                  maxHeight: 320,
-                  overflowY: 'auto',
-                }}
-              >
-                {/* 根视图：模型 > 与 思考 > */}
-                {selectPane === 'root' && (
-                  <div className="py-0.5">
-                    <div className="text-[0.7rem] px-3 py-1 font-medium" style={{ color: 'var(--color-text-muted)' }}>
-                      {text('模型与思考', 'Model & Thinking')}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setSelectPane('model')}
-                      className="w-full flex items-center justify-between px-3 py-2 text-xs transition-colors hover:bg-[var(--color-hover)] text-left"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Cpu size={14} className="text-[var(--color-text-muted)]" />
-                        <span className="font-medium text-[var(--color-text)]">{text('模型', 'Model')}</span>
-                      </div>
-                      <div className="flex items-center gap-1 text-[var(--color-text-muted)] min-w-0">
-                        <span className="truncate max-w-[120px] text-[0.75rem]">
-                          {currentModel?.modelName ?? currentModel?.name ?? text('未选择', 'None')}
-                        </span>
-                        <ChevronRight size={13} className="flex-shrink-0" />
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSelectPane('effort')}
-                      className="w-full flex items-center justify-between px-3 py-2 text-xs transition-colors hover:bg-[var(--color-hover)] text-left"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Sparkles size={14} className="text-[var(--color-text-muted)]" />
-                        <span className="font-medium text-[var(--color-text)]">{text('思考', 'Thinking')}</span>
-                      </div>
-                      <div className="flex items-center gap-1 text-[var(--color-text-muted)]">
-                        <span className="text-[0.75rem]">{thinkingLevelLabel(text, currentThinkingLevel)}</span>
-                        <ChevronRight size={13} className="flex-shrink-0" />
-                      </div>
-                    </button>
-                  </div>
-                )}
-
-                {/* 模型选择子视图：按渠道分组 */}
-                {selectPane === 'model' && (
-                  <div>
-                    <div className="flex items-center gap-1 px-2 py-1.5 border-b border-[var(--color-border)] mb-1">
-                      <button
-                        type="button"
-                        onClick={() => setSelectPane('root')}
-                        className="flex items-center gap-0.5 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)] px-1.5 py-0.5 rounded hover:bg-[var(--color-hover)]"
-                      >
-                        <ChevronLeft size={13} />
-                        <span>{text('返回', 'Back')}</span>
-                      </button>
-                      <span className="text-xs font-medium ml-1 text-[var(--color-text)]">{text('选择模型', 'Select model')}</span>
-                    </div>
-                    {chatModels.length === 0 ? (
-                      <div className="px-3 py-2 text-xs text-[var(--color-text-muted)]">
-                        {text('请先在设置中配置模型', 'Configure a model in Settings first')}
-                      </div>
-                    ) : (
-                      modelGroups.map(group => (
-                        <div key={group.key} className="mb-2">
-                          <div
-                            className="px-3 py-1 text-[0.68rem] font-semibold text-[var(--color-text-muted)] truncate"
-                            data-model-channel={group.key}
-                          >
-                            {group.channelName || group.label}
-                          </div>
-                          {group.models.map(entry => {
-                            const isSelected = entry.profile.id === currentModelId
-                            return (
-                              <button
-                                key={entry.profile.id}
-                                type="button"
-                                onClick={() => {
-                                  setModelId(entry.profile.id)
-                                  setShowModelSelectMenu(false)
-                                  setSelectPane('root')
-                                }}
-                                className={cn(
-                                  'w-full flex items-center justify-between px-3 py-1.5 text-xs transition-colors text-left',
-                                  isSelected
-                                    ? 'bg-[var(--color-hover)] font-medium text-[var(--color-accent)]'
-                                    : 'hover:bg-[var(--color-hover)] text-[var(--color-text)]',
-                                )}
-                              >
-                                <span className="truncate">{entry.modelName}</span>
-                                {isSelected && <Check size={14} className="text-[var(--color-accent)] flex-shrink-0 ml-2" />}
-                              </button>
-                            )
-                          })}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                )}
-
-                {/* 思考等级子视图 */}
-                {selectPane === 'effort' && (
-                  <div>
-                    <div className="flex items-center gap-1 px-2 py-1.5 border-b border-[var(--color-border)] mb-1">
-                      <button
-                        type="button"
-                        onClick={() => setSelectPane('root')}
-                        className="flex items-center gap-0.5 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)] px-1.5 py-0.5 rounded hover:bg-[var(--color-hover)]"
-                      >
-                        <ChevronLeft size={13} />
-                        <span>{text('返回', 'Back')}</span>
-                      </button>
-                      <span className="text-xs font-medium ml-1 text-[var(--color-text)]">{text('思考等级', 'Thinking level')}</span>
-                    </div>
-                    <div className="py-0.5">
-                      {[
-                        { value: null, label: text('关（默认）', 'Off (default)'), desc: text('不指定等级，使用模型默认行为', 'Use model default behavior') },
-                        { value: 'low' as const, label: text('低', 'Low'), desc: text('最快，适合简单改写与问答', 'Fastest; simple rewrites and questions') },
-                        { value: 'medium' as const, label: text('中', 'Medium'), desc: text('平衡，适合常规创作与改稿', 'Balanced; everyday drafting and revision') },
-                        { value: 'high' as const, label: text('高', 'High'), desc: text('最慢，适合大纲与复杂推理', 'Slowest; outlines and complex reasoning') },
-                      ].map(item => {
-                        const isSelected = currentThinkingLevel === item.value
-                        return (
-                          <button
-                            key={item.value ?? 'default'}
-                            type="button"
-                            data-thinking-level={item.value ?? 'default'}
-                            onClick={() => {
-                              setThinkingLevel(item.value)
-                              setShowModelSelectMenu(false)
-                              setSelectPane('root')
-                            }}
-                            className={cn(
-                              'w-full flex items-center justify-between px-3 py-2 text-left text-xs transition-colors rounded-md mx-1',
-                              isSelected ? 'bg-[var(--color-hover)]' : 'hover:bg-[var(--color-hover)]',
-                            )}
-                            style={{ width: 'calc(100% - 8px)' }}
-                          >
-                            <div className="flex flex-col">
-                              <span className={cn('font-medium', isSelected ? 'text-[var(--color-accent)]' : 'text-[var(--color-text)]')}>{item.label}</span>
-                              <span className="text-[0.7rem] text-[var(--color-text-muted)]">{item.desc}</span>
-                            </div>
-                            {isSelected && <Check size={14} className="text-[var(--color-accent)] flex-shrink-0 ml-2" />}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </div>
 

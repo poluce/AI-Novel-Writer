@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { createProposeNovelConfigTool } from '../propose-novel-config.tool'
 import { createProposeChapterBlueprintTool } from '../propose-chapter-blueprint.tool'
-import type { RendererAction } from '../../renderer-action'
 
 vi.mock('../../../repositories/project-core-repository', () => ({
   ProjectCoreRepository: { get: vi.fn(), update: vi.fn() },
@@ -25,25 +23,6 @@ beforeEach(() => {
   coreUpdateMock.mockReset()
   bpGetMock.mockReset()
   bpUpsertMock.mockReset()
-})
-
-describe('propose_novel_config', () => {
-  it('writes the config and emits a refresh action', async () => {
-    coreUpdateMock.mockReturnValue(undefined)
-    const actions: RendererAction[] = []
-    const tool = createProposeNovelConfigTool('zh-CN', (a) => { actions.push(a) })
-    const result = await tool.execute('c1', { changes: { genre: 'fantasy', totalChapters: 10 } })
-
-    expect(coreUpdateMock).toHaveBeenCalledWith(expect.objectContaining({ genre: 'fantasy', totalChapters: 10 }))
-    expect(actions).toHaveLength(1)
-    expect(actions[0]).toEqual({ type: 'refresh_project_config' })
-    expect(result.details.fields).toBe(2)
-  })
-
-  it('rejects an unknown field', async () => {
-    const tool = createProposeNovelConfigTool('zh-CN', () => {})
-    await expect(tool.execute('c1', { changes: { bogus: 'x' } })).rejects.toThrow('未知小说配置字段')
-  })
 })
 
 describe('propose_chapter_blueprint', () => {

@@ -18,6 +18,8 @@ export interface ResolvedGenerationParameters {
 type GenerationParameterRequest = Pick<LLMRequest, 'maxTokens' | 'responseFormat'> & {
   creativeStrategy?: CreativeStrategy
   reasoningStage?: GenerationReasoningStage
+  taskKey?: import('../../src/shared/ipc-channels').CreationTaskKey
+  reasoningEffort?: import('../../src/shared/reasoning-types').ReasoningEffort
 }
 
 function hasModelFamilyPrefix(modelName: string, prefixes: readonly string[]): boolean {
@@ -67,6 +69,8 @@ export function resolveGenerationParameters(
     model,
     creativeStrategy: request.creativeStrategy,
     stage: request.reasoningStage,
+    taskKey: request.taskKey,
+    requestedEffort: request.reasoningEffort,
   })
 
   return {

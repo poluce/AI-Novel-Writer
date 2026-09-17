@@ -40,7 +40,8 @@ function resolveModel(modelId: string | undefined): ModelProfile | null {
   const models = readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
   if (modelId) return models.find((m) => m.id === modelId) ?? null
   const config = readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)
-  const defaultId = config.defaultModelId
+  const assistantConfigId = config.taskModelRouting?.assistant?.modelId?.trim()
+  const defaultId = assistantConfigId || config.defaultModelId
   return models.find((m) => m.id === defaultId) ?? models[0] ?? null
 }
 

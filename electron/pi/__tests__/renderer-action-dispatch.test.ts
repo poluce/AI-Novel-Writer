@@ -55,7 +55,7 @@ describe('createRendererActionDispatcher', () => {
     await expect(pending).resolves.toEqual({ ok: true, summary: 'replaced' })
   })
 
-  it('waits for the renderer receipt before resolving start_workflow', async () => {
+  it('waits for the renderer receipt before resolving replace_draft_excerpt', async () => {
     const { win, send } = fakeWindow()
     const dispatcher = createRendererActionDispatcher({
       mainWindow: () => win,
@@ -63,9 +63,10 @@ describe('createRendererActionDispatcher', () => {
     })
 
     const pending = dispatcher.rendererAction({
-      type: 'start_workflow',
-      workflow: 'generate_draft',
+      type: 'replace_draft_excerpt',
       chapterNumber: 1,
+      oldText: 'aaa',
+      newText: 'bbb',
     })
     expect(pending).toBeInstanceOf(Promise)
     const payload = send.mock.calls[0]?.[1] as { requestId: string }
@@ -73,9 +74,9 @@ describe('createRendererActionDispatcher', () => {
 
     expect(dispatcher.complete(payload.requestId, {
       ok: true,
-      summary: 'started',
+      summary: 'replaced',
     })).toBe(true)
-    await expect(pending).resolves.toEqual({ ok: true, summary: 'started' })
+    await expect(pending).resolves.toEqual({ ok: true, summary: 'replaced' })
   })
 
   it('returns the renderer error instead of inventing success', async () => {
@@ -86,9 +87,10 @@ describe('createRendererActionDispatcher', () => {
     })
 
     const pending = dispatcher.rendererAction({
-      type: 'start_workflow',
-      workflow: 'refine',
+      type: 'replace_draft_excerpt',
       chapterNumber: 1,
+      oldText: 'aaa',
+      newText: 'bbb',
     })
     const payload = send.mock.calls[0]?.[1] as { requestId: string }
     dispatcher.complete(payload.requestId, {
@@ -104,8 +106,10 @@ describe('createRendererActionDispatcher', () => {
       messages: () => messages,
     })
     await expect(dispatcher.rendererAction({
-      type: 'start_workflow',
-      workflow: 'generate_architecture',
+      type: 'replace_draft_excerpt',
+      chapterNumber: 1,
+      oldText: 'aaa',
+      newText: 'bbb',
     })).resolves.toEqual({ ok: false, error: 'no-window' })
   })
 
@@ -118,23 +122,26 @@ describe('createRendererActionDispatcher', () => {
       timeoutMs: RENDERER_ACTION_RECEIPT_TIMEOUT_MS,
     })
     const pending = dispatcher.rendererAction({
-      type: 'start_workflow',
-      workflow: 'generate_blueprint',
+      type: 'replace_draft_excerpt',
+      chapterNumber: 1,
+      oldText: 'aaa',
+      newText: 'bbb',
     })
     await vi.advanceTimersByTimeAsync(RENDERER_ACTION_RECEIPT_TIMEOUT_MS)
     await expect(pending).resolves.toEqual({ ok: false, error: 'timeout' })
   })
 
-  it('aborts in-flight start_workflow waits', async () => {
+  it('aborts in-flight blocking waits', async () => {
     const { win } = fakeWindow()
     const dispatcher = createRendererActionDispatcher({
       mainWindow: () => win,
       messages: () => messages,
     })
     const pending = dispatcher.rendererAction({
-      type: 'start_workflow',
-      workflow: 'generate_draft',
+      type: 'replace_draft_excerpt',
       chapterNumber: 2,
+      oldText: 'aaa',
+      newText: 'bbb',
     })
     dispatcher.abortAll()
     await expect(pending).resolves.toEqual({ ok: false, error: 'aborted' })

@@ -20,18 +20,39 @@ import {
  * 数据库驱动的内置页面不需要文件路径；只有 file 目标才读取物理文件。
  * 内置页面的打开由渲染层完成，主进程不做多余的读盘。
  */
+const TARGET_ALIASES: Record<string, BuiltinEditorTarget | 'file'> = {
+  config: 'config',
+  blueprints: 'blueprints',
+  characters: 'characters',
+  architecture: 'architecture',
+  synopsis: 'synopsis',
+  file: 'file',
+  '小说配置': 'config',
+  '配置': 'config',
+  '章节蓝图': 'blueprints',
+  '蓝图': 'blueprints',
+  '角色管理': 'characters',
+  '角色': 'characters',
+  '人物': 'characters',
+  '故事架构': 'architecture',
+  '架构': 'architecture',
+  '情节大纲': 'synopsis',
+  '大纲': 'synopsis',
+  '文件': 'file',
+}
+
 const Target = Type.Union([
-  Type.Literal('config'),
-  Type.Literal('blueprints'),
-  Type.Literal('characters'),
-  Type.Literal('architecture'),
-  Type.Literal('synopsis'),
-  Type.Literal('file'),
-])
+  Type.Literal('config', { description: '小说配置页面（基础参数、受众、核心大纲、金手指等）' }),
+  Type.Literal('blueprints', { description: '章节蓝图页面（全书章节规划细纲清单）' }),
+  Type.Literal('characters', { description: '角色管理页面（全书角色档案与关系图谱）' }),
+  Type.Literal('architecture', { description: '故事架构页面（故事前提、世界观设定）' }),
+  Type.Literal('synopsis', { description: '情节大纲页面（全书分卷情节大纲）' }),
+  Type.Literal('file', { description: '以只读方式查看项目物理文本文件（需提供 file_path）' }),
+], { description: '要打开的目标编辑器或页面类型' })
 
 const Schema = Type.Object({
   target: Target,
-  file_path: Type.Optional(Type.String()),
+  file_path: Type.Optional(Type.String({ description: '当 target 为 "file" 时必填，指定项目目录内文本文件的相对路径' })),
 })
 
 const TARGET_LABELS: Record<BuiltinEditorTarget, readonly [string, string]> = {
@@ -57,7 +78,8 @@ export function createOpenEditorTool(
     description,
     parameters: Schema,
     execute: async (_id, params) => {
-      const target = params.target
+      const rawTarget = params.target
+      const target = TARGET_ALIASES[rawTarget] ?? (rawTarget as BuiltinEditorTarget | 'file')
 
       if (target !== 'file') {
         const label = TARGET_LABELS[target]

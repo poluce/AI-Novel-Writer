@@ -20,6 +20,7 @@ import {
   type DraftAnnotation,
 } from '../../shared/draft-annotation'
 import { MAX_DRAFT_EXCERPT_CHARS, type DraftPassageCitation } from '../../shared/draft-excerpt'
+import { type DraftDiffProposal, buildDiffDecorations } from './draft-diff'
 
 export type CodeMirrorEditorProps = {
   content: string
@@ -34,6 +35,8 @@ export type CodeMirrorEditorProps = {
   enableAnnotations?: boolean
   annotations?: readonly DraftAnnotation[]
   onAnnotationsChange?: (annotations: DraftAnnotation[]) => void
+  diffProposals?: readonly DraftDiffProposal[]
+  scrollToDiffRequestId?: number
   showLineNumbers?: boolean
   chapterNumber?: number
   draftId?: number
@@ -92,6 +95,8 @@ export default function CodeMirrorEditor({
   enableAnnotations = false,
   annotations = [],
   onAnnotationsChange,
+  diffProposals = [],
+  scrollToDiffRequestId,
   showLineNumbers = false,
   chapterNumber,
   draftId,
@@ -103,6 +108,7 @@ export default function CodeMirrorEditor({
   const uiLocale = useLocaleStore(s => s.locale)
   const editorRef = useRef<ReactCodeMirrorRef>(null)
   const [annotationCompartment] = useState(() => new Compartment())
+  const [diffCompartment] = useState(() => new Compartment())
   const annotationInputFocusedRef = useRef(false)
   const [annotationNote, setAnnotationNote] = useState('')
   const [contextMenu, setContextMenu] = useState<{ top: number; left: number; from: number; to: number } | null>(null)
@@ -176,6 +182,53 @@ export default function CodeMirrorEditor({
       ),
     })
   }, [annotationCompartment, annotations])
+
+  // 行内草稿修改差异对比装饰更新
+  useEffect(() => {
+    const view = editorRef.current?.view
+    if (!view) return
+    view.dispatch({
+      effects: diffCompartment.reconfigure(
+        EditorView.decorations.of(buildDiffDecorations(diffProposals, view.state.doc.toString(), uiLocale)),
+      ),
+    })
+  }, [diffCompartment, diffProposals, editorContent, uiLocale])
+
+  // 当新增差异提案时，自动平滑滚动到首处修改位置
+  const prevDiffCountRef = useRef(0)
+  useEffect(() => {
+    const count = diffProposals?.length ?? 0
+    if (count > 0 && prevDiffCountRef.current === 0 && editorRef.current?.view) {
+      const view = editorRef.current.view
+      const first = diffProposals[0]
+      if (first?.oldText) {
+        const idx = view.state.doc.toString().indexOf(first.oldText)
+        if (idx >= 0) {
+          view.dispatch({
+            effects: EditorView.scrollIntoView(idx, { y: 'center' }),
+          })
+        }
+      }
+    }
+    prevDiffCountRef.current = count
+  }, [diffProposals])
+
+  // 外部主动请求滚动定位到首处差异位置
+  useEffect(() => {
+    if (!scrollToDiffRequestId || !editorRef.current?.view || !diffProposals?.length) return
+    const view = editorRef.current.view
+    const first = diffProposals[0]
+    if (first?.oldText) {
+      const idx = view.state.doc.toString().indexOf(first.oldText)
+      if (idx >= 0) {
+        view.dispatch({
+          effects: EditorView.scrollIntoView(idx, { y: 'center' }),
+          selection: { anchor: idx },
+        })
+        view.focus()
+      }
+    }
+  }, [scrollToDiffRequestId, diffProposals])
 
   useEffect(() => {
     if (aiResult === '') {
@@ -323,6 +376,77 @@ export default function CodeMirrorEditor({
       backgroundColor: "color-mix(in srgb, var(--color-warning, #d97706) 22%, transparent)",
       borderBottom: "1px dashed var(--color-warning-text, #b45309)",
     },
+    ".cm-diff-deletion": {
+      backgroundColor: "color-mix(in srgb, var(--color-error, #ef4444) 18%, transparent) !important",
+      color: "var(--color-error-text, #dc2626) !important",
+      textDecoration: "line-through !important",
+      textDecorationColor: "var(--color-error, #ef4444) !important",
+      textDecorationThickness: "1.5px !important",
+      borderRadius: "2px",
+      padding: "1px 2px",
+    },
+    ".cm-diff-widget-wrap": {
+      display: "inline",
+      verticalAlign: "baseline",
+    },
+    ".cm-diff-insertion": {
+      backgroundColor: "color-mix(in srgb, var(--color-success, #22c55e) 18%, transparent) !important",
+      color: "var(--color-success-text, #16a34a) !important",
+      borderBottom: "2px solid var(--color-success, #22c55e) !important",
+      borderRadius: "2px",
+      padding: "1px 3px",
+      marginLeft: "3px",
+      marginRight: "4px",
+      whiteSpace: "pre-wrap",
+      fontFamily: "inherit",
+      fontWeight: "normal",
+    },
+    ".cm-diff-actions": {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "4px",
+      marginLeft: "4px",
+      marginRight: "6px",
+      verticalAlign: "middle",
+      userSelect: "none",
+    },
+    ".cm-diff-btn": {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: "2px",
+      padding: "1px 6px",
+      fontSize: "11px",
+      fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      fontWeight: "500",
+      borderRadius: "4px",
+      cursor: "pointer",
+      lineHeight: "1.4",
+      transition: "all 0.15s ease",
+      boxShadow: "0 1px 2px rgba(0, 0, 0, 0.08)",
+    },
+    ".cm-diff-btn:active": {
+      transform: "scale(0.96)",
+    },
+    ".cm-diff-btn-accept": {
+      backgroundColor: "var(--color-success, #22c55e)",
+      color: "var(--color-success-foreground, #ffffff)",
+      border: "1px solid var(--color-success, #22c55e)",
+    },
+    ".cm-diff-btn-accept:hover": {
+      filter: "brightness(1.1)",
+      boxShadow: "0 1px 4px color-mix(in srgb, var(--color-success) 40%, transparent)",
+    },
+    ".cm-diff-btn-reject": {
+      backgroundColor: "color-mix(in srgb, var(--color-error, #ef4444) 15%, transparent)",
+      color: "var(--color-error-text, #dc2626)",
+      border: "1px solid color-mix(in srgb, var(--color-error, #ef4444) 30%, transparent)",
+    },
+    ".cm-diff-btn-reject:hover": {
+      backgroundColor: "var(--color-error, #ef4444)",
+      color: "var(--color-error-foreground, #ffffff)",
+      borderColor: "var(--color-error, #ef4444)",
+    },
     ".cm-gutters": {
       backgroundColor: "transparent",
       border: "none",
@@ -387,9 +511,11 @@ export default function CodeMirrorEditor({
     // 父组件 effect 第一次跑的时候还不一定有 view。之后的变化由下面的 reconfigure
     // 单独写入，不重建整个 extensions 数组。
     exts.push(annotationCompartment.of(EditorView.decorations.of(annotationDecorations(annotations))))
+    // 行内差异对比装饰初值
+    exts.push(diffCompartment.of(EditorView.decorations.of(buildDiffDecorations(diffProposals, content, uiLocale))))
     return exts
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 批注刻意不进依赖：进了就会因批注变化重建 extensions（等于重置编辑器）；批注变化走 reconfigure。
-  }, [annotationCompartment, mode, uiLocale])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 批注/差异刻意不进依赖：进了就会因批注/差异变化重建 extensions（等于重置编辑器）；变化走 reconfigure。
+  }, [annotationCompartment, diffCompartment, mode, uiLocale])
 
   const handleAddAnnotation = () => {
     if (!enableAnnotations || !onAnnotationsChange || !selectionRange || !editorRef.current?.view) return

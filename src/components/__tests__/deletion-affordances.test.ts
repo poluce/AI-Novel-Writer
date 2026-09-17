@@ -106,4 +106,15 @@ describe('generated content deletion affordances', () => {
     expect(projectController).toContain("'project:delete'")
     expect(ipcChannels).toContain("'project:delete'")
   })
+
+  it('supports clearing individual novel config sections with confirmation', () => {
+    const novelConfigEditor = source('src/components/editor/NovelConfigEditor.tsx')
+    const settingSections = source('src/components/editor/SettingSections.tsx')
+
+    expect(settingSections).toContain('onClear')
+    expect(settingSections).toContain("text('清除', 'Clear')")
+    expect(novelConfigEditor).toContain('handleFieldClear')
+    expect(novelConfigEditor).toContain("confirmText: text('清除', 'Clear')")
+    expect(novelConfigEditor).toContain("onClear={() => void handleFieldClear('coreOutline'")
+  })
 })
