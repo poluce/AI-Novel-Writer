@@ -68,7 +68,11 @@ export default defineConfig({
   },
   test: {
     // Test copy must not follow the operating-system locale of a CI runner.
-    setupFiles: ['test/setup-locale.ts'],
+    setupFiles: ['test/setup-locale.ts', 'test/setup-better-sqlite3.ts'],
+    alias: {
+      // Node 套件走旁路 .node，不覆盖 Electron 用的 build/Release。
+      'better-sqlite3': path.resolve(__dirname, 'scripts/better-sqlite3-node.cjs'),
+    },
     // 本地历史 worktree 和 pnpm 缓存可能包含旧版本测试；它们不是当前项目源码。
     exclude: [
       ...configDefaults.exclude,

@@ -168,21 +168,17 @@
 "/mnt/c/Program Files/nodejs/node.exe" ./node_modules/vitest/vitest.mjs run --config vitest.browser.config.ts
 ```
 
-### 5.3 ⚠️ 原生模块 ABI 陷阱（本次实测踩过）
+### 5.3 原生模块 ABI（已改为双份共存）
 
-完整 Node 套件必须切 ABI：`better-sqlite3` 只能针对一种运行时编译（Electron 供应用运行、Node 供 vitest）。
+`better-sqlite3` 仍按运行时编译，但 **Node 版放在 `node_modules/.native-abi/`，Electron 版留在包内 `build/Release`**，测试不再覆盖应用用的那份。
 
 ```bash
 "/mnt/c/Program Files/nodejs/node.exe" ./scripts/prepare-native-for-node.mjs
 "/mnt/c/Program Files/nodejs/node.exe" ./node_modules/vitest/vitest.mjs run
-"/mnt/c/Program Files/nodejs/node.exe" ./scripts/prepare-native-for-electron.mjs   # 必须跑，否则应用起不来
+# 不必再切回 Electron；应用可保持运行
 ```
 
-两条硬约束：
-
-1. **跑之前先关闭 Electron 应用**。应用运行时占用 `node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3/build/Release/better_sqlite3.node`，切换会报 `EBUSY: resource busy or locked`；此时 vitest 会在 Electron ABI 下运行，产生**几十个文件、三百多条假失败**（症状：日志里出现 `NODE_MODULE_VERSION`）。
-2. **不要并发跑两套测试**。浏览器套件与 Node 套件并行同样会锁住该文件（本次即因此失败一次）。
-3. 只跑与编辑器相关的用例时不需要切 ABI：编辑器的用例都在浏览器套件里。
+应用开着也可以准备 Node 旁路并跑 SQLite 测试。`pnpm dev` 的 `predev` 仍负责包内 Electron 版。
 
 ### 5.4 现有环境性失败（与代码无关，不要误判）
 

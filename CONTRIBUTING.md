@@ -16,7 +16,7 @@
 1. **Issue-first**：PR 必须链接一个已有 Issue。非琐碎功能、架构调整或大范围重构应先在 Issue 中说明问题、使用场景和验收方式。
 2. **保持单一**：一个 PR 只解决一个问题。不要混入无关重构、依赖升级、格式化或生成文件。
 3. **核验改动**：使用 Node.js 20+ 和仓库指定的 pnpm 版本。至少运行与改动相关的检查，并保留实际命令、人工步骤和结果。常用命令见 `package.json`，包括 `pnpm run typecheck`、`pnpm test`、`pnpm run lint` 和 `pnpm run check:i18n`。
-   - `better-sqlite3` 只能针对一种运行时编译：应用用 Electron，测试用 Node。本地跑完整套件请用 `pnpm test:node`（自动切到 Node、跑完切回 Electron）；直接用 `pnpm test` 会因 ABI 不匹配让 SQLite 相关用例失败（CI 在测试前自行执行 `prepare:native-node`）。只想跑部分用例时可用 `pnpm test:node <文件或目录>`。
+   - `better-sqlite3` 为 Electron 和 Node 准备了两份原生二进制，互不覆盖。`pnpm test` / `pnpm test:node` 会准备 Node 旁路并直接跑套件，不必关掉应用，也不必再切回 Electron。应用仍走包内 `build/Release`（`pnpm dev` 的 `predev` 负责）。
 4. **如实填写 PR**：说明用户可见变化、实现范围、测试证据和未运行检查的原因。只有在 PR 确实会关闭 Issue 时才使用 `Closes #123`。
 
 ## AI / Agent 辅助贡献

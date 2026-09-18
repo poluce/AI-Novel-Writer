@@ -28,7 +28,7 @@
     "prebuild": "node scripts/generate-prompt-modules.mjs",
     "predev": "node scripts/prepare-native-for-electron.mjs",
     "prepare:native-node": "node scripts/prepare-native-for-node.mjs",
-    "pretest": "node scripts/generate-prompt-modules.mjs && node scripts/check-native-node-abi.mjs",
+    "pretest": "node scripts/generate-prompt-modules.mjs && node scripts/prepare-native-for-node.mjs",
     "preview": "vite preview",
     "rebuild": "pnpm run rebuild:electron",
     "rebuild:electron": "node scripts/prepare-native-for-electron.mjs",

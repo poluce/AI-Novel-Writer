@@ -1,30 +1,19 @@
-/* global process */
 /**
- * check-native-node-abi — 在 `pnpm test` 之前给出可操作的 ABI 提示。
+ * check-native-node-abi — 探测 Node 旁路二进制是否可用。
  *
- * better-sqlite3 为 Electron 编译时，vitest（Node）会加载失败，表现为几十个
- * 测试文件报 NODE_MODULE_VERSION 不匹配。这里只做一次探测并打印指引，
- * 不改变退出码，测试照常运行（CI 已经自行 prepare:native-node）。
+ * 不改退出码。完整准备请用 `pnpm run prepare:native-node`（或 `pnpm test` 的 pretest）。
  */
-import { createRequire } from 'node:module'
+import { nodeSidecarBindingPath, probeBetterSqlite3Binding } from './native-abi.mjs'
 
-const require = createRequire(import.meta.url)
-
-try {
-  const Database = require('better-sqlite3')
-  const db = new Database(':memory:')
-  db.prepare('select 1').get()
-  db.close()
-} catch (error) {
-  const message = error instanceof Error ? error.message : String(error)
-  if (message.includes('NODE_MODULE_VERSION')) {
-    console.warn([
-      '',
-      '⚠️  better-sqlite3 原生模块与当前 Node 版本不匹配，SQLite 相关测试会失败。',
-      '    本地跑完整套件请用：pnpm test:node（自动切换 ABI，跑完切回 Electron）',
-      '    或手动：pnpm run prepare:native-node && pnpm test && pnpm run rebuild',
-      '    仅跑不依赖 SQLite 的用例可以忽略这条提示。',
-      '',
-    ].join('\n'))
-  }
+const sidecarPath = nodeSidecarBindingPath()
+const probe = probeBetterSqlite3Binding(sidecarPath)
+if (!probe.ok) {
+  console.warn([
+    '',
+    'better-sqlite3 Node 旁路不可用，SQLite 相关测试会失败。',
+    `    ${probe.diagnostic}`,
+    '    请先运行：pnpm run prepare:native-node',
+    '    然后直接 pnpm test（不必关应用、不必切回 Electron）。',
+    '',
+  ].join('\n'))
 }
