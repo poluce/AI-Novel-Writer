@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { applyToolCallResult, handleRendererAction } from '../agent-store'
+import { handleRendererAction } from '../../services/agent/renderer-actions'
+import { applyToolCallResult } from '../agent-store'
 import { resetEditorSessionStores, useEditorStore } from '../editor-store'
 import { useLayoutStore } from '../layout-store'
 import { useProjectStore } from '../project-store'

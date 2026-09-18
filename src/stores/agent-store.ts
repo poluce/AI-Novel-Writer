@@ -28,21 +28,21 @@ import {
   type DraftPassageCitation,
 } from '../shared/draft-excerpt'
 import { ipc } from '../services/ipc-client'
-import { globalEventBus } from '../shared/event-bus'
 import { logFailure, logInfo } from '../shared/fail-log'
 import { describeProviderFailure } from '../shared/provider-error-message'
 import { describeAgentTurnRefusal } from '../shared/agent-turn-refusal'
 import type {
   PiAgentEvent,
   PiToolCallInfo,
-  RendererAction,
   RendererActionResult,
 } from '../shared/agent-events'
+import { handleRendererAction } from '../services/agent/renderer-actions'
 import { useLocaleStore } from './locale-store'
 import { useProjectStore } from './project-store'
-import { useEditorStore } from './editor-store'
 import type { Locale } from '../i18n/types'
 import { DEFAULT_AGENT_SCOPE, type AgentScope } from '../shared/agent-scope'
+
+export { handleRendererAction }
 
 // ===== 类型定义 =====
 
@@ -317,6 +317,9 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     // 确保 Tool 已初始化
     get().initializeTools()
 
+    const scope = get().activeScope
+    const previous = get().getActiveConversation()
+    const inheritFromPrevious = previous?.scope === scope ? previous : null
     const newConv: AgentConversation = {
       id: genId(),
       title: useLocaleStore.getState().locale === 'en-US' ? 'New conversation' : '新对话',
@@ -324,12 +327,11 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       createdAt: Date.now(),
       updatedAt: Date.now(),
       mode: get().defaultMode,
-      // Null means “use the default once when a run starts”; the runtime then
-      // freezes the selected lease across the entire ReAct loop.
-      modelId: null,
-      // 会话级思考等级跟着这条会话走，换会话不互相影响。
-      thinkingLevel: null,
-      scope: get().activeScope,
+      // 新会话抄当前这条同作用域对话的模型和思考档；没有上一条才留空，
+      // 运行时再冻结默认模型 / Pi 默认思考。
+      modelId: inheritFromPrevious?.modelId ?? null,
+      thinkingLevel: inheritFromPrevious?.thinkingLevel ?? null,
+      scope,
     }
     set(state => ({
       conversations: [newConv, ...state.conversations],
@@ -497,8 +499,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   },
 
   setModelId: (modelId) => {
-    const conv = get().getActiveConversation()
-    if (!conv) return
+    const conv = get().getActiveConversation() ?? get().createConversation()
     set(state => ({
       conversations: state.conversations.map(c =>
         c.id === conv.id ? { ...c, modelId } : c
@@ -507,8 +508,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   },
 
   setThinkingLevel: (thinkingLevel) => {
-    const conv = get().getActiveConversation()
-    if (!conv) return
+    const conv = get().getActiveConversation() ?? get().createConversation()
     set(state => ({
       conversations: state.conversations.map(c =>
         c.id === conv.id ? { ...c, thinkingLevel } : c
@@ -781,108 +781,6 @@ function updateInflightAssistantMsg(
         : c
     ),
   }))
-}
-
-/** 处理主进程工具发来的渲染层动作；导出以便直接测试分派结果。 */
-export async function handleRendererAction(action: RendererAction): Promise<RendererActionResult | void> {
-  switch (action.type) {
-    case 'open_editor': {
-      // 数据库驱动的页面直接打开内置编辑器；只有 file 目标才带文件内容开标签页。
-      if (action.target === 'builtin') {
-        const { openBuiltinEditor } = await import('../components/panels/sidebar/sidebar-file-openers')
-        const uiText = useLocaleStore.getState().text
-        const builtin = {
-          config: null,
-          blueprints: ['chapter-card-editor', uiText('章节蓝图', 'Chapter blueprints'), 'chapter-card'],
-          characters: ['character-editor', uiText('角色管理', 'Characters'), 'character'],
-          architecture: ['world-building-editor', uiText('故事架构', 'Story architecture'), 'world-building'],
-          synopsis: ['synopsis-editor', uiText('情节大纲', 'Plot outline'), 'synopsis'],
-        } as const
-        const entry = builtin[action.editor]
-        if (entry === null) {
-          useEditorStore.getState().openFile({
-            id: 'config',
-            name: uiText('小说配置', 'Novel configuration'),
-            type: 'config',
-            projectKey: useProjectStore.getState().currentProject?.path ?? '',
-          })
-          return
-        }
-        openBuiltinEditor(entry[0], entry[1], entry[2])
-        return
-      }
-      useEditorStore.getState().openFile({
-        id: `agent-${Date.now()}`,
-        name: action.fileName,
-        type: 'outline',
-        filePath: action.filePath,
-        content: action.content,
-        savedContent: action.content,
-        projectKey: useProjectStore.getState().currentProject?.path ?? '',
-      })
-      return
-    }
-    case 'replace_draft_excerpt': {
-      const { applyDraftExcerptReplace } = await import('../services/agent/apply-draft-excerpt')
-      try {
-        return await applyDraftExcerptReplace({
-          chapterNumber: action.chapterNumber,
-          oldText: action.oldText,
-          newText: action.newText,
-          draftId: action.draftId,
-        })
-      } catch (error) {
-        logFailure('Agent', 'replace_draft_excerpt failed', error, {
-          chapterNumber: action.chapterNumber,
-        })
-        return {
-          ok: false,
-          error: error instanceof Error ? error.message : String(error),
-        }
-      }
-    }
-    case 'refresh_project_config': {
-      const project = useProjectStore.getState().currentProject
-      if (!project) return
-      void useProjectStore.getState().reloadNovelConfig().catch((error) => {
-        logFailure('Agent', 'reloadNovelConfig failed', error)
-      })
-      void useProjectStore.getState().refreshFileTree(project.path).catch((error) => {
-        logFailure('Agent', `${action.type} refresh failed`, error)
-      })
-      return
-    }
-    case 'refresh_blueprint': {
-      const project = useProjectStore.getState().currentProject
-      if (!project) return
-      void useProjectStore.getState().refreshFileTree(project.path).catch((error) => {
-        logFailure('Agent', `${action.type} refresh failed`, error)
-      })
-      return
-    }
-    case 'refresh_architecture': {
-      const project = useProjectStore.getState().currentProject
-      if (!project) return
-      const projectSession = projectSessionContextFromProject(project)
-      if (!projectSession) return
-      const files = action.section === 'premise'
-        ? ['premise.md']
-        : action.section === 'worldbuilding'
-          ? ['worldbuilding.md']
-          : action.section === 'synopsis'
-            ? ['synopsis.md']
-            : ['premise.md', 'worldbuilding.md', 'synopsis.md']
-      for (const fileName of files) {
-        globalEventBus.emit('ARCH_FILE_UPDATED', {
-          fileName,
-          projectPath: project.path,
-          projectSession,
-          runId: `agent-${Date.now()}`,
-        })
-      }
-      return
-    }
-  }
 }
 
 /**
