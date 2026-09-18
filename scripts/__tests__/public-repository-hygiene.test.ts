@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const prohibitedPaths = [
@@ -13,10 +14,18 @@ const prohibitedPaths = [
   'tsconfig.node.tsbuildinfo',
 ]
 
+function gitTracked(target: string): string[] {
+  const result = spawnSync('git', ['ls-files', '--', target], { encoding: 'utf8' })
+  if (result.status !== 0) {
+    throw new Error(result.stderr || `git ls-files failed for ${target}`)
+  }
+  return result.stdout.split(/\r?\n/).filter(Boolean)
+}
+
 describe('public repository hygiene', () => {
-  it('does not contain internal process material or generated output', () => {
+  it('does not track internal process material or generated output', () => {
     for (const target of prohibitedPaths) {
-      expect(existsSync(target), target).toBe(false)
+      expect(gitTracked(target), target).toEqual([])
     }
   })
 

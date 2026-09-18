@@ -180,9 +180,9 @@
 
 应用开着也可以准备 Node 旁路并跑 SQLite 测试。`pnpm dev` 的 `predev` 仍负责包内 Electron 版。
 
-### 5.4 现有环境性失败（与代码无关，不要误判）
+### 5.4 卫生测试
 
-- `scripts/__tests__/public-repository-hygiene.test.ts`：断言仓库不应包含内部流程文件，而工作区存在本地 `AGENTS.md`（已被 `.gitignore` 忽略，从未进入任何提交）。
+`public-repository-hygiene` 只查 `git ls-files`（有没有进仓库），不查磁盘上是否存在。本机 gitignore 的 `AGENTS.md` 不会误报。
 
 ---
 
