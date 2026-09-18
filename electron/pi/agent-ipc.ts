@@ -1,6 +1,3 @@
-import fs from 'node:fs'
-import path from 'node:path'
-
 import { ipcMain, BrowserWindow } from 'electron'
 
 import { AgentSessionManager } from './agent-session-manager'
@@ -19,11 +16,9 @@ import type { AgentPromptHistoryTurn } from '../../src/shared/agent-conversation
 
 import {
   readJsonFile,
-  ensureVelaHome,
   MODELS_CONFIG_PATH,
   GLOBAL_CONFIG_PATH,
   DEFAULT_GLOBAL_CONFIG,
-  VELA_HOME,
 } from '../utils/config-utils'
 import { getCurrentProjectPath } from '../database'
 import { logFailure } from '../../src/shared/fail-log'
@@ -130,11 +125,6 @@ function closeConversationStore(): void {
   })
 }
 
-/** 界面助手的界面存档：~/.vela 只有主进程能写，渲染层只收发字符串。 */
-function globalConversationsPath(): string {
-  return path.join(VELA_HOME, 'agent-conversations.json')
-}
-
 function mainWindow(): BrowserWindow | null {
   return BrowserWindow.getAllWindows()[0] ?? null
 }
@@ -223,7 +213,9 @@ export function registerAgentController(): void {
     skills?: unknown,
     scope?: unknown,
     thinkingLevel?: unknown,
+    executionMode?: unknown,
   ) => {
+    const resolvedExecutionMode: 'plan' | 'writing' = executionMode === 'writing' ? 'writing' : 'plan'
     return manager.prompt(
       conversationId,
       input,
@@ -233,6 +225,7 @@ export function registerAgentController(): void {
       acceptedSkillCatalog(skills),
       acceptedScope(scope),
       acceptedAssistantThinkingLevel(thinkingLevel),
+      resolvedExecutionMode,
     )
   })
 
@@ -271,25 +264,25 @@ export function registerAgentController(): void {
     }
   })
 
-  ipcMain.handle('agent:load-global-conversations', async () => {
+  ipcMain.handle('agent:list-conversations', async (_event, scope?: unknown) => {
     try {
-      const filePath = globalConversationsPath()
-      if (!fs.existsSync(filePath)) return { exists: false, content: '' }
-      return { exists: true, content: fs.readFileSync(filePath, 'utf8') }
+      const result = await manager.listConversations(acceptedScope(scope))
+      return { success: true, conversations: result.conversations, activeConversationId: result.activeConversationId }
     } catch (error) {
-      logFailure('Agent', 'failed to read global conversations', error)
-      return { exists: false, content: '', error: String(error) }
+      logFailure('Agent', 'failed to list conversations', error, { scope })
+      return { success: false, conversations: [], activeConversationId: null, error: String(error) }
     }
   })
 
-  ipcMain.handle('agent:save-global-conversations', async (_event, content: unknown) => {
-    if (typeof content !== 'string') return { success: false, error: '会话存档内容无效' }
+  ipcMain.handle('agent:rename-conversation', async (_event, conversationId: string, title: string, scope?: unknown) => {
+    if (!conversationId || typeof conversationId !== 'string' || typeof title !== 'string') {
+      return { success: false, error: '参数无效' }
+    }
     try {
-      ensureVelaHome()
-      fs.writeFileSync(globalConversationsPath(), content, 'utf8')
-      return { success: true }
+      const success = await manager.renameConversation(conversationId, title.trim(), acceptedScope(scope))
+      return { success }
     } catch (error) {
-      logFailure('Agent', 'failed to write global conversations', error)
+      logFailure('Agent', 'failed to rename conversation', error, { conversationId, scope })
       return { success: false, error: String(error) }
     }
   })

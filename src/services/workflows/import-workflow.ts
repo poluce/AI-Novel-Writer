@@ -16,9 +16,12 @@ import { useProjectStore } from '../../stores/project-store'
 import { workflowResourceKey, type StepCallbacks, type WorkflowContext, type WorkflowDefinition, type WorkflowStep } from '../../stores/workflow-store'
 import {
   IMPORT_CHAPTER_PAGE_SIZE,
-  ImportRunOrchestrator,
-  type ImportRunOrchestratorDependencies,
+  NovelStudyOrchestrator,
+  type NovelStudyOrchestratorDependencies,
+  AuthorManuscriptImportOrchestrator,
+  type AuthorManuscriptImportOrchestratorDependencies,
 } from './import-run-orchestrator'
+import type { BaseLeaseBatchDependencies } from './lease-batch-orchestrator'
 import { refreshImportDerivedFileTreeBestEffort } from './import-derived-refresh'
 import { promptLanguageText } from '../prompt-language'
 import { retryDirectoryCharacterSync } from './directory-character-sync-recovery'
@@ -118,10 +121,10 @@ function currentNovelConfigSummary(writingLanguage: WritingLanguage): string {
   )
 }
 
-function productionDependencies(
+function commonDependencies(
   context: WorkflowContext,
   callbacks: StepCallbacks,
-): ImportRunOrchestratorDependencies {
+): BaseLeaseBatchDependencies {
   const session = context.projectSession
   const projectPath = context.projectPath
   return {
@@ -244,56 +247,62 @@ function productionDependencies(
     listChapters: (runId, after, limit) => ipc.invokeWithProjectSession(
       session, 'db:import-run-list-chapters', runId, after, limit, projectPath,
     ),
-    importReference: async (chapter, run, executionAuthority) => {
-      const result = await ipc.invokeWithProjectSession(
-        session,
-        'kb:import-reference-text',
-        chapter.number,
-        run.id,
-        executionAuthority,
+    refresh: async run => {
+      callbacks.log(textForLocale(run.locale, '正在刷新项目数据...', 'Refreshing project data...'))
+      await refreshImportDerivedFileTreeBestEffort(
+        () => useProjectStore.getState().refreshFileTree(projectPath, undefined, session),
+        callbacks,
+        (zhCNText, enUSText) => textForLocale(run.locale, zhCNText, enUSText),
       )
-      if (!result.success) throw new Error(result.error || textForLocale(
-        run.locale,
-        `第 ${chapter.number} 章参照文本未能写入知识库`,
-        `Reference Chapter ${chapter.number} could not be written to the knowledge base.`,
-      ))
-      callbacks.log(textForLocale(
-        run.locale,
-        `参照章节 ${chapter.number} 已进入知识库${result.idempotent ? '（已存在）' : ''}`,
-        `Reference Chapter ${chapter.number} is in the knowledge base${result.idempotent ? ' (already present)' : ''}.`,
-      ))
+      const [{ useCharacterStore }, { useDraftStore }] = await Promise.all([
+        import('../../stores/character-store'),
+        import('../../stores/draft-store'),
+      ])
+      await useCharacterStore.getState().loadCharacters(projectPath, session)
+      await useDraftStore.getState().loadAllDrafts(projectPath, session)
     },
-    inferGlobal: async (chapters, stats, _run, commit) => {
-      context.data.chapters = chapters.map(importedChapter)
-      context.data.importRunTotalChapters = stats.totalChapters
-      context.data.importRunTotalWords = stats.totalWords
-      const { InferGlobalSettingsCommand } = await import('./commands/import-novel.command')
-      await new InferGlobalSettingsCommand(undefined, async request => (
-        await commit(request)
-      ) as ImportGlobalFactsReceipt).execute({ step: {} as never, context, callbacks })
-    },
-    analyzeStyle: async (chapters, _run, commit) => {
-      const { AnalyzeWritingStyleCommand } = await import('./commands/analyze-style.command')
-      const style = await new AnalyzeWritingStyleCommand(
-        { chapters: chapters.map(importedChapter) },
-        undefined,
-        async writingStyle => { await commit({ writingStyle }) },
+    completeBatch: async (runId, stage, checkpoint, execution) => {
+      const result = required(
+        await ipc.invokeWithProjectSession(
+          session, 'db:import-run-complete-batch', runId, stage, checkpoint, execution, projectPath,
+        ),
+        'Could not save the import checkpoint.',
       )
-        .execute({ step: {} as never, context, callbacks })
-      if (!style.trim()) throw new Error(textForLocale(
-        context.uiLocale,
-        '未提取到可用文风，无法继续建立仿写约束',
-        'No usable writing style was extracted, so imitation guidance cannot be created.',
-      ))
+      return { cancelApplied: result.cancelApplied ?? false, run: result.run! }
     },
-    inferBlueprints: async (chapters, _checkpoint, _run, commit) => {
-      context.data.chapters = chapters.map(importedChapter)
-      context.data.novelConfigSummary = currentNovelConfigSummary(context.writingLanguage)
-      const { InferBlueprintsPerChapterCommand } = await import('./commands/import-novel.command')
-      await new InferBlueprintsPerChapterCommand(undefined, async request => (
-        await commit(request)
-      ) as BlueprintRangeCommitReceipt).execute({ step: {} as never, context, callbacks })
-    },
+    advanceStage: async (runId, completedStage, nextStage, execution) => required(
+      await ipc.invokeWithProjectSession(
+        session, 'db:import-run-advance-stage', runId, completedStage, nextStage, execution, projectPath,
+      ),
+      'Could not advance the import checkpoint.',
+    ).run!,
+    fail: async (runId, stage, error, execution) => required(
+      await ipc.invokeWithProjectSession(
+        session, 'db:import-run-fail', runId, stage, error, execution, projectPath,
+      ),
+      'Could not save the import failure.',
+    ).run!,
+    cancelAtBoundary: async (runId, execution) => required(
+      await ipc.invokeWithProjectSession(
+        session, 'db:import-run-cancel-at-boundary', runId, execution, projectPath,
+      ),
+      'Could not save import cancellation.',
+    ).run!,
+    complete: async (runId, execution) => required(
+      await ipc.invokeWithProjectSession(session, 'db:import-run-complete', runId, execution, projectPath),
+      'Could not complete the import run.',
+    ).run!,
+  }
+}
+
+function authorProductionDependencies(
+  context: WorkflowContext,
+  callbacks: StepCallbacks,
+): AuthorManuscriptImportOrchestratorDependencies {
+  const session = context.projectSession
+  const projectPath = context.projectPath
+  return {
+    ...commonDependencies(context, callbacks),
     commitAuthorManuscript: async (run, commit) => {
       if (!run.authorityFingerprint || !run.manifestFingerprint) {
         throw new Error(textForLocale(
@@ -378,55 +387,70 @@ function productionDependencies(
         ))
       }
     },
-    refresh: async run => {
-      callbacks.log(textForLocale(run.locale, '正在刷新项目数据...', 'Refreshing project data...'))
-      await refreshImportDerivedFileTreeBestEffort(
-        () => useProjectStore.getState().refreshFileTree(projectPath, undefined, session),
-        callbacks,
-        (zhCNText, enUSText) => textForLocale(run.locale, zhCNText, enUSText),
-      )
-      const [{ useCharacterStore }, { useDraftStore }] = await Promise.all([
-        import('../../stores/character-store'),
-        import('../../stores/draft-store'),
-      ])
-      await useCharacterStore.getState().loadCharacters(projectPath, session)
-      await useDraftStore.getState().loadAllDrafts(projectPath, session)
-    },
-    completeBatch: async (runId, stage, checkpoint, execution) => {
-      const result = required(
-        await ipc.invokeWithProjectSession(
-          session, 'db:import-run-complete-batch', runId, stage, checkpoint, execution, projectPath,
-        ),
-        'Could not save the import checkpoint.',
-      )
-      return { cancelApplied: result.cancelApplied ?? false, run: result.run! }
-    },
-    advanceStage: async (runId, completedStage, nextStage, execution) => required(
-      await ipc.invokeWithProjectSession(
-        session, 'db:import-run-advance-stage', runId, completedStage, nextStage, execution, projectPath,
-      ),
-      'Could not advance the import checkpoint.',
-    ).run!,
-    fail: async (runId, stage, error, execution) => required(
-      await ipc.invokeWithProjectSession(
-        session, 'db:import-run-fail', runId, stage, error, execution, projectPath,
-      ),
-      'Could not save the import failure.',
-    ).run!,
-    cancelAtBoundary: async (runId, execution) => required(
-      await ipc.invokeWithProjectSession(
-        session, 'db:import-run-cancel-at-boundary', runId, execution, projectPath,
-      ),
-      'Could not save import cancellation.',
-    ).run!,
-    complete: async (runId, execution) => required(
-      await ipc.invokeWithProjectSession(session, 'db:import-run-complete', runId, execution, projectPath),
-      'Could not complete the import run.',
-    ).run!,
   }
 }
 
-function importStep(
+function studyProductionDependencies(
+  context: WorkflowContext,
+  callbacks: StepCallbacks,
+): NovelStudyOrchestratorDependencies {
+  const session = context.projectSession
+  return {
+    ...commonDependencies(context, callbacks),
+    importReference: async (chapter, run, executionAuthority) => {
+      const result = await ipc.invokeWithProjectSession(
+        session,
+        'kb:import-reference-text',
+        chapter.number,
+        run.id,
+        executionAuthority,
+      )
+      if (!result.success) throw new Error(result.error || textForLocale(
+        run.locale,
+        `第 ${chapter.number} 章参照文本未能写入知识库`,
+        `Reference Chapter ${chapter.number} could not be written to the knowledge base.`,
+      ))
+      callbacks.log(textForLocale(
+        run.locale,
+        `参照章节 ${chapter.number} 已进入知识库${result.idempotent ? '（已存在）' : ''}`,
+        `Reference Chapter ${chapter.number} is in the knowledge base${result.idempotent ? ' (already present)' : ''}.`,
+      ))
+    },
+    inferGlobal: async (chapters, stats, _run, commit) => {
+      context.data.chapters = chapters.map(importedChapter)
+      context.data.importRunTotalChapters = stats.totalChapters
+      context.data.importRunTotalWords = stats.totalWords
+      const { InferGlobalSettingsCommand } = await import('./commands/import-novel.command')
+      await new InferGlobalSettingsCommand(undefined, async request => (
+        await commit(request)
+      ) as ImportGlobalFactsReceipt).execute({ step: {} as never, context, callbacks })
+    },
+    analyzeStyle: async (chapters, _run, commit) => {
+      const { AnalyzeWritingStyleCommand } = await import('./commands/analyze-style.command')
+      const style = await new AnalyzeWritingStyleCommand(
+        { chapters: chapters.map(importedChapter) },
+        undefined,
+        async writingStyle => { await commit({ writingStyle }) },
+      )
+        .execute({ step: {} as never, context, callbacks })
+      if (!style.trim()) throw new Error(textForLocale(
+        context.uiLocale,
+        '未提取到可用文风，无法继续建立仿写约束',
+        'No usable writing style was extracted, so imitation guidance cannot be created.',
+      ))
+    },
+    inferBlueprints: async (chapters, _checkpoint, _run, commit) => {
+      context.data.chapters = chapters.map(importedChapter)
+      context.data.novelConfigSummary = currentNovelConfigSummary(context.writingLanguage)
+      const { InferBlueprintsPerChapterCommand } = await import('./commands/import-novel.command')
+      await new InferBlueprintsPerChapterCommand(undefined, async request => (
+        await commit(request)
+      ) as BlueprintRangeCommitReceipt).execute({ step: {} as never, context, callbacks })
+    },
+  }
+}
+
+function authorImportStep(
   run: ImportRunSnapshot,
   executionOwner: string,
   stage: Exclude<ImportRunStage, 'completed'>,
@@ -437,33 +461,34 @@ function importStep(
     name: textForLocale(run.locale, ...name),
     description: textForLocale(run.locale, ...description),
     executor: async (_step: WorkflowStep, context: WorkflowContext, callbacks: StepCallbacks) => {
-      await new ImportRunOrchestrator(productionDependencies(context, callbacks))
+      await new AuthorManuscriptImportOrchestrator(authorProductionDependencies(context, callbacks))
         .executeStage(run.id, stage, executionOwner, context, callbacks)
     },
   }
 }
 
-export function createImportWorkflow(params: ImportWorkflowParams): WorkflowDefinition {
-  const project = useProjectStore.getState().currentProject
-  if (!project || !sameProjectSessionContext(params.projectSession, projectSessionContextFromProject(project))) {
-    throw new Error(textForLocale(
-      params.run.locale,
-      '当前项目已切换，无法启动导入工作流',
-      'The project changed, so the import workflow cannot start.',
-    ))
+function novelStudyStep(
+  run: ImportRunSnapshot,
+  executionOwner: string,
+  stage: Exclude<ImportRunStage, 'completed'>,
+  name: [string, string],
+  description: [string, string],
+) {
+  return {
+    name: textForLocale(run.locale, ...name),
+    description: textForLocale(run.locale, ...description),
+    executor: async (_step: WorkflowStep, context: WorkflowContext, callbacks: StepCallbacks) => {
+      await new NovelStudyOrchestrator(studyProductionDependencies(context, callbacks))
+        .executeStage(run.id, stage, executionOwner, context, callbacks)
+    },
   }
-  const session = Object.freeze({ ...params.projectSession })
-  const count = params.run.totalChapters
-  const chapterCountEn = `${count} ${count === 1 ? 'chapter' : 'chapters'}`
-  const contextReadResourceKeys = [
-    workflowResourceKey('novel-config'),
-    workflowResourceKey('architecture'),
-    workflowResourceKey('blueprints'),
-  ]
-  const durableCancelHooks: Pick<
-    WorkflowDefinition,
-    'onCancelRequested' | 'onCancelledAtBoundary'
-  > = {
+}
+
+function createDurableCancelHooks(
+  params: ImportWorkflowParams,
+  session: ProjectSessionContext,
+): Pick<WorkflowDefinition, 'onCancelRequested' | 'onCancelledAtBoundary'> {
+  return {
     onCancelRequested: async context => {
       const execution = context.data.importRunExecution as ImportRunExecutionLease | undefined
       if (!execution) return
@@ -512,52 +537,83 @@ export function createImportWorkflow(params: ImportWorkflowParams): WorkflowDefi
       ))
     },
   }
-  if (params.run.purpose === 'author-manuscript') {
-    const authorChapterNumbers = normalizeAuthorChapterNumbers(
-      params.run,
-      params.authorChapterNumbers,
-    )
-    return {
-      runId: params.run.id,
-      type: 'novel_import',
-      title: textForLocale(
-        params.run.locale,
-        `导入作者原稿（${count} 章）`,
-        `Import author manuscript (${chapterCountEn})`,
-      ),
-      projectPath: params.projectPath,
-      projectSession: session,
-      uiLocale: params.run.locale,
-      resourceKeys: [
-        ...authorChapterNumbers.map(chapterNumber => workflowResourceKey('chapter', chapterNumber)),
-        ...FINALIZATION_SHARED_WRITE_RESOURCE_KINDS.map(kind => workflowResourceKey(kind)),
-      ],
-      readResourceKeys: contextReadResourceKeys,
-      ...durableCancelHooks,
-      steps: [
-        importStep(params.run, params.executionOwner, 'author-commit',
-          ['提交权威定稿快照', 'Commit authoritative finalized snapshots'],
-          ['以单个 SQLite 事务提交不可变定稿与发布 outbox', 'Atomically commit immutable finalized snapshots and publication outbox records.']),
-        importStep(params.run, params.executionOwner, 'author-publish',
-          ['发布实体正文', 'Publish manuscript files'],
-          ['按持久检查点发布正文文件；失败后可安全重试', 'Publish manuscript files with durable checkpoints and safe retries.']),
-        importStep(params.run, params.executionOwner, 'author-postprocess',
-          ['更新连续性事实', 'Update continuity facts'],
-          ['从权威定稿更新章节事实与角色状态，不导入参照语料', 'Update chapter facts and character state from authoritative text without importing reference prose.']),
-        importStep(params.run, params.executionOwner, 'refresh',
-          ['刷新项目状态', 'Refresh project state'],
-          ['刷新正文树、角色卡与定稿状态', 'Refresh the manuscript tree, character cards, and finalized status.']),
-      ],
-      onComplete: {
-        mode: 'silent',
-        message: textForLocale(
-          params.run.locale,
-          '作者原稿已作为权威定稿导入，可以从下一章继续创作。',
-          'The manuscript is now authoritative finalized text. You can continue from the next chapter.',
-        ),
-      },
-    }
+}
+
+export function createAuthorManuscriptImportWorkflow(params: ImportWorkflowParams): WorkflowDefinition {
+  const project = useProjectStore.getState().currentProject
+  if (!project || !sameProjectSessionContext(params.projectSession, projectSessionContextFromProject(project))) {
+    throw new Error(textForLocale(
+      params.run.locale,
+      '当前项目已切换，无法启动导入工作流',
+      'The project changed, so the import workflow cannot start.',
+    ))
   }
+  const session = Object.freeze({ ...params.projectSession })
+  const count = params.run.totalChapters
+  const chapterCountEn = `${count} ${count === 1 ? 'chapter' : 'chapters'}`
+  const contextReadResourceKeys = [
+    workflowResourceKey('novel-config'),
+    workflowResourceKey('architecture'),
+    workflowResourceKey('blueprints'),
+  ]
+  const authorChapterNumbers = normalizeAuthorChapterNumbers(
+    params.run,
+    params.authorChapterNumbers,
+  )
+  return {
+    runId: params.run.id,
+    type: 'novel_import',
+    title: textForLocale(
+      params.run.locale,
+      `导入作者原稿（${count} 章）`,
+      `Import author manuscript (${chapterCountEn})`,
+    ),
+    projectPath: params.projectPath,
+    projectSession: session,
+    uiLocale: params.run.locale,
+    resourceKeys: [
+      ...authorChapterNumbers.map(chapterNumber => workflowResourceKey('chapter', chapterNumber)),
+      ...FINALIZATION_SHARED_WRITE_RESOURCE_KINDS.map(kind => workflowResourceKey(kind)),
+    ],
+    readResourceKeys: contextReadResourceKeys,
+    ...createDurableCancelHooks(params, session),
+    steps: [
+      authorImportStep(params.run, params.executionOwner, 'author-commit',
+        ['提交权威定稿快照', 'Commit authoritative finalized snapshots'],
+        ['以单个 SQLite 事务提交不可变定稿与发布 outbox', 'Atomically commit immutable finalized snapshots and publication outbox records.']),
+      authorImportStep(params.run, params.executionOwner, 'author-publish',
+        ['发布实体正文', 'Publish manuscript files'],
+        ['按持久检查点发布正文文件；失败后可安全重试', 'Publish manuscript files with durable checkpoints and safe retries.']),
+      authorImportStep(params.run, params.executionOwner, 'author-postprocess',
+        ['更新连续性事实', 'Update continuity facts'],
+        ['从权威定稿更新章节事实与角色状态，不导入参照语料', 'Update chapter facts and character state from authoritative text without importing reference prose.']),
+      authorImportStep(params.run, params.executionOwner, 'refresh',
+        ['刷新项目状态', 'Refresh project state'],
+        ['刷新正文树、角色卡与定稿状态', 'Refresh the manuscript tree, character cards, and finalized status.']),
+    ],
+    onComplete: {
+      mode: 'silent',
+      message: textForLocale(
+        params.run.locale,
+        '作者原稿已作为权威定稿导入，可以从下一章继续创作。',
+        'The manuscript is now authoritative finalized text. You can continue from the next chapter.',
+      ),
+    },
+  }
+}
+
+export function createNovelStudyWorkflow(params: ImportWorkflowParams): WorkflowDefinition {
+  const project = useProjectStore.getState().currentProject
+  if (!project || !sameProjectSessionContext(params.projectSession, projectSessionContextFromProject(project))) {
+    throw new Error(textForLocale(
+      params.run.locale,
+      '当前项目已切换，无法启动导入工作流',
+      'The project changed, so the import workflow cannot start.',
+    ))
+  }
+  const session = Object.freeze({ ...params.projectSession })
+  const count = params.run.totalChapters
+  const chapterCountEn = `${count} ${count === 1 ? 'chapter' : 'chapters'}`
   return {
     runId: params.run.id,
     type: 'novel_import',
@@ -575,21 +631,21 @@ export function createImportWorkflow(params: ImportWorkflowParams): WorkflowDefi
       workflowResourceKey('character-roster'),
       workflowResourceKey('blueprints'),
     ],
-    ...durableCancelHooks,
+    ...createDurableCancelHooks(params, session),
     steps: [
-      importStep(params.run, params.executionOwner, 'knowledge',
+      novelStudyStep(params.run, params.executionOwner, 'knowledge',
         ['导入参照文本与构建知识库', 'Import reference text and build the knowledge base'],
         [`按有界批次导入 ${count} 章参照文本，不写入草稿或正文`, `Import ${chapterCountEn} of reference text in bounded batches without creating drafts or manuscript text`]),
-      importStep(params.run, params.executionOwner, 'global',
+      novelStudyStep(params.run, params.executionOwner, 'global',
         ['AI 推演全局配置与架构', 'AI infers global configuration and architecture'],
         ['从有界样本推演小说配置、故事架构与角色卡', 'Infer the novel configuration, architecture, and character cards from bounded samples.']),
-      importStep(params.run, params.executionOwner, 'style',
+      novelStudyStep(params.run, params.executionOwner, 'style',
         ['AI 拆解文风与仿写指南', 'AI analyzes writing style and imitation guidance'],
         ['从有界样本提取文风与仿写约束', 'Extract a style profile and imitation guidance from bounded samples.']),
-      importStep(params.run, params.executionOwner, 'blueprints',
+      novelStudyStep(params.run, params.executionOwner, 'blueprints',
         ['AI 分批推演章节蓝图', 'AI infers chapter blueprints in batches'],
         [`以最多 5 章一批生成 ${count} 章蓝图`, `Infer ${chapterCountEn} of blueprints in batches of at most five.`]),
-      importStep(params.run, params.executionOwner, 'refresh',
+      novelStudyStep(params.run, params.executionOwner, 'refresh',
         ['刷新项目状态', 'Refresh project state'],
         ['刷新项目树、角色卡与蓝图', 'Refresh the project tree, character cards, and blueprints.']),
     ],
@@ -602,6 +658,13 @@ export function createImportWorkflow(params: ImportWorkflowParams): WorkflowDefi
       ),
     },
   }
+}
+
+export function createImportWorkflow(params: ImportWorkflowParams): WorkflowDefinition {
+  if (params.run.purpose === 'author-manuscript') {
+    return createAuthorManuscriptImportWorkflow(params)
+  }
+  return createNovelStudyWorkflow(params)
 }
 
 export function estimateImportCost(_totalWords: number, chapterCount: number): {

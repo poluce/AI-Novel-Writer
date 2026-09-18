@@ -14,9 +14,7 @@ vi.mock('../../services/ipc-client', () => ({
     on: ipcOn,
     once: vi.fn(),
     send: vi.fn(),
-    invokeWithProjectSession: vi.fn(),
-  },
-}))
+    invokeWithProjectSession: vi.fn()}}))
 
 /** 渲染层监听的事件回调：用来模拟主进程推送。 */
 const listeners = new Map<string, (payload: never) => void>()
@@ -30,8 +28,7 @@ function resetAgentState(): void {
     activeRequestId: null,
     toolsInitialized: true,
     composerCitations: [],
-    showHistory: false,
-  })
+    showHistory: false})
 }
 
 beforeEach(() => {
@@ -55,6 +52,29 @@ afterEach(() => {
 })
 
 describe('agent scope', () => {
+  it('creates a conversation when thinking level is set with none active', () => {
+    useAgentStore.getState().setThinkingLevel('medium')
+    const active = useAgentStore.getState().getActiveConversation()
+    expect(active).not.toBeNull()
+    expect(active?.thinkingLevel).toBe('medium')
+  })
+
+  it('copies model and thinking level from the previous conversation in the same scope', () => {
+    const first = useAgentStore.getState().createConversation()
+    useAgentStore.getState().setModelId('model-a')
+    useAgentStore.getState().setThinkingLevel('high')
+
+    const second = useAgentStore.getState().createConversation()
+    expect(second.id).not.toBe(first.id)
+    expect(second.modelId).toBe('model-a')
+    expect(second.thinkingLevel).toBe('high')
+
+    useAgentStore.getState().setScope('global')
+    const globalConv = useAgentStore.getState().createConversation()
+    expect(globalConv.modelId).toBeNull()
+    expect(globalConv.thinkingLevel).toBeNull()
+  })
+
   it('tags new conversations with the scope that is showing and remembers the active one per scope', () => {
     const project = useAgentStore.getState().createConversation()
     expect(project.scope).toBe('project')
@@ -114,11 +134,25 @@ describe('agent scope', () => {
     expect(useAgentStore.getState().activeConversationId).toBeNull()
     handleAgentEvent({
       conversationId: globalConv.id,
-      event: { type: 'text_delta', delta: '后台仍然在写' },
-    })
+      event: { type: 'text_delta', delta: '后台仍然在写' }})
 
     const updated = useAgentStore.getState().conversations
       .find(c => c.id === globalConv.id)
     expect(updated?.messages.at(-1)?.content).toContain('后台仍然在写')
+  })
+
+  it('toggles executionMode between plan and writing and passes it to agent:prompt', async () => {
+    useAgentStore.getState().setExecutionMode('writing')
+    expect(useAgentStore.getState().executionMode).toBe('writing')
+
+    useAgentStore.getState().createConversation()
+    ipcInvoke.mockResolvedValueOnce({ success: true })
+    await useAgentStore.getState().sendMessage('全自动写作测试')
+
+    const promptCall = ipcInvoke.mock.calls.find(([channel]) => channel === 'agent:prompt')
+    expect(promptCall?.[9]).toBe('writing')
+
+    useAgentStore.getState().setExecutionMode('plan')
+    expect(useAgentStore.getState().executionMode).toBe('plan')
   })
 })

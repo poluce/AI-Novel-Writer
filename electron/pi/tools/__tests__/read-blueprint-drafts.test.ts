@@ -37,10 +37,12 @@ describe('read_blueprint', () => {
     if (first.type === 'text') expect(first.text).toContain('第 1 章蓝图')
   })
 
-  it('throws for a missing blueprint', async () => {
+  it('returns friendly notice without throwing for a missing blueprint', async () => {
     bpGetByChapterMock.mockReturnValue(null)
     const tool = createReadBlueprintTool('zh-CN')
-    await expect(tool.execute('c1', { chapter_number: 9 })).rejects.toThrow('蓝图不存在')
+    const result = await tool.execute('c1', { chapter_number: 9 })
+    const first = result.content[0]
+    if (first.type === 'text') expect(first.text).toContain('第 9 章蓝图目前尚未创建')
   })
 
   it('requires a chapter number instead of listing every blueprint', async () => {

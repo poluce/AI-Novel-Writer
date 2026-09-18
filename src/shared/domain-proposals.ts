@@ -139,7 +139,7 @@ function plainChanges(args: Record<string, unknown>): Record<string, unknown> | 
   if (args.field && (args.content !== undefined || args.value !== undefined || args.text !== undefined)) {
     return { [String(args.field)]: args.content ?? args.value ?? args.text }
   }
-  const IGNORED_META_KEYS = new Set(['action', 'field', 'content', 'value', 'text', 'blueprint_changes'])
+  const IGNORED_META_KEYS = new Set(['action', 'field', 'content', 'value', 'text', 'blueprint_changes', 'chapter_number', 'old_text', 'new_text', 'blueprints'])
   const rest: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(args)) {
     if (!IGNORED_META_KEYS.has(k) && v !== undefined) {
@@ -214,58 +214,142 @@ export function buildNovelConfigProposal(
   }
 }
 
+export function defaultEmptyBlueprint(chapterNumber: number): BlueprintData {
+  return {
+    chapterNumber,
+    title: '',
+    role: '发展',
+    purpose: '',
+    keyEvents: '',
+    characters: [],
+    suspenseHook: '',
+    userGuidance: '',
+    notes: '',
+    notesUpdatedAt: '',
+  }
+}
+
 const BLUEPRINT_STRING_FIELDS = new Set<keyof BlueprintData>([
   'title', 'role', 'purpose', 'keyEvents', 'suspenseHook', 'userGuidance', 'notes',
 ])
 const BLUEPRINT_FIELD_ALIASES: Record<string, keyof BlueprintData> = {
-  作者微操指导: 'userGuidance',
-  用户指引: 'userGuidance',
+  title: 'title',
+  '标题': 'title',
+  '章节标题': 'title',
+
+  role: 'role',
+  '作用': 'role',
+  '章节作用': 'role',
+
+  purpose: 'purpose',
+  '目的': 'purpose',
+  '章节目的': 'purpose',
+  '核心目标': 'purpose',
+
+  keyEvents: 'keyEvents',
+  key_events: 'keyEvents',
+  '关键事件': 'keyEvents',
+  '情节': 'keyEvents',
+  '剧情': 'keyEvents',
+
+  characters: 'characters',
+  '角色': 'characters',
+  '出场角色': 'characters',
+  '登场人物': 'characters',
+
+  suspenseHook: 'suspenseHook',
+  suspense_hook: 'suspenseHook',
+  '悬念': 'suspenseHook',
+  '悬念钩子': 'suspenseHook',
+  '钩子': 'suspenseHook',
+
+  userGuidance: 'userGuidance',
+  user_guidance: 'userGuidance',
+  '作者微操指导': 'userGuidance',
+  '用户指引': 'userGuidance',
+  '指导': 'userGuidance',
+
+  notes: 'notes',
+  '备注': 'notes',
+  '备忘': 'notes',
+  '伏笔': 'notes',
 }
 
 export type ChapterBlueprintProposal =
-  | { valid: true; chapterNumber: number; changes: Partial<BlueprintData>; diffs: ProposalFieldDiff[] }
+  | { valid: true; chapterNumber: number; changes: Partial<BlueprintData>; diffs: ProposalFieldDiff[]; isNewCreation?: boolean }
   | { valid: false; error: string }
 
 /**
- * 校验章节蓝图变更，并要求 `chapter_number` 与传入的当前蓝图一致，
- * 以免确认界面展示的差异对应的不是同一章。
+ * 校验章节蓝图变更，若目标章节尚未创建，则使用空白基线，支持全新创建与已有修改。
  */
 export function buildChapterBlueprintProposal(
   args: Record<string, unknown>,
-  current: BlueprintData,
+  currentBlueprint: BlueprintData | null | undefined,
   text: ProposalText,
 ): ChapterBlueprintProposal {
   const chapterNumber = args.chapter_number
-  if (!Number.isInteger(chapterNumber) || (chapterNumber as number) <= 0 || chapterNumber !== current.chapterNumber) {
+  if (!Number.isInteger(chapterNumber) || (chapterNumber as number) <= 0) {
+    return { valid: false, error: text('章节号无效，必须为正整数', 'The chapter number is invalid') }
+  }
+
+  const isNewCreation = !currentBlueprint
+  const current = currentBlueprint ?? defaultEmptyBlueprint(chapterNumber as number)
+
+  if (chapterNumber !== current.chapterNumber) {
     return { valid: false, error: text('目标章节与当前蓝图不一致', 'The target chapter does not match the current blueprint') }
   }
-  const candidate = plainChanges(args)
-  if (!candidate || Object.keys(candidate).length === 0) {
+
+  const candidate = plainChanges(args) ?? {}
+
+  // 支持对长文本字段进行精准局部替换（如替换 keyEvents 中的某个段落）
+  if (typeof args.old_text === 'string' && typeof args.new_text === 'string') {
+    const targetField = String(args.field || 'keyEvents')
+    const canonicalField = BLUEPRINT_FIELD_ALIASES[targetField] ?? targetField
+    const currentText = typeof current[canonicalField as keyof BlueprintData] === 'string'
+      ? (current[canonicalField as keyof BlueprintData] as string)
+      : ''
+    if (!currentText.includes(args.old_text)) {
+      return { valid: false, error: text(`未在 ${targetField} 中找到待替换的原文本`, `The original text to replace was not found in ${targetField}`) }
+    }
+    candidate[canonicalField] = currentText.replace(args.old_text, args.new_text)
+  }
+
+  if (Object.keys(candidate).length === 0) {
     return { valid: false, error: text('缺少章节蓝图变更字段', 'No chapter blueprint changes were provided') }
   }
+
   const changes: Record<string, unknown> = {}
   for (const [field, proposed] of Object.entries(candidate)) {
     const canonicalField = BLUEPRINT_FIELD_ALIASES[field] ?? field
+    let normalizedValue = proposed
     if (BLUEPRINT_STRING_FIELDS.has(canonicalField as keyof BlueprintData)) {
       if (typeof proposed !== 'string') {
         return { valid: false, error: text(`字段 ${field} 必须是文本`, `Field ${field} must be text`) }
       }
     } else if (canonicalField === 'characters') {
-      if (!Array.isArray(proposed) || !proposed.every(item => typeof item === 'string')) {
+      if (Array.isArray(proposed)) {
+        if (!proposed.every(item => typeof item === 'string')) {
+          return { valid: false, error: text('字段 characters 必须是文本数组', 'Field characters must be an array of text values') }
+        }
+      } else if (typeof proposed === 'string') {
+        // 容错：允许模型传入逗号分隔的角色名称
+        normalizedValue = proposed.split(/[,，、\s]+/).filter(Boolean)
+      } else {
         return { valid: false, error: text('字段 characters 必须是文本数组', 'Field characters must be an array of text values') }
       }
     } else {
       return { valid: false, error: text(`未知章节蓝图字段：${field}`, `Unknown chapter blueprint field: ${field}`) }
     }
-    changes[canonicalField] = proposed
+    changes[canonicalField] = normalizedValue
   }
   return {
     valid: true,
     chapterNumber: chapterNumber as number,
     changes: changes as Partial<BlueprintData>,
+    isNewCreation,
     diffs: Object.entries(changes).map(([field, proposed]) => ({
       field,
-      current: current[field as keyof BlueprintData],
+      current: isNewCreation ? '（未创建）' : (current[field as keyof BlueprintData] ?? ''),
       proposed,
     })),
   }

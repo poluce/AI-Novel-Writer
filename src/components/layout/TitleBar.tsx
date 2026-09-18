@@ -3,6 +3,7 @@ import {
   Archive,
   CheckCircle2,
   FilePlus2,
+  FileText,
   FolderOpen,
   Import,
   Languages,
@@ -67,7 +68,8 @@ export default function TitleBar() {
   const openSettings = useLayoutStore(s => s.openSettings)
   const openNewProject = useLayoutStore(s => s.openNewProject)
   const openExport = useLayoutStore(s => s.openExport)
-  const openImportNovel = useLayoutStore(s => s.openImportNovel)
+  const openAuthorManuscriptImport = useLayoutStore(s => s.openAuthorManuscriptImport)
+  const openNovelDeconstruction = useLayoutStore(s => s.openNovelDeconstruction)
   const { locale, toggleLocale, t, text } = useLocaleStore()
   const [exitRequest, setExitRequest] = useState<{ requestId: string; workflowBlocked?: boolean } | null>(null)
   const [exitBusy, setExitBusy] = useState(false)
@@ -271,7 +273,11 @@ export default function TitleBar() {
           <Archive size={14} strokeWidth={1.75} />
           {t('common.backup')}
         </button>
-        <button className="writer-command-button" title={t('project.imitation')} onClick={openImportNovel}>
+        <button className="writer-command-button" title={text('导入作者原稿为权威定稿', 'Import author manuscript')} onClick={openAuthorManuscriptImport}>
+          <FileText size={14} strokeWidth={1.75} />
+          {text('导入原稿', 'Import Manuscript')}
+        </button>
+        <button className="writer-command-button" title={t('project.imitation')} onClick={openNovelDeconstruction}>
           <Import size={14} strokeWidth={1.75} />
           {t('project.imitationShort')}
         </button>

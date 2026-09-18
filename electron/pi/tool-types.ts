@@ -44,6 +44,16 @@ export type AnyHarnessTool = AgentHarnessTool<HarnessToolContext, TSchema, unkno
 export function toHarnessTool(tool: AnyAgentTool): AnyHarnessTool {
   return {
     ...tool,
-    execute: (toolCallId: string, params: unknown) => tool.execute(toolCallId, params as never),
+    execute: async (toolCallId: string, params: unknown) => {
+      try {
+        return await tool.execute(toolCallId, params as never)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        return {
+          content: [{ type: 'text', text: `工具 ${tool.name} 执行未通过：${message}` }],
+          details: { error: message, status: 'failed' },
+        }
+      }
+    },
   } as unknown as AnyHarnessTool
 }

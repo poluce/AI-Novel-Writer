@@ -47,6 +47,11 @@ import type {
 import type { DraftSourceDependency } from './draft-source-dependency'
 import type { ConsistencyExemption } from './consistency-preflight'
 import type {
+  NovelStudyDossier,
+  NovelStudyProjectionOptions,
+  NovelStudyProjectionReceipt,
+} from './novel-study'
+import type {
   NarrativeThreadEvent,
   NarrativeThreadEventInput,
   NarrativeThreadChapterContext,
@@ -807,6 +812,17 @@ export interface DatabaseChannels {
   }
   'db:import-run-complete': { args: [runId: string, execution: ImportRunExecutionLease, expectedProjectPath: string]; return: { success: boolean; run?: ImportRunSnapshot; error?: string } }
 
+  // study-dossiers
+  'db:study-dossier-save': { args: [dossier: NovelStudyDossier, expectedProjectPath: string]; return: { success: boolean; error?: string } }
+  'db:study-dossier-get': { args: [id: string, expectedProjectPath: string]; return: NovelStudyDossier | null }
+  'db:study-dossier-get-by-run': { args: [runId: string, expectedProjectPath: string]; return: NovelStudyDossier | null }
+  'db:study-dossier-list': { args: [expectedProjectPath: string]; return: NovelStudyDossier[] }
+  'db:study-dossier-delete': { args: [id: string, expectedProjectPath: string]; return: { success: boolean; error?: string } }
+  'db:study-dossier-apply': {
+    args: [options: NovelStudyProjectionOptions, expectedProjectPath: string]
+    return: { success: boolean; receipt?: NovelStudyProjectionReceipt; error?: string }
+  }
+
   // 2. blueprints
   'db:blueprint-get-all': { args: [expectedProjectPath: string]; return: BlueprintData[] }
   'db:blueprint-get': { args: [chapterNumber: number, expectedProjectPath: string]; return: BlueprintData | null }
@@ -1154,6 +1170,8 @@ export interface AgentChannels {
       scope?: AgentScope,
       /** 会话级思考等级；缺省表示不指定（Pi 默认的 off）。 */
       thinkingLevel?: AssistantThinkingLevel,
+      /** 执行模式：'plan'（审查/计划）| 'writing'（全自动写作） */
+      executionMode?: 'plan' | 'writing',
     ]
     /** `code` 只在主进程主动拒绝这一轮时给出（见 shared/agent-turn-refusal）。 */
     return: { success: boolean; error?: string; code?: AgentTurnRefusalCode }
@@ -1170,13 +1188,19 @@ export interface AgentChannels {
     args: [conversationId: string, scope?: AgentScope]
     return: { success: boolean }
   }
-  /** 界面助手（无项目）的界面存档：~/.vela 只有主进程能读写。 */
-  'agent:load-global-conversations': {
-    args: []
-    return: { exists: boolean; content: string; error?: string }
+  /** 原生会话列表：由主进程直接从底层 .jsonl 扫描还原 */
+  'agent:list-conversations': {
+    args: [scope?: AgentScope]
+    return: {
+      success: boolean
+      conversations: import('./agent-conversation-archive').PersistedAgentConversation[]
+      activeConversationId: string | null
+      error?: string
+    }
   }
-  'agent:save-global-conversations': {
-    args: [content: string]
+  /** 原生会话重命名：直接固化到 session.setName */
+  'agent:rename-conversation': {
+    args: [conversationId: string, title: string, scope?: AgentScope]
     return: { success: boolean; error?: string }
   }
   'agent:system-prompt': {

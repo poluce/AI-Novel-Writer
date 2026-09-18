@@ -19,7 +19,7 @@ describe('LeftToolWindowBar', () => {
   it('renders visible Chinese labels for every left navigation item', () => {
     const html = renderToString(<LeftToolWindowBar />)
 
-    for (const label of ['首页', '项目', '蓝图', '角色', '架构', '大纲', '剧情', '知识库', '任务', '设置']) {
+    for (const label of ['首页', '项目', '架构', '大纲', '蓝图', '剧情', '人物', '知识库', '任务', '设置']) {
       expect(html).toContain(label)
     }
   })
@@ -39,8 +39,7 @@ describe('LeftToolWindowBar', () => {
       aiPanelOpen: true,
       rightView: 'agent',
       bottomPanelOpen: true,
-      bottomTab: 'models',
-    })
+      bottomTab: 'models'})
     const html = renderToString(<LeftToolWindowBar />)
 
     expect(countActiveRailButtons(html)).toBe(1)
@@ -68,7 +67,7 @@ describe('LeftToolWindowBar', () => {
     useProjectStore.setState({ currentProject: null })
 
     const html = renderToString(<LeftToolWindowBar />)
-    const projectDependentLabels = ['角色', '蓝图', '架构', '大纲', '剧情', '知识库']
+    const projectDependentLabels = ['架构', '大纲', '蓝图', '剧情', '人物', '知识库']
 
     for (const label of projectDependentLabels) {
       // Button containing this label must have disabled attribute and is-disabled class

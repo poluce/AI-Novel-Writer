@@ -3,7 +3,7 @@
 模型实际能调用的工具只有一份实现：领域工具 `electron/pi/tools/*` 由
 `electron/pi/tool-builder.ts:buildAgentTools()` 组装；Pi harness 自带的执行工具
 （`read` / `write` / `edit` / `bash`，`electron/pi/execution-tools.ts:buildExecutionTools()`）
-由 `AgentSession.create` 在有执行环境时挂上（ADR 0023）。
+由 `AgentSession.create` 在有执行环境时挂上（架构 ADR 0009）。
 渲染层不再拥有第二份工具实现（历史遗留的 `src/services/agent/tools/*.tool.ts` 已删除）。
 
 ## 工具与数据来源
@@ -25,7 +25,7 @@
 | `open_editor` | 打开内置页面（config/blueprints/characters/architecture/synopsis）或只读查看项目文件 | 渲染层动作 | 是 |
 | `novel_config` | 读取或直接填充修改小说配置各个字段（大纲/世界观/金手指/人设等） | `ProjectCoreRepository` | 是（修改时） |
 | `story_architecture` | 读取或直接填充修改故事架构三大核心文档（premise/worldbuilding/synopsis） | `ProjectCoreRepository` | 是（修改时） |
-| `propose_chapter_blueprint` | 章节蓝图字段差异提案 | `BlueprintRepository` | 是 |
+| `propose_chapter_blueprint` | 章节细纲全生命周期：单章/批量新建、字段/段落替换、范围/全书导出与删除 | `BlueprintRepository` | 计划模式需确认 / 写作模式自动执行 |
 | `install_writing_skill` / `bind_writing_skill` | 安装 / 绑定写作 Skill | 网络 + 项目配置 | 是 |
 | `mcp__<server>__<tool>` | 已连接 MCP 服务提供的工具 | MCP manager | 由 MCP 决定 |
 
@@ -44,14 +44,14 @@
    主进程用它校验并落库，确认卡片用同一份函数计算差异；不要再写第二套字段白名单。
 6. **确认语义按工具划分**：只读工具自动执行；写入与外部副作用工具必须列入
    `confirmationToolNames()`（`electron/pi/__tests__/tool-builder.test.ts` 会锁住这份名单）。
-7. **写入只有一套语义**（ADR 0023）：`write_file` 与 harness 的 `write` / `edit` 都走安全文件系统的
+7. **写入只有一套语义**（架构 ADR 0009）：`write_file` 与 harness 的 `write` / `edit` 都走安全文件系统的
    原子写；提交态未知时都终止本轮，避免模型自动重写。`bash` 只能靠确认卡把关。
 8. **配置与采样参数只有一个策略源**：`resolveGenerationParameters()` + `resolveReasoningPolicy()`。
    两条轨道（助手对话 / 工作流单发）都必须从这里取参数，不要在调用点各写一份。
 
 ## 技能（Skill）与工具的关系
 
-Skill 不作为工具暴露给模型，也**不注册进 harness 的资源表**（ADR 0023：`resources.skills` 的
+Skill 不作为工具暴露给模型，也**不注册进 harness 的资源表**（架构 ADR 0009 与 ADR 0010：`resources.skills` 的
 唯一消费入口 `lane.skill()` 无人调用，同一份正文不再留第二份副本）。
 `/技能名` 由 `src/stores/agent-store.ts` 把 Skill 正文注入该轮用户消息，
 阶段绑定（`bind_writing_skill`）则把 Skill 正文写进对应工作流提示词。

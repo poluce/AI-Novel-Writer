@@ -104,12 +104,16 @@ export interface AgentState {
   dataProjectSession: ProjectSessionContext | null
   /** 待随下一句用户消息发送的草稿选区引用 */
   composerCitations: DraftPassageCitation[]
+  /** 助手执行模式：'plan'（审查计划）| 'writing'（全自动写作） */
+  executionMode: 'plan' | 'writing'
 
   // ===== 计算属性（Getters） =====
   /** 获取当前活跃会话 */
   getActiveConversation: () => AgentConversation | null
 
   // ===== Actions =====
+  /** 切换执行模式（计划/写作） */
+  setExecutionMode: (mode: 'plan' | 'writing') => void
   /** 初始化 Tool 系统 */
   initializeTools: () => void
   /** 新建会话并激活 */
@@ -118,6 +122,8 @@ export interface AgentState {
   selectConversation: (id: string) => void
   /** 删除指定会话 */
   deleteConversation: (id: string) => void
+  /** 重命名会话 */
+  renameConversation: (id: string, title: string) => void
   /** 清空当前助手的会话（不会动另一个助手） */
   clearAll: () => void
   /** 切换助手作用域（项目助手 / 界面助手） */
@@ -289,6 +295,18 @@ export function applyToolCallResult(
 
 // ===== Zustand Store =====
 
+const EXECUTION_MODE_STORAGE_KEY = 'vela:agent:execution-mode'
+
+function getSavedExecutionMode(): 'plan' | 'writing' {
+  try {
+    const saved = localStorage.getItem(EXECUTION_MODE_STORAGE_KEY)
+    if (saved === 'writing' || saved === 'plan') return saved
+  } catch {
+    // localStorage may be unavailable in some environments
+  }
+  return 'plan'
+}
+
 export const useAgentStore = create<AgentState>()((set, get) => ({
   conversations: [],
   activeScope: DEFAULT_AGENT_SCOPE,
@@ -296,10 +314,20 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   activeConversationId: null,
   showHistory: false,
   defaultMode: 'planning',
+  executionMode: getSavedExecutionMode(),
   activeRequestId: null,
   toolsInitialized: false,
   dataProjectSession: null,
   composerCitations: [],
+
+  setExecutionMode: (mode) => {
+    try {
+      localStorage.setItem(EXECUTION_MODE_STORAGE_KEY, mode)
+    } catch {
+      // ignore
+    }
+    set({ executionMode: mode })
+  },
 
   getActiveConversation: () => {
     const { conversations, activeConversationId } = get()
@@ -388,6 +416,14 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         : state.activeConversationId
       return { conversations: filtered, activeConversationId: nextId }
     })
+  },
+
+  renameConversation: (id, title) => {
+    const scope = get().conversations.find(c => c.id === id)?.scope ?? get().activeScope
+    void ipc.invoke('agent:rename-conversation', id, title, scope).catch(() => {})
+    set(state => ({
+      conversations: state.conversations.map(c => c.id === id ? { ...c, title, updatedAt: Date.now() } : c),
+    }))
   },
 
   clearAll: () => {
@@ -648,6 +684,9 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
           : c
       ),
     }))
+    if (isFirstMsg) {
+      void ipc.invoke('agent:rename-conversation', convId, newTitle, conv.scope).catch(() => {})
+    }
     // 辅助函数：更新助手消息
     const updateAssistantMsg = (updater: (msg: AgentMessage) => AgentMessage) => {
       set(state => ({
@@ -688,6 +727,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         buildAgentSkillCatalog(executionContext.writingLanguage),
         conv.scope,
         thinkingLevel,
+        get().executionMode,
       )
       if (!result.success) {
         logFailure('Agent', 'renderer prompt returned failure', undefined, {

@@ -18,8 +18,7 @@ function ScopeTab({
   disabled,
   title,
   label,
-  onClick,
-}: {
+  onClick}: {
   active: boolean
   disabled?: boolean
   title: string
@@ -37,8 +36,7 @@ function ScopeTab({
       className="px-2 py-0.5 rounded text-[0.7rem] font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
       style={{
         backgroundColor: active ? 'var(--color-accent)' : 'transparent',
-        color: active ? '#fff' : 'var(--color-text-secondary)',
-      }}
+        color: active ? '#fff' : 'var(--color-text-secondary)'}}
     >
       {label}
     </button>
@@ -56,8 +54,7 @@ export default function AgentHeader() {
     showHistory,
     getActiveConversation,
     activeScope,
-    setScope,
-  } = useAgentStore()
+    setScope} = useAgentStore()
   const hasProject = useProjectStore(s => s.currentProject !== null)
   const toggleAIPanel = useLayoutStore(s => s.toggleAIPanel)
   const [showMore, setShowMore] = useState(false)
@@ -93,8 +90,7 @@ export default function AgentHeader() {
       className="no-select flex items-center justify-between gap-1.5 px-2 flex-shrink-0"
       style={{
         height: 'var(--height-panel-header)',
-        borderBottom: '1px solid var(--color-border)',
-      }}
+        borderBottom: '1px solid var(--color-border)'}}
     >
       {/* 助手切换：项目助手（跟着书）/ 界面助手（跟着应用） */}
       <div
@@ -104,7 +100,7 @@ export default function AgentHeader() {
         aria-label={text('助手切换', 'Assistant switch')}
       >
         <ScopeTab
-          active={activeScope === 'project'}
+          active={hasProject && activeScope === 'project'}
           disabled={!hasProject}
           title={hasProject
             ? text('项目助手：读写当前项目资料', 'Project assistant: works on this project')
@@ -113,7 +109,7 @@ export default function AgentHeader() {
           onClick={() => setScope('project')}
         />
         <ScopeTab
-          active={activeScope === 'global'}
+          active={!hasProject || activeScope === 'global'}
           title={text('界面助手：不依赖项目，随时可用', 'App assistant: always available, no project needed')}
           label={text('界面助手', 'App')}
           onClick={() => setScope('global')}
@@ -162,8 +158,7 @@ export default function AgentHeader() {
                 width: subView === 'main' ? 200 : 260,
                 backgroundColor: 'var(--color-sidebar)',
                 border: '1px solid var(--color-border)',
-                boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
-              }}
+                boxShadow: '0 8px 24px rgba(0,0,0,0.25)'}}
             >
               {/* ===== 主菜单视图 ===== */}
               {subView === 'main' && (
@@ -189,8 +184,7 @@ export default function AgentHeader() {
                       const ok = await confirm(text('确定要清空所有对话记录？\n此操作不可撤销。', 'Clear all conversation history?\nThis cannot be undone.'), {
                         title: text('清空对话记录', 'Clear conversation history'),
                         confirmText: text('确认清空', 'Clear all'),
-                        danger: true,
-                      })
+                        danger: true})
                       if (ok) useAgentStore.getState().clearAll()
                     }}
                   />
@@ -231,8 +225,7 @@ export default function AgentHeader() {
 function MCPSubView({
   servers,
   toolCount,
-  onBack,
-}: {
+  onBack}: {
   servers: { id: string; name: string; status: string; toolCount: number; error?: string }[]
   toolCount: number
   onBack: () => void
@@ -282,8 +275,7 @@ function MCPSubView({
                     server.status === 'connected' ? 'var(--color-success)'
                     : server.status === 'connecting' ? 'var(--color-warning)'
                     : server.status === 'error' ? 'var(--color-error)'
-                    : 'var(--color-text-muted)',
-                }}
+                    : 'var(--color-text-muted)'}}
               />
               <span
                 className="flex-1 truncate font-medium"
@@ -326,8 +318,7 @@ function MCPSubView({
 
 function SkillSubView({
   skills,
-  onBack,
-}: {
+  onBack}: {
   skills: LoadedSkill[]
   onBack: () => void
 }) {

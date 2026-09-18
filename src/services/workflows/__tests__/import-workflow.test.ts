@@ -248,10 +248,10 @@ describe('createImportWorkflow', () => {
     expect(ipcMocks.invoke.mock.calls.map(call => call[1])).not.toContain('db:draft-create')
   })
 
-  it('rejects a stale project lease before creating any task', () => {
+  it('rejects a switched project session before creating any task', () => {
     expect(() => createImportWorkflow({
       projectPath: session.projectPath,
-      projectSession: { ...session },
+      projectSession: { ...session, projectId: 'switched-project' },
       run: run(),
       executionOwner,
     })).toThrow('当前项目已切换')

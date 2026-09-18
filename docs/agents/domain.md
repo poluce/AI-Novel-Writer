@@ -17,4 +17,4 @@
 - 公共词汇表和本机 `CONTEXT.md` 只保存术语及其边界，不保存实现步骤、临时计划或测试清单。
 - 需要公开保留的稳定边界写入 ADR；面向用户的行为同步到中英文 README，不能只引用本机 `CONTEXT.md`。
 - 如果实现方案与现有 ADR 冲突，必须明确指出并先更新或取代该 ADR。
-- 新 ADR 使用 `docs/adr/NNNN-slug.md` 的连续编号。
+- 新 ADR 按系统架构与业务功能分类放置于 `docs/adr/architecture/` 或 `docs/adr/features/`，使用连续编号。

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react'
-import { ArrowDown, FileText, Info, Trash2, Workflow } from 'lucide-react'
+import { ArrowDown, FileText, Info, Trash2 } from 'lucide-react'
 import { selectIsGenerating, useAgentStore } from '../../../stores/agent-store'
-import { useLayoutStore } from '../../../stores/layout-store'
 import { useProjectStore } from '../../../stores/project-store'
 import { resolveWritingLanguage, type WritingLanguage } from '../../../shared/writing-language'
 import type { Locale } from '../../../i18n/types'
@@ -15,8 +14,7 @@ import { formatRelativeTime } from '../../../utils/time'
 import { useLocaleStore } from '../../../stores/locale-store'
 import { ipc } from '../../../services/ipc-client'
 import {
-  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
-} from '../../ui/Dialog'
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle} from '../../ui/Dialog'
 
 /**
  * 对话区域主组件
@@ -51,6 +49,7 @@ function EmptyState() {
   const scopedConversations = conversations.filter(conversation => conversation.scope === activeScope)
   const recentConvs = scopedConversations
     .filter(c => c && c.messages.length > 0)
+    .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, 3)
 
 
@@ -116,8 +115,7 @@ function ActiveConversation() {
     if (isAtBottom && scrollRef.current) {
       scrollRef.current.scrollTo({
         top: scrollRef.current.scrollHeight,
-        behavior: 'smooth',
-      })
+        behavior: 'smooth'})
     }
   }, [activeConv?.messages, generating, isAtBottom])
 
@@ -133,8 +131,7 @@ function ActiveConversation() {
   const scrollToBottom = () => {
     scrollRef.current?.scrollTo({
       top: scrollRef.current.scrollHeight,
-      behavior: 'smooth',
-    })
+      behavior: 'smooth'})
   }
 
   if (!activeConv) return null
@@ -168,8 +165,7 @@ function ActiveConversation() {
             bottom: 100,
             backgroundColor: 'var(--color-sidebar)',
             border: '1px solid var(--color-border)',
-            color: 'var(--color-text-secondary)',
-          }}
+            color: 'var(--color-text-secondary)'}}
           title={text('回到底部', 'Back to bottom')}
           onMouseEnter={e => {
             e.currentTarget.style.borderColor = 'var(--color-accent)'
@@ -206,8 +202,7 @@ function ActiveConversation() {
 function toolbarChipStyle() {
   return {
     color: 'var(--color-text-muted)',
-    border: '1px solid var(--color-border)',
-  } as const
+    border: '1px solid var(--color-border)'} as const
 }
 
 /** 助手提示词预览按项目写作语言渲染，与真实请求一致（无项目时退回界面语言）。 */
@@ -221,7 +216,6 @@ function agentWritingLanguage(locale: Locale): WritingLanguage {
 function AgentToolbar() {
   const text = useLocaleStore(s => s.text)
   const locale = useLocaleStore(s => s.locale)
-  const openRightPanel = useLayoutStore(s => s.openRightPanel)
   const [inspect, setInspect] = useState<{
     kind: 'system' | 'turn'
     body: string
@@ -235,16 +229,14 @@ function AgentToolbar() {
     onMouseLeave: (e: MouseEvent<HTMLButtonElement>) => {
       e.currentTarget.style.backgroundColor = 'transparent'
       e.currentTarget.style.color = 'var(--color-text-muted)'
-    },
-  }
+    }}
 
   const openTurnContext = () => {
     const language = agentWritingLanguage(locale)
     const snapshot = captureAgentEditorSnapshot({ commitSurface: false })
     setInspect({
       kind: 'turn',
-      body: buildL1AgentContext(snapshot, language) ?? '',
-    })
+      body: buildL1AgentContext(snapshot, language) ?? ''})
   }
 
   const openSystemPrompt = async () => {
@@ -260,13 +252,11 @@ function AgentToolbar() {
         kind: 'system',
         body: result.success
           ? (result.prompt ?? '')
-          : (result.error ?? text('无法读取系统提示词', 'Could not read the system prompt')),
-      })
+          : (result.error ?? text('无法读取系统提示词', 'Could not read the system prompt'))})
     } catch (error) {
       setInspect({
         kind: 'system',
-        body: text(`无法读取系统提示词：${error}`, `Could not read the system prompt: ${error}`),
-      })
+        body: text(`无法读取系统提示词：${error}`, `Could not read the system prompt: ${error}`)})
     }
   }
 
@@ -296,18 +286,6 @@ function AgentToolbar() {
           {text('本轮上下文', 'Turn context')}
         </button>
       </div>
-
-      <button
-        type="button"
-        onClick={() => openRightPanel('ai-output')}
-        className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all select-none"
-        style={toolbarChipStyle()}
-        title={text('切换到 AI 输出面板', 'Switch to AI output panel')}
-        {...chipHover}
-      >
-        <Workflow size={12} strokeWidth={1.75} />
-        {text('AI 工作流', 'AI workflow')}
-      </button>
 
       <Dialog open={inspect !== null} onOpenChange={open => { if (!open) setInspect(null) }} modal={false}>
         <DialogContent
@@ -340,8 +318,7 @@ function AgentToolbar() {
             style={{
               backgroundColor: 'var(--color-editor-bg)',
               border: '1px solid var(--color-border)',
-              color: 'var(--color-text)',
-            }}
+              color: 'var(--color-text)'}}
           >
             {inspect?.body
               || (inspect?.kind === 'system'
@@ -364,8 +341,7 @@ function AgentHistoryPanel() {
     activeScope,
     selectConversation,
     deleteConversation,
-    setShowHistory,
-  } = useAgentStore()
+    setShowHistory} = useAgentStore()
 
   // 按更新时间倒序排列
   const sorted = conversations
@@ -423,8 +399,7 @@ function RecentConversationItem({
   updatedAt,
   isActive,
   onClick,
-  onDelete,
-}: {
+  onDelete}: {
   title: string
   updatedAt: number
   isActive?: boolean

@@ -82,4 +82,34 @@ describe('buildChapterBlueprintProposal', () => {
     expect(buildChapterBlueprintProposal({ chapter_number: 2, changes: { characters: [1] } }, blueprint, text))
       .toMatchObject({ valid: false, error: 'Field characters must be an array of text values' })
   })
+
+  it('supports creating a new blueprint when current is null', () => {
+    const proposal = buildChapterBlueprintProposal({
+      chapter_number: 1,
+      changes: { title: '第一章 启程', purpose: '引出世界观', role: '开端' },
+    }, null, text)
+
+    expect(proposal).toMatchObject({
+      valid: true,
+      chapterNumber: 1,
+      isNewCreation: true,
+      changes: { title: '第一章 启程', purpose: '引出世界观', role: '开端' },
+    })
+    if (!proposal.valid) throw new Error('expected valid')
+    expect(proposal.diffs).toContainEqual({ field: 'title', current: '（未创建）', proposed: '第一章 启程' })
+  })
+
+  it('supports targeted text replacement via old_text and new_text', () => {
+    const proposal = buildChapterBlueprintProposal({
+      chapter_number: 2,
+      field: 'keyEvents',
+      old_text: '找到线索',
+      new_text: '遭遇伏击并找到密函',
+    }, blueprint, text)
+
+    expect(proposal).toMatchObject({
+      valid: true,
+      changes: { keyEvents: '遭遇伏击并找到密函' },
+    })
+  })
 })

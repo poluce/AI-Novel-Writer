@@ -24,6 +24,8 @@ interface ConfirmOptions {
   confirmText?: string
   cancelText?: string
   danger?: boolean
+  /** 默认有全屏遮罩。字段清除等轻确认可关掉。 */
+  overlay?: boolean
 }
 
 interface ConfirmDialogProps extends ConfirmOptions {
@@ -36,14 +38,15 @@ function ConfirmDialog({
   confirmText,
   cancelText,
   danger = false,
-  onResolve,
-}: ConfirmDialogProps) {
+  overlay = true,
+  onResolve}: ConfirmDialogProps) {
   const text = useLocaleStore(s => s.text)
   const resolvedTitle = title ?? text('确认操作', 'Confirm action')
   const resolvedConfirmText = confirmText ?? text('确认', 'Confirm')
   const resolvedCancelText = cancelText ?? text('取消', 'Cancel')
   const [isExiting, setIsExiting] = useState(false)
   const confirmBtnRef = useRef<HTMLButtonElement>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
 
   const handleConfirm = () => {
     setIsExiting(true)
@@ -69,8 +72,18 @@ function ConfirmDialog({
     return () => window.removeEventListener('keydown', onKey)
   }, [handleCancel])
 
+  useEffect(() => {
+    if (overlay) return
+    const onPointer = (event: MouseEvent) => {
+      if (dialogRef.current && !dialogRef.current.contains(event.target as Node)) {
+        handleCancel()
+      }
+    }
+    document.addEventListener('mousedown', onPointer)
+    return () => document.removeEventListener('mousedown', onPointer)
+  }, [handleCancel, overlay])
+
   return (
-    /* 遮罩层 — 统一 CSS 变量和动画 */
     <div
       style={{
         position: 'fixed',
@@ -79,21 +92,20 @@ function ConfirmDialog({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'var(--color-backdrop)',
-        backdropFilter: 'blur(8px)',
-        pointerEvents: 'auto',
-        /* 为遮罩层的进场同样加入 both 属性防闪烁 */
-        animation: isExiting
-          ? 'backdrop-exit 0.15s ease-out both'
-          : 'backdrop-enter 0.25s ease-out both',
-      }}
-      onClick={handleCancel}
+        backgroundColor: overlay ? 'var(--color-backdrop)' : 'transparent',
+        backdropFilter: overlay ? 'blur(8px)' : 'none',
+        pointerEvents: overlay ? 'auto' : 'none',
+        animation: overlay
+          ? (isExiting ? 'backdrop-exit 0.15s ease-out both' : 'backdrop-enter 0.25s ease-out both')
+          : undefined}}
+      onClick={overlay ? handleCancel : undefined}
     >
-      {/* 弹窗主体 */}
       <div
+        ref={dialogRef}
         role="dialog"
-        aria-modal="true"
+        aria-modal={overlay}
         style={{
+          pointerEvents: 'auto',
           backgroundColor: 'var(--color-sidebar)',
           border: '1px solid var(--color-border)',
           borderRadius: 'var(--radius-2xl)',
@@ -104,8 +116,7 @@ function ConfirmDialog({
           /* CSS 动画，使用 both 从而提前应用 0% 关键帧，彻底杜绝闪烁现象 */
           animation: isExiting
             ? 'dialog-exit 0.15s ease-out both'
-            : 'dialog-enter 0.25s var(--transition-spring) both',
-        }}
+            : 'dialog-enter 0.25s var(--transition-spring) both'}}
         onClick={e => e.stopPropagation()}
       >
         {/* 标题 */}
@@ -120,8 +131,7 @@ function ConfirmDialog({
             color: 'var(--color-text-secondary)',
             lineHeight: 1.65,
             whiteSpace: 'pre-wrap',
-            marginBottom: 20,
-          }}
+            marginBottom: 20}}
         >
           {message}
         </div>
@@ -175,6 +185,7 @@ export function confirm(
         confirmText={options?.confirmText}
         cancelText={options?.cancelText}
         danger={options?.danger}
+        overlay={options?.overlay}
         onResolve={cleanup}
       />
     )

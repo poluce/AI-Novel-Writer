@@ -20,7 +20,7 @@ import type { AgentSkillCatalogEntry } from '../../src/shared/agent-skills'
 import type { AgentScope } from '../../src/shared/agent-scope'
 import type { AssistantThinkingLevel } from '../../src/shared/agent-runtime'
 import type { AgentTurnRefusalCode } from '../../src/shared/agent-turn-refusal'
-import type { AgentPromptHistoryTurn } from '../../src/shared/agent-conversation-archive'
+import type { AgentPromptHistoryTurn, PersistedAgentConversation } from '../../src/shared/agent-conversation-archive'
 import type { ModelProfile } from '../../src/shared/ipc-channels'
 import type { WritingLanguage } from '../../src/shared/writing-language'
 import { logFailure, logInfo } from '../../src/shared/fail-log'
@@ -92,6 +92,7 @@ export class AgentSessionManager {
     skills?: readonly AgentSkillCatalogEntry[],
     scope: AgentScope = 'project',
     thinkingLevel?: AssistantThinkingLevel,
+    executionMode?: 'plan' | 'writing',
   ): Promise<{ success: boolean; error?: string; code?: AgentTurnRefusalCode }> {
     try {
       const profile = this.options.resolveModel(modelId)
@@ -102,11 +103,13 @@ export class AgentSessionManager {
         protocol: profile?.protocol,
         provider: profile?.provider,
         thinkingLevel: thinkingLevel ?? 'off',
+        executionMode: executionMode ?? 'plan',
         chars: input.length,
       })
       const session = await this.getOrCreate(conversationId, modelId, history, skills, scope, thinkingLevel)
       const language = this.options.resolveLanguage(conversationId)
       session.setEditorSnapshot(editorSnapshot)
+      session.setExecutionMode(executionMode)
       session.setSystemPrompt(this.options.resolveSystemPrompt(conversationId, scope, skills))
       await session.setTools(buildAgentTools(
         language,
@@ -157,6 +160,34 @@ export class AgentSessionManager {
       }
     }
     return { success: true }
+  }
+
+  async listConversations(scope: AgentScope = 'project'): Promise<{
+    conversations: PersistedAgentConversation[]
+    activeConversationId: string | null
+  }> {
+    const store = this.options.resolveConversationStore?.(scope) ?? null
+    if (!store) return { conversations: [], activeConversationId: null }
+    try {
+      const conversations = await store.listConversations()
+      const activeConversationId = conversations[0]?.id ?? null
+      return { conversations, activeConversationId }
+    } catch (error) {
+      logFailure('Agent', 'failed to list conversations from store', error, { scope })
+      return { conversations: [], activeConversationId: null }
+    }
+  }
+
+  async renameConversation(conversationId: string, title: string, scope: AgentScope = 'project'): Promise<{ success: boolean }> {
+    const store = this.options.resolveConversationStore?.(scope) ?? null
+    if (!store) return { success: false }
+    try {
+      const success = await store.renameConversation(conversationId, title)
+      return { success }
+    } catch (error) {
+      logFailure('Agent', 'failed to rename conversation in store', error, { conversationId, scope })
+      return { success: false }
+    }
   }
 
   /** Abort every Agent session and every one-shot stream. Sessions are dropped. */

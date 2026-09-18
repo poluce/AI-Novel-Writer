@@ -29,8 +29,7 @@ export default function ConfirmCard({ toolCall }: Props) {
   const impactPreview = useConfigImpactPreview(toolCall, proposalPreview)
   const [selectedImpactKeys, setSelectedImpactKeys] = useState<Set<string>>(() => new Set())
   const isDomainProposal = proposalPreview.kind !== 'none'
-  const impactReady = impactPreview.kind === 'none' || impactPreview.kind === 'valid'
-  const canApprove = (!isDomainProposal || proposalPreview.kind === 'valid') && impactReady
+  const canApprove = proposalPreview.kind !== 'stale'
 
   const handleViewInDraft = async () => {
     const chapterNumber = typeof args.chapter_number === 'number'

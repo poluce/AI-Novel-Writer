@@ -16,6 +16,7 @@ const h = vi.hoisted(() => {
     isBusy: vi.fn(() => h.busy),
     transcriptLength: vi.fn(async () => h.transcriptLength),
     seedHistory: vi.fn(async () => {}),
+    setExecutionMode: vi.fn(),
   })
   return {
     sessions: [] as Array<Record<string, ReturnType<typeof vi.fn>>>,

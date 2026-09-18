@@ -135,6 +135,8 @@ export class AgentSession {
   private readonly announcedToolCalls = new Set<string>()
   /** 当前这一轮累积的可见文本；工具回合之间的正文按顺序拼接。 */
   private fullText = ''
+  /** 执行模式：'plan'（审查计划）| 'writing'（全自动写作） */
+  private executionMode: 'plan' | 'writing' = 'plan'
   /** 有一轮生成在跑；`close()` 之外的并发操作靠它判断。 */
   private busy = false
   private closed = false
@@ -271,7 +273,21 @@ export class AgentSession {
 
   private isConfirmationRequired(toolName: string, args?: Record<string, unknown>): boolean {
     if (toolName.startsWith('mcp__')) return true
+
+    // 写作模式（writing）：创作类工具全部自动放行，零弹窗直接落盘；操作系统级 bash 命令保留底线确认
+    if (this.executionMode === 'writing') {
+      if (toolName === 'bash') return true
+      return false
+    }
+
+    // 计划模式（plan）：保持逐项确认
     if (!this.confirmationNames.has(toolName)) return false
+    if (toolName === 'propose_chapter_blueprint') {
+      const rawAction = String(args?.action ?? '').toLowerCase().trim()
+      if (rawAction === 'read' || rawAction === '读取' || rawAction === '查看') {
+        return false
+      }
+    }
     if (toolName === 'novel_config') {
       const rawAction = String(args?.action ?? '').toLowerCase().trim()
       const isExplicitRead = rawAction === 'read' || rawAction === '读取' || rawAction === '查看'
@@ -449,6 +465,10 @@ export class AgentSession {
 
   setEditorSnapshot(snapshot: AgentEditorSnapshot | null | undefined): void {
     this.editorSnapshot = snapshot ?? null
+  }
+
+  setExecutionMode(mode?: 'plan' | 'writing'): void {
+    this.executionMode = mode === 'writing' ? 'writing' : 'plan'
   }
 
   /** 技能目录与项目事实每轮重建，下一次请求就会拿到新的系统提示词。 */

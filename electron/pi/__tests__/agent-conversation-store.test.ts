@@ -11,7 +11,7 @@ import {
   type SessionMetadata,
 } from '@earendil-works/pi-agent-core'
 
-import { AgentConversationStore } from '../agent-conversation-store'
+import { AgentConversationStore, foldEntriesToMessages } from '../agent-conversation-store'
 
 const roots: string[] = []
 
@@ -126,5 +126,122 @@ describe('AgentConversationStore.forGlobal', () => {
     walk(path.join(appDataRoot, 'agent-sessions'))
     expect(sessionFile).toContain(path.join('agent-sessions'))
     await reopened.close()
+  })
+
+  it('lists conversations and supports renaming natively via Session.setName', async () => {
+    const projectPath = temporaryProject()
+    const store = AgentConversationStore.forProject(projectPath)
+    const session = await store.open('conv-list-test', { create: true })
+    expect(session).not.toBeNull()
+    await appendToSession(session!, userMessage('测试首条消息作为标题'))
+
+    // 默认标题提取首条消息
+    const listBefore = await store.listConversations()
+    expect(listBefore).toHaveLength(1)
+    expect(listBefore[0].title).toBe('测试首条消息作为标题')
+
+    // 重命名
+    const renameOk = await store.renameConversation('conv-list-test', '自定义新标题')
+    expect(renameOk).toBe(true)
+
+    // 再次列出，标题已更新
+    const listAfter = await store.listConversations()
+    expect(listAfter).toHaveLength(1)
+    expect(listAfter[0].title).toBe('自定义新标题')
+
+    await store.close()
+  })
+
+  it('folds raw entries into UI messages with toolCalls', () => {
+    const entries: Entry[] = [
+      {
+        id: 'e-1',
+        parentId: null,
+        seq: 1,
+        timestamp: 1000,
+        type: 'message',
+        message: {
+          role: 'user',
+          content: [{ type: 'text', text: '写大纲' }],
+          timestamp: 1000,
+        } as never,
+      },
+      {
+        id: 'e-2',
+        parentId: 'e-1',
+        seq: 2,
+        timestamp: 1100,
+        type: 'message',
+        message: {
+          role: 'assistant',
+          content: [
+            { type: 'text', text: '正在处理' },
+            { type: 'toolCall', id: 'c1', name: 'novel_config', arguments: {} },
+          ],
+          timestamp: 1100,
+        } as never,
+      },
+      {
+        id: 'e-3',
+        parentId: 'e-2',
+        seq: 3,
+        timestamp: 1200,
+        type: 'message',
+        message: {
+          role: 'toolResult',
+          toolCallId: 'c1',
+          toolName: 'novel_config',
+          content: [{ type: 'text', text: 'ok' }],
+          isError: false,
+          timestamp: 1200,
+        } as never,
+      },
+    ]
+
+    const folded = foldEntriesToMessages(entries)
+    expect(folded).toHaveLength(2)
+    expect(folded[0].role).toBe('user')
+    expect(folded[0].content).toBe('写大纲')
+    expect(folded[1].role).toBe('assistant')
+    expect(folded[1].content).toContain('正在处理')
+    const toolCalls = folded[1].toolCalls as Array<Record<string, unknown>>
+    expect(toolCalls).toHaveLength(1)
+    expect(toolCalls[0].toolName).toBe('novel_config')
+    expect(toolCalls[0].status).toBe('completed')
+  })
+
+  it('strictly preserves chronological order (oldest first) even if entries are passed newest first', () => {
+    const reversedEntries: Entry[] = [
+      {
+        id: 'e-3',
+        parentId: 'e-2',
+        seq: 3,
+        timestamp: 3000,
+        type: 'message',
+        message: { role: 'assistant', content: [{ type: 'text', text: '第三句（最新）' }] } as never,
+      },
+      {
+        id: 'e-2',
+        parentId: 'e-1',
+        seq: 2,
+        timestamp: 2000,
+        type: 'message',
+        message: { role: 'user', content: [{ type: 'text', text: '第二句' }] } as never,
+      },
+      {
+        id: 'e-1',
+        parentId: null,
+        seq: 1,
+        timestamp: 1000,
+        type: 'message',
+        message: { role: 'user', content: [{ type: 'text', text: '第一句（最早）' }] } as never,
+      },
+    ]
+
+    const folded = foldEntriesToMessages(reversedEntries)
+    expect(folded).toHaveLength(3)
+    expect(folded[0].content).toBe('第一句（最早）')
+    expect(folded[1].content).toBe('第二句')
+    expect(folded[2].content).toBe('第三句（最新）')
   })
 })

@@ -10,14 +10,12 @@ import {
   X,
   ChevronRight,
   ChevronLeft,
-  Check,
-} from 'lucide-react'
+  Check} from 'lucide-react'
 import { selectIsGenerating, useAgentStore } from '../../../stores/agent-store'
 import { useLLMStore } from '../../../stores/llm-store'
 import {
   groupModelsByChannel,
-  type AssistantThinkingLevel,
-} from '../../../shared/agent-runtime'
+  type AssistantThinkingLevel} from '../../../shared/agent-runtime'
 import { useOutsideClick } from '../../../hooks/useOutsideClick'
 import SlashCommandMenu from './SlashCommandMenu'
 import MentionMenu from './MentionMenu'
@@ -36,24 +34,28 @@ export default function AgentInputBox() {
   const text = useLocaleStore(s => s.text)
   const [inputText, setInputText] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const { sendMessage, cancelGeneration, getActiveConversation, setModelId, setThinkingLevel, removeComposerCitation } = useAgentStore()
+  const { sendMessage, cancelGeneration, setModelId, setThinkingLevel, removeComposerCitation, setExecutionMode } = useAgentStore()
   const composerCitations = useAgentStore(s => s.composerCitations)
+  const executionMode = useAgentStore(s => s.executionMode)
   const generating = useAgentStore(selectIsGenerating)
   const models = useLLMStore(s => s.models)
   const defaultModelId = useLLMStore(s => s.defaultModelId)
+  const currentModelId = useAgentStore(s => {
+    const active = s.conversations.find(c => c.id === s.activeConversationId)
+    return active?.modelId ?? defaultModelId
+  })
+  const currentThinkingLevel = useAgentStore(s => {
+    const active = s.conversations.find(c => c.id === s.activeConversationId)
+    return active?.thinkingLevel ?? null
+  })
 
   // 过滤出非仅限 embedding 专用的模型
   const chatModels = models.filter(m => !(m.purposes.length === 1 && m.purposes[0] === 'embedding'))
-
-  const activeConv = getActiveConversation()
-  const currentModelId = activeConv?.modelId ?? defaultModelId
 
   // 找到当前模型信息
   const currentModel = models.find(m => m.id === currentModelId)
   // 同一渠道（provider + 协议 + baseUrl）下的模型归成一组：菜单按「渠道 → 模型」两层展示。
   const modelGroups = groupModelsByChannel(chatModels)
-  // 会话级思考等级；null = 不指定，走 Pi 默认。
-  const currentThinkingLevel = activeConv?.thinkingLevel ?? null
 
   // 下拉菜单状态
   const [showContextMenu, setShowContextMenu] = useState(false)
@@ -249,8 +251,7 @@ export default function AgentInputBox() {
             width: 180,
             backgroundColor: 'var(--color-sidebar)',
             border: '1px solid var(--color-border)',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
-          }}
+            boxShadow: '0 8px 24px rgba(0,0,0,0.25)'}}
         >
           <div className="text-[0.7rem] px-3 pb-1 pt-1" style={{ color: 'var(--color-text-muted)' }}>
             {text('添加上下文', 'Add context')}
@@ -285,8 +286,7 @@ export default function AgentInputBox() {
             border: '1px solid var(--color-border)',
             boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
             maxHeight: 320,
-            overflowY: 'auto',
-          }}
+            overflowY: 'auto'}}
         >
           {/* 根视图：模型 > 与 思考 > */}
           {selectPane === 'root' && (
@@ -447,8 +447,7 @@ export default function AgentInputBox() {
                 style={{
                   backgroundColor: 'var(--color-panel)',
                   border: '1px solid var(--color-accent)',
-                  color: 'var(--color-text)',
-                }}
+                  color: 'var(--color-text)'}}
                 title={`${location}\n${citation.quote}`}
               >
                 <span className="truncate">
@@ -485,8 +484,7 @@ export default function AgentInputBox() {
               minHeight: 36,
               maxHeight: MAX_HEIGHT,
               overflowY: 'hidden',
-              display: 'block',
-            }}
+              display: 'block'}}
           />
         {/* 占位文字颜色已通过 tailwind placeholder 设置 */}
       </div>
@@ -510,6 +508,40 @@ export default function AgentInputBox() {
             </ToolbarIconBtn>
           </div>
 
+          {/* 执行模式切换：纯文字 计划 / 写作，零图标零 Emoji */}
+          <div
+            className="flex items-center rounded text-[11px] p-0.5 shrink-0"
+            style={{
+              backgroundColor: 'var(--color-bg-secondary)',
+              border: '1px solid var(--color-border)',
+            }}
+          >
+            <button
+              type="button"
+              className={`px-1.5 py-0.5 rounded transition-colors ${
+                executionMode === 'plan'
+                  ? 'font-medium bg-[var(--color-bg)] text-[var(--color-text)] shadow-xs'
+                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
+              }`}
+              onClick={() => setExecutionMode('plan')}
+              title={text('计划模式：写操作需人工批准', 'Plan mode: writes require approval')}
+            >
+              {text('计划', 'Plan')}
+            </button>
+            <button
+              type="button"
+              className={`px-1.5 py-0.5 rounded transition-colors ${
+                executionMode === 'writing'
+                  ? 'font-medium bg-[var(--color-bg)] text-[var(--color-text)] shadow-xs'
+                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
+              }`}
+              onClick={() => setExecutionMode('writing')}
+              title={text('写作模式：创作读写全自动放行', 'Writing mode: autonomous execution')}
+            >
+              {text('写作', 'Write')}
+            </button>
+          </div>
+
           {/* DSH 风格模型与思考选择器：单个触发器 + 二级面板联动 */}
           <div ref={modelSelectRef} className="relative min-w-0">
             <button
@@ -527,8 +559,7 @@ export default function AgentInputBox() {
               style={{
                 color: 'var(--color-text-secondary)',
                 opacity: 0.85,
-                maxWidth: 200,
-              }}
+                maxWidth: 260}}
               onMouseEnter={e => {
                 e.currentTarget.style.backgroundColor = 'var(--color-hover)'
                 e.currentTarget.style.opacity = '1'
@@ -537,21 +568,19 @@ export default function AgentInputBox() {
                 e.currentTarget.style.backgroundColor = 'transparent'
                 e.currentTarget.style.opacity = '0.85'
               }}
-              title={currentThinkingLevel ? `${currentModel?.modelName ?? currentModel?.name ?? text('选择模型', 'Select model')} · ${thinkingLevelLabel(text, currentThinkingLevel)}` : (currentModel?.modelName ?? currentModel?.name ?? text('选择模型', 'Select model'))}
+              title={`${currentModel?.modelName ?? currentModel?.name ?? text('选择模型', 'Select model')} · ${thinkingLevelLabel(text, currentThinkingLevel)}`}
             >
               <span className="truncate select-none font-medium">
                 {currentModel?.modelName
                   ?? currentModel?.name
                   ?? (chatModels.length === 0 ? text('未配置模型', 'No model configured') : text('选择模型', 'Select model'))}
               </span>
-              {currentThinkingLevel && (
-                <span
-                  className="text-[0.68rem] px-1 rounded flex-shrink-0 select-none font-normal"
-                  style={{ backgroundColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}
-                >
-                  {thinkingLevelLabel(text, currentThinkingLevel)}
-                </span>
-              )}
+              <span
+                className="text-[0.68rem] px-1 rounded flex-shrink-0 select-none font-normal"
+                style={{ backgroundColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}
+              >
+                {thinkingLevelLabel(text, currentThinkingLevel)}
+              </span>
               <ChevronDown size={13} strokeWidth={1.5} className="flex-shrink-0" />
             </button>
           </div>
@@ -572,8 +601,7 @@ export default function AgentInputBox() {
                 : 'rgba(128,128,128,0.3)',
               color: '#ffffff',
               cursor: !generating && !canSend ? 'not-allowed' : 'pointer',
-              opacity: !generating && !canSend ? 0.5 : 1,
-            }}
+              opacity: !generating && !canSend ? 0.5 : 1}}
             title={generating ? text('停止生成', 'Stop generation') : text('发送消息', 'Send message')}
           >
             {generating ? (
@@ -594,8 +622,7 @@ export default function AgentInputBox() {
 function ToolbarIconBtn({
   children,
   title,
-  onClick,
-}: {
+  onClick}: {
   children: React.ReactNode
   title: string
   onClick?: () => void
@@ -625,8 +652,7 @@ function ContextMenuItem({
   icon,
   label,
   onClick,
-  disabled,
-}: {
+  disabled}: {
   icon: React.ReactNode
   label: string
   onClick: () => void
@@ -640,8 +666,7 @@ function ContextMenuItem({
       className="w-full flex items-center gap-2 px-3 py-1.5 text-xs transition-colors"
       style={{
         color: disabled ? 'var(--color-text-muted)' : 'var(--color-text)',
-        cursor: disabled ? 'not-allowed' : 'pointer',
-      }}
+        cursor: disabled ? 'not-allowed' : 'pointer'}}
       onMouseEnter={e => {
         if (!disabled) e.currentTarget.style.backgroundColor = 'var(--color-hover)'
       }}

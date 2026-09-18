@@ -28,6 +28,11 @@ import { FinalizationRepository } from '../repositories/finalization-repository'
 import { ImportGlobalFactsRepository } from '../repositories/import-global-facts-repository'
 import type { ImportGlobalFactsRequest } from '../../src/shared/import-global-facts'
 import { ImportRunRepository } from '../repositories/import-run-repository'
+import { StudyDossierRepository } from '../repositories/study-dossier-repository'
+import type {
+  NovelStudyDossier,
+  NovelStudyProjectionOptions,
+} from '../../src/shared/novel-study'
 import type {
   ImportRunExecutionLease,
   ImportRunPrepareEffectReceiptRequest,
@@ -473,6 +478,40 @@ export function registerDatabaseController() {
   ) => {
     assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
     return { success: true, run: ImportRunRepository.complete(runId, execution) }
+  })
+
+  // ============================================================
+  // study-dossiers — 佳作研习档案
+  // ============================================================
+  ipcMain.handle('db:study-dossier-save', async (_event, dossier: NovelStudyDossier, expectedProjectPath: string) => {
+    assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
+    StudyDossierRepository.save(dossier)
+    return { success: true }
+  })
+
+  ipcMain.handle('db:study-dossier-get', async (_event, id: string, expectedProjectPath: string) => {
+    assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
+    return StudyDossierRepository.get(id)
+  })
+
+  ipcMain.handle('db:study-dossier-get-by-run', async (_event, runId: string, expectedProjectPath: string) => {
+    assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
+    return StudyDossierRepository.getByRunId(runId)
+  })
+
+  ipcMain.handle('db:study-dossier-list', async (_event, expectedProjectPath: string) => {
+    assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
+    return StudyDossierRepository.list()
+  })
+
+  ipcMain.handle('db:study-dossier-delete', async (_event, id: string, expectedProjectPath: string) => {
+    assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
+    return { success: StudyDossierRepository.delete(id) }
+  })
+
+  ipcMain.handle('db:study-dossier-apply', async (_event, options: NovelStudyProjectionOptions, expectedProjectPath: string) => {
+    assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
+    return { success: true, receipt: StudyDossierRepository.applyProjection(options) }
   })
 
   // ============================================================

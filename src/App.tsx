@@ -20,6 +20,8 @@ import AIOutputPanel from './components/panels/AIOutputPanel'
 import BottomPanel from './components/panels/BottomPanel'
 import NewProjectDialog from './components/dialogs/NewProjectDialog'
 import ImportNovelDialog from './components/dialogs/ImportNovelDialog'
+import AuthorManuscriptImportDialog from './components/dialogs/AuthorManuscriptImportDialog'
+import NovelDeconstructionDialog from './components/dialogs/NovelDeconstructionDialog'
 import ChapterCreationDialog from './components/dialogs/ChapterCreationDialog'
 import ExportDialog from './components/dialogs/ExportDialog'
 import SettingsModal from './components/settings/SettingsModal'
@@ -107,6 +109,10 @@ export default function App() {
   const closeExport = useLayoutStore(s => s.closeExport)
   const importNovelOpen = useLayoutStore(s => s.importNovelOpen)
   const closeImportNovel = useLayoutStore(s => s.closeImportNovel)
+  const authorManuscriptImportOpen = useLayoutStore(s => s.authorManuscriptImportOpen)
+  const closeAuthorManuscriptImport = useLayoutStore(s => s.closeAuthorManuscriptImport)
+  const novelDeconstructionOpen = useLayoutStore(s => s.novelDeconstructionOpen)
+  const closeNovelDeconstruction = useLayoutStore(s => s.closeNovelDeconstruction)
   const chapterCreationOpen = useLayoutStore(s => s.chapterCreationOpen)
   const chapterCreationPrefill = useLayoutStore(s => s.chapterCreationPrefill)
   const closeChapterCreation = useLayoutStore(s => s.closeChapterCreation)
@@ -334,8 +340,16 @@ export default function App() {
         open={newProjectOpen}
         onClose={closeNewProject}
       />
+      <AuthorManuscriptImportDialog
+        open={authorManuscriptImportOpen}
+        onClose={closeAuthorManuscriptImport}
+      />
+      <NovelDeconstructionDialog
+        open={novelDeconstructionOpen}
+        onClose={closeNovelDeconstruction}
+      />
       <ImportNovelDialog
-        open={importNovelOpen}
+        open={importNovelOpen && !novelDeconstructionOpen && !authorManuscriptImportOpen}
         onClose={closeImportNovel}
       />
       <ChapterCreationDialog

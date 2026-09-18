@@ -26,8 +26,7 @@ function profile(overrides: Partial<ModelProfile> & { id: string; modelName: str
     temperature: 0.7,
     maxTokens: 65530,
     purposes: ['generation'],
-    ...overrides,
-  }
+    ...overrides}
 }
 
 /** 一条会话：模型与思考等级都是会话级的，这里从"都没选"开始。 */
@@ -41,8 +40,7 @@ function conversation(): AgentConversation {
     mode: 'planning',
     modelId: null,
     thinkingLevel: null,
-    scope: 'project',
-  }
+    scope: 'project'}
 }
 
 function buttonWithText(fragment: string): HTMLButtonElement | undefined {
@@ -64,8 +62,7 @@ beforeEach(() => {
     activeConversationId: 'conv-1',
     activeRequestId: null,
     composerCitations: [],
-    toolsInitialized: true,
-  })
+    toolsInitialized: true})
   useLLMStore.setState({
     // 同一渠道下两个模型 + 另一个渠道一个模型：菜单要按渠道分两层。
     models: [
@@ -73,8 +70,7 @@ beforeEach(() => {
       profile({ id: 'p2', modelName: 'gemini-3.1-pro-low' }),
       profile({ id: 'p3', modelName: 'gpt-5', provider: 'openai', protocol: 'openai', baseUrl: 'https://api.openai.com/v1' }),
     ],
-    defaultModelId: 'p1',
-  })
+    defaultModelId: 'p1'})
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
@@ -92,8 +88,10 @@ afterEach(async () => {
 describe('assistant composer runtime pickers', () => {
   it('groups the saved models by channel and switches the conversation model (DSH two-level menu)', async () => {
     await act(async () => root.render(<AgentInputBox />))
-    // 触发按钮上显示当前模型名
-    expect(buttonWithText('gemini-3.8-flash-low')).toBeDefined()
+    // 触发按钮上同时显示当前模型名和思考档（未指定时为「关」）
+    const trigger = buttonWithText('gemini-3.8-flash-low')
+    expect(trigger).toBeDefined()
+    expect(trigger?.textContent).toContain('关')
 
     // 1. 点击触发器，打开 DSH 根菜单
     await click(buttonWithText('gemini-3.8-flash-low'))
@@ -144,5 +142,6 @@ describe('assistant composer runtime pickers', () => {
     await click(container.querySelector<HTMLButtonElement>('[data-thinking-level="default"]') ?? undefined)
 
     expect(useAgentStore.getState().getActiveConversation()?.thinkingLevel).toBeNull()
+    expect(buttonWithText('gemini-3.8-flash-low')?.textContent).toContain('关')
   })
 })

@@ -183,7 +183,7 @@ ai-novel-writer-mac-x64-<version>-installer.dmg
 
 ## Development and architecture documentation
 
-See [`docs/README.md`](docs/README.md) for documentation authority, ADRs, research, agent rules, and dated handoffs.
+See [`docs/README.md`](docs/README.md) for documentation authority, ADRs, research, and agent collaboration guidelines.
 
 ## License
 

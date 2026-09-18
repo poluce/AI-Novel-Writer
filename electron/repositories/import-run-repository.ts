@@ -40,6 +40,7 @@ import {
 } from '../../src/shared/import-limits'
 import { ProjectCoreRepository } from './project-core-repository'
 import { FinalizedDraftImportRepository } from './finalized-draft-import-repository'
+import { StudyDossierRepository } from './study-dossier-repository'
 
 interface ImportRunRow {
   id: string
@@ -2299,6 +2300,9 @@ export class ImportRunRepository {
         }
         default:
           throw new Error('导入 effect receipt 类型不受支持')
+      }
+      if (run.purpose !== 'author-manuscript') {
+        StudyDossierRepository.updateFromImportEffect(runId, row.kind, row.payload_json)
       }
       const checkpoint = applyBatchCheckpoint(run, stage, batchId, 'receipt')
       db().prepare(`

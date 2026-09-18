@@ -10,8 +10,7 @@ import {
   Settings,
   ScrollText,
   Cpu,
-  Map,
-} from 'lucide-react'
+  Map} from 'lucide-react'
 import { useLayoutStore, type SidebarView, type BottomTab } from '../../stores/layout-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { useProjectStore } from '../../stores/project-store'
@@ -22,7 +21,6 @@ import { useLocaleStore } from '../../stores/locale-store'
 /** 左侧侧边栏视图按钮配置（不含 Home，它单独渲染） */
 const sidebarActivities: Array<{ id: SidebarView; icon: typeof FolderOpen; zh: string; en: string }> = [
   { id: 'project', icon: FolderOpen, zh: '项目', en: 'Project' },
-  { id: 'characters', icon: Users, zh: '角色', en: 'Cast' },
 ]
 
 /** 底部面板 Tab 按钮配置 */
@@ -39,8 +37,7 @@ function LeftNavButton({
   pulse,
   disabled,
   onClick,
-  title,
-}: {
+  title}: {
   icon: typeof FolderOpen
   label: string
   active?: boolean
@@ -96,8 +93,7 @@ export default function LeftToolWindowBar() {
       id: 'config',
       name: text('小说配置', 'Novel configuration'),
       type: 'config',
-      projectKey: project.path,
-    })
+      projectKey: project.path})
   }
 
   /** Home 按钮是否激活 */
@@ -109,8 +105,7 @@ export default function LeftToolWindowBar() {
       className="writer-left-rail no-select flex flex-col h-full"
       style={{
         width: 'var(--width-left-bar)',
-        flexShrink: 0,
-      }}
+        flexShrink: 0}}
     >
       {/* ===== 顶部：Home + 侧边栏视图切换 ===== */}
       <div className="flex flex-col items-center w-full pt-0.5">
@@ -152,18 +147,6 @@ export default function LeftToolWindowBar() {
         <div className="writer-nav-divider w-8 my-1" style={{ height: 1 }} />
 
         <LeftNavButton
-          icon={ListTree}
-          label={text('蓝图', 'Plot')}
-          active={activeRailItem === 'blueprint'}
-          disabled={!hasOpenProject}
-          title={text('章节蓝图', 'Chapter blueprint')}
-          onClick={() => {
-            if (!hasOpenProject) return
-            setSidebarView('project', 'blueprint')
-            openBuiltinEditor('chapter-card-editor', text('章节蓝图', 'Chapter blueprint'), 'chapter-card')
-          }}
-        />
-        <LeftNavButton
           icon={Globe2}
           label={text('架构', 'Architecture')}
           active={activeRailItem === 'world'}
@@ -188,6 +171,18 @@ export default function LeftToolWindowBar() {
           }}
         />
         <LeftNavButton
+          icon={ListTree}
+          label={text('蓝图', 'Plot')}
+          active={activeRailItem === 'blueprint'}
+          disabled={!hasOpenProject}
+          title={text('章节蓝图', 'Chapter blueprint')}
+          onClick={() => {
+            if (!hasOpenProject) return
+            setSidebarView('project', 'blueprint')
+            openBuiltinEditor('chapter-card-editor', text('章节蓝图', 'Chapter blueprint'), 'chapter-card')
+          }}
+        />
+        <LeftNavButton
           icon={GitBranch}
           label={text('剧情', 'Plot tree')}
           active={plotTreeActive}
@@ -202,6 +197,17 @@ export default function LeftToolWindowBar() {
               'narrative-thread',
               'plot-tree',
             )
+          }}
+        />
+        <LeftNavButton
+          icon={Users}
+          label={text('人物', 'Cast')}
+          active={activeRailItem === 'characters'}
+          disabled={!hasOpenProject}
+          title={text('人物', 'Cast')}
+          onClick={() => {
+            if (!hasOpenProject) return
+            setSidebarView('characters')
           }}
         />
         <LeftNavButton

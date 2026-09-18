@@ -429,7 +429,7 @@ export default function EditorArea() {
           }
         }}
         onImportNovel={() => {
-          useLayoutStore.getState().openImportNovel()
+          useLayoutStore.getState().openNovelDeconstruction()
         }}
       />
     )

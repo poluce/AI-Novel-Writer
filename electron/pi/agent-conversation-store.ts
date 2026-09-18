@@ -3,6 +3,7 @@ import path from 'node:path'
 import {
   BACKGROUND_CONTEXT,
   JsonlSessionRepo,
+  type Entry,
   type JsonlSessionMetadata,
   type Session,
 } from '@earendil-works/pi-agent-core'
@@ -11,6 +12,10 @@ import { NodeExecutionEnv } from '@earendil-works/pi-agent-core/harness/env/node
 import { DIR_VELA_INTERNAL } from '../../src/shared/project-paths'
 import { logFailure, logInfo } from '../../src/shared/fail-log'
 import { VELA_HOME } from '../utils/config-utils'
+import type {
+  PersistedAgentConversation,
+  PersistedAgentMessage,
+} from '../../src/shared/agent-conversation-archive'
 
 /** 会话文件所在的一级目录名（项目内与 `~/.vela` 下同名）。 */
 export const SESSIONS_DIR = 'agent-sessions'
@@ -23,10 +28,138 @@ export interface AgentConversationStoreRoot {
 }
 
 /**
- * 一个作用域的 Pi 会话存档：项目助手落在项目内，界面助手落在应用数据目录。
+ * 将底层原始 Entry 事件列表折叠转换为符合前端展示的气泡消息结构。
+ * 严格保持时间升序（最早消息在前，最新消息在后）。
+ */
+export function foldEntriesToMessages(entries: readonly Entry[]): PersistedAgentMessage[] {
+  // 必须严格按序列号/时间戳升序排序，杜绝底层倒序扫描带来的错位
+  const sortedEntries = [...entries].sort((a, b) => {
+    if (typeof a.seq === 'number' && typeof b.seq === 'number' && a.seq !== b.seq) {
+      return a.seq - b.seq
+    }
+    return (a.timestamp || 0) - (b.timestamp || 0)
+  })
+
+  const foldedMessages: PersistedAgentMessage[] = []
+  let currentAssistant: PersistedAgentMessage | null = null
+  const toolResultsById = new Map<string, { text: string; isError?: boolean; details?: unknown }>()
+
+  // 1. 收集所有 toolResult / tool 回执
+  for (const it of sortedEntries) {
+    if (it.type !== 'message') continue
+    const m = it.message as unknown as Record<string, unknown>
+    if (m.role === 'toolResult' || m.role === 'tool') {
+      const toolCallId = String(m.toolCallId ?? '')
+      let resultText = ''
+      const content = m.content
+      if (Array.isArray(content)) {
+        for (const p of content) {
+          if (p && typeof p === 'object' && 'text' in p && typeof p.text === 'string') {
+            resultText += p.text
+          }
+        }
+      } else if (typeof content === 'string') {
+        resultText = content
+      }
+      toolResultsById.set(toolCallId, {
+        text: resultText,
+        isError: Boolean(m.isError),
+        details: m.details,
+      })
+    }
+  }
+
+  // 2. 遍历消息条目还原 user 与 assistant
+  for (const it of sortedEntries) {
+    if (it.type !== 'message') continue
+    const m = it.message as unknown as Record<string, unknown>
+    const role = m.role
+    const ts = it.timestamp || (typeof m.timestamp === 'number' ? m.timestamp : Date.now())
+    const eid = it.id
+
+    if (role === 'user') {
+      currentAssistant = null
+      let userText = ''
+      const content = m.content
+      if (Array.isArray(content)) {
+        for (const p of content) {
+          if (p && typeof p === 'object' && 'text' in p && typeof p.text === 'string') {
+            userText += p.text
+          }
+        }
+      } else if (typeof content === 'string') {
+        userText = content
+      }
+      foldedMessages.push({
+        id: eid,
+        role: 'user',
+        content: userText,
+        createdAt: ts,
+      })
+    } else if (role === 'assistant') {
+      let assistantText = ''
+      const toolCalls: Record<string, unknown>[] = []
+      const content = m.content
+      if (Array.isArray(content)) {
+        for (const p of content) {
+          if (!p || typeof p !== 'object') continue
+          const part = p as Record<string, unknown>
+          if (part.type === 'text' && typeof part.text === 'string') {
+            assistantText += part.text
+          } else if (part.type === 'toolCall') {
+            const tcid = String(part.id ?? '')
+            const tname = String(part.name ?? '')
+            const targs = part.arguments as Record<string, unknown>
+            const res = toolResultsById.get(tcid)
+            toolCalls.push({
+              id: tcid,
+              toolName: tname,
+              arguments: targs ?? {},
+              status: res?.isError ? 'failed' : 'completed',
+              result: res?.text,
+              details: res?.details,
+              error: res?.isError ? res.text : undefined,
+              source: tname.startsWith('mcp__') ? 'mcp' : 'builtin',
+            })
+          }
+        }
+      } else if (typeof content === 'string') {
+        assistantText = content
+      }
+
+      // 如果上一条也是同一个回合的 assistant 消息，合并文本与工具调用
+      if (currentAssistant && foldedMessages.length > 0 && foldedMessages[foldedMessages.length - 1] === currentAssistant) {
+        if (assistantText) {
+          currentAssistant.content = currentAssistant.content
+            ? `${currentAssistant.content}\n\n${assistantText}`
+            : assistantText
+        }
+        if (toolCalls.length > 0) {
+          const prevCalls = (currentAssistant.toolCalls as Record<string, unknown>[]) || []
+          currentAssistant.toolCalls = [...prevCalls, ...toolCalls]
+        }
+      } else {
+        currentAssistant = {
+          id: eid,
+          role: 'assistant',
+          content: assistantText,
+          createdAt: ts,
+          ...(toolCalls.length > 0 ? { toolCalls } : {}),
+        }
+        foldedMessages.push(currentAssistant)
+      }
+    }
+  }
+
+  // 严格按时间升序返回（最早在 index 0，最新在最末尾）
+  foldedMessages.sort((a, b) => a.createdAt - b.createdAt)
+  return foldedMessages
+}
+
+/**
+ * 一个作用域的 Pi 会话仓储服务（单一真实数据源）。
  *
- * 这一层只负责「按 conversationId 打开/创建/删除一个 Pi 会话」——条目写入、
- * 上下文投影、压缩全部由 `AgentHarness` 在会话内部完成（见 agent-session.ts）。
+ * 负责会话的创建、打开、扫描还原、重命名与删除。
  */
 export class AgentConversationStore {
   private readonly fileSystem: NodeExecutionEnv
@@ -65,7 +198,6 @@ export class AgentConversationStore {
 
   /**
    * 取这个对话的 Pi 会话；`create` 为真时没有就建一个。
-   * 返回的会话直接交给 `AgentHarness.create()`。
    */
   async open(
     conversationId: string,
@@ -76,9 +208,6 @@ export class AgentConversationStore {
 
   /**
    * 忘掉一个已关闭的会话。
-   *
-   * harness 关闭时会连会话一起关掉，而仓库拒绝重复打开仍登记在册的会话，
-   * 所以关掉 harness 的一方必须同时让这里松手，下一次打开才会重新读盘。
    */
   forget(conversationId: string): void {
     this.opened.delete(conversationId)
@@ -87,7 +216,6 @@ export class AgentConversationStore {
   async delete(conversationId: string): Promise<void> {
     const metadata = await this.metadataFor(conversationId)
     if (!metadata) return
-    // 仓库拒绝删除仍打开的会话，先关掉再删。
     const open = this.opened.get(conversationId)
     if (open) {
       this.opened.delete(conversationId)
@@ -112,6 +240,99 @@ export class AgentConversationStore {
       await this.repo.close(BACKGROUND_CONTEXT)
     } catch (error) {
       logFailure('Agent', 'failed to close conversation session repo', error)
+    }
+  }
+
+  /**
+   * 扫描并还原底层所有会话，按最新修改时间倒序排列。
+   */
+  async listConversations(): Promise<PersistedAgentConversation[]> {
+    if (this.closed) return []
+
+    const metadataList = await this.repo.list({ cwd: this.cwd }, BACKGROUND_CONTEXT)
+    this.known.clear()
+    for (const meta of metadataList) this.known.set(meta.id, meta)
+    this.scanned = true
+
+    const conversations: PersistedAgentConversation[] = []
+    for (const meta of metadataList) {
+      try {
+        const conv = await this.hydrateSession(meta)
+        if (conv) conversations.push(conv)
+      } catch (err) {
+        logFailure('Agent', 'failed to hydrate session', err, { conversationId: meta.id })
+      }
+    }
+
+    // 按最后修改/发言时间降序排列
+    conversations.sort((a, b) => b.updatedAt - a.updatedAt)
+    return conversations
+  }
+
+  /**
+   * 获取单个会话的完整消息树。
+   */
+  async getConversation(conversationId: string): Promise<PersistedAgentConversation | null> {
+    if (this.closed) return null
+    const meta = await this.metadataFor(conversationId)
+    if (!meta) return null
+    return this.hydrateSession(meta)
+  }
+
+  /**
+   * 重命名会话：利用原生 Session.setName 持久化固化至 .jsonl。
+   */
+  async renameConversation(conversationId: string, title: string): Promise<boolean> {
+    if (this.closed) return false
+    const session = await this.sessionFor(conversationId, false)
+    if (!session) return false
+    try {
+      await session.setName(title, BACKGROUND_CONTEXT)
+      return true
+    } catch (err) {
+      logFailure('Agent', 'failed to rename conversation session', err, { conversationId })
+      return false
+    }
+  }
+
+  private async hydrateSession(meta: JsonlSessionMetadata): Promise<PersistedAgentConversation | null> {
+    const session = await this.sessionFor(meta.id, false)
+    if (!session) return null
+
+    let customName: string | undefined
+    try {
+      customName = await session.getName(BACKGROUND_CONTEXT)
+    } catch {
+      // session may not have custom name
+    }
+
+    const branch = await session.branch('main', BACKGROUND_CONTEXT)
+    const entries = (await branch?.findEntries({ order: 'oldestFirst' }, BACKGROUND_CONTEXT)) ?? []
+    const messages = foldEntriesToMessages(entries)
+
+    let title = customName
+    if (!title || !title.trim()) {
+      const firstUserMsg = messages.find(m => m.role === 'user')
+      if (firstUserMsg && firstUserMsg.content.trim()) {
+        const clean = firstUserMsg.content.replace(/\s+/g, ' ').trim()
+        title = clean.length > 24 ? `${clean.slice(0, 24)}…` : clean
+      } else {
+        title = '新对话'
+      }
+    }
+
+    const lastMsgTime = messages.length > 0 ? messages[messages.length - 1].createdAt : 0
+    const updatedAt = Math.max(meta.modifiedAt || 0, meta.createdAt || 0, lastMsgTime)
+
+    return {
+      id: meta.id,
+      title,
+      messages,
+      createdAt: meta.createdAt || Date.now(),
+      updatedAt,
+      mode: 'planning',
+      modelId: null,
+      thinkingLevel: null,
     }
   }
 

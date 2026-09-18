@@ -47,6 +47,10 @@ interface LayoutState {
   exportOpen: boolean
   /** 导入小说对话框是否打开 */
   importNovelOpen: boolean
+  /** 作者原稿导入对话框是否打开 */
+  authorManuscriptImportOpen: boolean
+  /** 小说拆解研习对话框是否打开 */
+  novelDeconstructionOpen: boolean
   /** 章节创建对话框是否打开 */
   chapterCreationOpen: boolean
   /** 章节创建对话框的预填参数 */
@@ -76,6 +80,10 @@ interface LayoutState {
   closeExport: () => void
   openImportNovel: () => void
   closeImportNovel: () => void
+  openAuthorManuscriptImport: () => void
+  closeAuthorManuscriptImport: () => void
+  openNovelDeconstruction: () => void
+  closeNovelDeconstruction: () => void
   openChapterCreation: (prefill?: ChapterCreationPrefill) => void
   closeChapterCreation: () => void
 }
@@ -91,7 +99,7 @@ export const useLayoutStore = create<LayoutState>()((set) => ({
   aiPanelWidth: 320,
   rightView: 'agent',
 
-  bottomPanelOpen: true,
+  bottomPanelOpen: false,
   bottomTab: 'tasks',
   bottomPanelHeight: 200,
 
@@ -101,6 +109,8 @@ export const useLayoutStore = create<LayoutState>()((set) => ({
   newProjectOpen: false,
   exportOpen: false,
   importNovelOpen: false,
+  authorManuscriptImportOpen: false,
+  novelDeconstructionOpen: false,
   chapterCreationOpen: false,
   chapterCreationPrefill: null,
 
@@ -113,8 +123,7 @@ export const useLayoutStore = create<LayoutState>()((set) => ({
       return {
         sidebarView: view,
         activeRailItem: nextRailItem,
-        sidebarOpen: sameButton ? !s.sidebarOpen : true,
-      }
+        sidebarOpen: sameButton ? !s.sidebarOpen : true}
     }),
   setSidebarWidth: (width) => set({ sidebarWidth: Math.max(200, Math.min(500, width)) }),
 
@@ -131,8 +140,7 @@ export const useLayoutStore = create<LayoutState>()((set) => ({
       return {
         bottomTab: tab,
         activeRailItem: tab,
-        bottomPanelOpen: sameButton ? !s.bottomPanelOpen : true,
-      }
+        bottomPanelOpen: sameButton ? !s.bottomPanelOpen : true}
     }),
   setBottomPanelHeight: (height) => set({ bottomPanelHeight: Math.max(100, Math.min(500, height)) }),
   openBottomTab: (tab) => set({ bottomPanelOpen: true, bottomTab: tab, activeRailItem: tab }),
@@ -164,8 +172,11 @@ export const useLayoutStore = create<LayoutState>()((set) => ({
   closeNewProject: () => set({ newProjectOpen: false }),
   openExport: () => set({ exportOpen: true }),
   closeExport: () => set({ exportOpen: false }),
-  openImportNovel: () => set({ importNovelOpen: true }),
-  closeImportNovel: () => set({ importNovelOpen: false }),
+  openImportNovel: () => set({ importNovelOpen: true, novelDeconstructionOpen: true }),
+  closeImportNovel: () => set({ importNovelOpen: false, novelDeconstructionOpen: false }),
+  openAuthorManuscriptImport: () => set({ authorManuscriptImportOpen: true }),
+  closeAuthorManuscriptImport: () => set({ authorManuscriptImportOpen: false }),
+  openNovelDeconstruction: () => set({ novelDeconstructionOpen: true, importNovelOpen: true }),
+  closeNovelDeconstruction: () => set({ novelDeconstructionOpen: false, importNovelOpen: false }),
   openChapterCreation: (prefill = null) => set({ chapterCreationOpen: true, chapterCreationPrefill: prefill }),
-  closeChapterCreation: () => set({ chapterCreationOpen: false, chapterCreationPrefill: null }),
-}))
+  closeChapterCreation: () => set({ chapterCreationOpen: false, chapterCreationPrefill: null })}))

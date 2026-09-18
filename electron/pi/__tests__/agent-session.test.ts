@@ -385,4 +385,56 @@ describe('AgentSession', () => {
       fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })
     }
   })
+
+  it('bypasses confirmation for creative tools in writing mode while keeping confirmation in plan mode', async () => {
+    // 1. 计划模式下：要求确认
+    const planRun = await buildSession({
+      tools: [addTool] as never,
+      confirmationToolNames: new Set(['add_numbers']),
+      decision: () => true,
+      responses: [
+        fauxAssistantMessage([fauxToolCall('add_numbers', { a: 1, b: 2 })]),
+        fauxAssistantMessage('计算完成'),
+      ],
+    })
+    planRun.session.setExecutionMode('plan')
+    await planRun.session.prompt('加一下')
+    await planRun.session.close()
+
+    expect(planRun.events.some(e => e.type === 'tool_call_confirm')).toBe(true)
+
+    // 2. 写作模式下：自动放行创作工具，无需确认
+    const writingRun = await buildSession({
+      tools: [addTool] as never,
+      confirmationToolNames: new Set(['add_numbers']),
+      responses: [
+        fauxAssistantMessage([fauxToolCall('add_numbers', { a: 1, b: 2 })]),
+        fauxAssistantMessage('计算完成'),
+      ],
+    })
+    writingRun.session.setExecutionMode('writing')
+    await writingRun.session.prompt('加一下')
+    await writingRun.session.close()
+
+    expect(writingRun.events.some(e => e.type === 'tool_call_confirm')).toBe(false)
+    expect(writingRun.events.some(e => e.type === 'tool_call_complete')).toBe(true)
+  })
+
+  it('keeps confirmation for bash even in writing mode', async () => {
+    const bashRun = await buildSession({
+      tools: [],
+      withExecutionEnv: true,
+      confirmationToolNames: new Set(['bash']),
+      decision: () => true,
+      responses: [
+        fauxAssistantMessage([fauxToolCall('bash', { command: 'echo 42' })]),
+        fauxAssistantMessage('执行完毕'),
+      ],
+    })
+    bashRun.session.setExecutionMode('writing')
+    await bashRun.session.prompt('跑命令')
+    await bashRun.session.close()
+
+    expect(bashRun.events.some(e => e.type === 'tool_call_confirm')).toBe(true)
+  })
 })

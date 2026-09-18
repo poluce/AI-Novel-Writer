@@ -547,6 +547,23 @@ export function ensureProjectSchema(db: BetterSqlite3.Database, importSourceSecr
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS study_dossiers (
+      id TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      source_files_json TEXT NOT NULL,
+      total_chapters INTEGER NOT NULL,
+      total_words INTEGER NOT NULL,
+      style_profile_json TEXT NOT NULL,
+      inferred_outline_json TEXT NOT NULL,
+      character_cards_json TEXT NOT NULL,
+      blueprints_json TEXT NOT NULL,
+      knowledge_partition_id TEXT DEFAULT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_study_dossiers_run_id ON study_dossiers(run_id);
   `)
 
   const draftColumns = db.prepare('PRAGMA table_info(drafts)').all() as Array<{ name: string }>

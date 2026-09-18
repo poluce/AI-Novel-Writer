@@ -28,12 +28,11 @@ beforeEach(() => {
   useMCPStore.setState({ servers: [], tools: [] })
   useAgentStore.setState({
     conversations: [],
-    activeScope: 'project',
+    activeScope: 'global',
     scopeActiveConversationIds: { project: null, global: null },
     activeConversationId: null,
     showHistory: false,
-    toolsInitialized: true,
-  })
+    toolsInitialized: true})
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
@@ -56,9 +55,8 @@ describe('assistant scope switcher', () => {
 
     expect(tab('项目助手')?.disabled).toBe(true)
     expect(tab('界面助手')?.disabled).toBe(false)
-
-    await act(async () => tab('界面助手')?.click())
-    expect(useAgentStore.getState().activeScope).toBe('global')
+    expect(tab('项目助手')?.getAttribute('aria-selected')).toBe('false')
+    expect(tab('界面助手')?.getAttribute('aria-selected')).toBe('true')
 
     // 项目助手此时点不动，仍停在界面助手。
     await act(async () => tab('项目助手')?.click())
@@ -71,9 +69,8 @@ describe('assistant scope switcher', () => {
         id: 'p1',
         name: '潮门',
         path: 'C:\\novels\\chaomen',
-        novelConfig: { writingLanguage: 'zh-CN' },
-      },
-    } as never)
+        novelConfig: { writingLanguage: 'zh-CN' }}} as never)
+    useAgentStore.setState({ activeScope: 'project' })
     await act(async () => root.render(<AgentHeader />))
 
     expect(tab('项目助手')?.disabled).toBe(false)

@@ -169,7 +169,7 @@ ai-novel-writer-mac-x64-<版本号>-installer.dmg
 
 ## 开发与架构文档
 
-文档权威层级、ADR、调研、Agent 规则和任务交接入口见 [`docs/README.md`](docs/README.md)。
+文档权威层级、ADR、调研与 Agent 协作规范见 [`docs/README.md`](docs/README.md)。
 
 ## 许可证
 
