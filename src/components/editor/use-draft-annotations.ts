@@ -3,50 +3,19 @@
  *
  * 从 CodeMirrorEditor 抽出来的业务层。编辑器内核只该回答两件事——「给我一份装饰」
  * 和「文档变了」；批注自己的状态、上限与"原文改动后标注该落在哪"的规则都在这里，
- * 不再和引擎配置挤在同一个组件里。
+ * 不再和引擎配置挤在同一个组件里。纯函数部分（装饰集、区间重映射）在
+ * `draft-annotations.ts`，这里只管状态与生命周期。
  */
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import type { ReactCodeMirrorRef, ViewUpdate } from '@uiw/react-codemirror'
 import { Compartment } from '@codemirror/state'
-import { Decoration, EditorView } from '@codemirror/view'
+import { EditorView } from '@codemirror/view'
 import {
   MAX_DRAFT_ANNOTATIONS,
   MAX_DRAFT_ANNOTATION_NOTE,
   type DraftAnnotation,
 } from '../../shared/draft-annotation'
-
-/** 批注高亮的装饰集；越界或空区间的批注直接丢掉。 */
-export function annotationDecorations(
-  annotations: readonly DraftAnnotation[],
-  docLength = Number.POSITIVE_INFINITY,
-) {
-  return Decoration.set(
-    annotations
-      .filter(item => item.from >= 0 && item.to > item.from && item.to <= docLength)
-      .sort((left, right) => left.from - right.from || left.to - right.to)
-      .map(item => Decoration.mark({ class: 'cm-draft-annotation' }).range(item.from, item.to)),
-    true,
-  )
-}
-
-/**
- * 文档改动后把批注区间跟着映射；映射后对不上原文就按原文重新定位，
- * 再找不到就退化成 -1/-1（渲染时会被丢掉，但记录还在，交给用户处置）。
- */
-function remapAnnotation(annotation: DraftAnnotation, update: ViewUpdate): DraftAnnotation {
-  const from = update.changes.mapPos(annotation.from, 1)
-  const to = update.changes.mapPos(annotation.to, -1)
-  const doc = update.state.doc
-  if (from < to && from <= doc.length && to <= doc.length && doc.sliceString(from, to) === annotation.quote) {
-    return from === annotation.from && to === annotation.to ? annotation : { ...annotation, from, to }
-  }
-  const index = doc.toString().indexOf(annotation.quote)
-  if (index >= 0) {
-    return { ...annotation, from: index, to: index + annotation.quote.length }
-  }
-  if (annotation.from === -1 && annotation.to === -1) return annotation
-  return { ...annotation, from: -1, to: -1 }
-}
+import { annotationDecorations, remapAnnotation } from './draft-annotations'
 
 export function useDraftAnnotations({
   viewRef,
