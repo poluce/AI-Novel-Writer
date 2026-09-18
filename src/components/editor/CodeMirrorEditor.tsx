@@ -8,7 +8,6 @@ import { EditorState } from '@codemirror/state'
 import { openSearchPanel, closeSearchPanel, search } from '@codemirror/search'
 import { Sparkles, Bold, Pencil, MessageSquarePlus } from 'lucide-react'
 import { cn } from '../../lib/utils'
-import type { GenerationReasoningStage } from '../../shared/reasoning-types'
 import { countDraftUnits } from '../../shared/draft-units'
 import { useLocaleStore } from '../../stores/locale-store'
 import { useAgentStore } from '../../stores/agent-store'
@@ -18,11 +17,12 @@ import {
   MAX_DRAFT_ANNOTATION_NOTE,
   type DraftAnnotation,
 } from '../../shared/draft-annotation'
-import { MAX_DRAFT_EXCERPT_CHARS, type DraftPassageCitation } from '../../shared/draft-excerpt'
+import { type DraftPassageCitation } from '../../shared/draft-excerpt'
 import { type DraftDiffProposal, buildDiffDecorations } from './draft-diff'
 import { annotationDecorations, useDraftAnnotations } from './use-draft-annotations'
 import { useDraftDiffDecorations } from './use-draft-diff-decorations'
 import { useEditorBubble } from './use-editor-bubble'
+import { useEditorAiHandoff } from './use-editor-ai-handoff'
 
 export type CodeMirrorEditorProps = {
   content: string
@@ -45,21 +45,6 @@ export type CodeMirrorEditorProps = {
   draftVersion?: number
   onAddToAssistant?: (citation: DraftPassageCitation) => void
 }
-
-type EditorAIAction = {
-  key: 'refine' | 'expand' | 'continue' | 'dialogue'
-  label: readonly [string, string]
-  color: string
-  prompt: readonly [string, string]
-  reasoningStage: GenerationReasoningStage
-}
-
-const AI_ACTIONS = [
-  { key: 'refine', label: ['润色', 'Refine'], color: 'text-[var(--color-category-progress-text)]', prompt: ['润色这部分，使语言自然、具体并增强场景表现力。', 'Refine this passage for natural, specific language and stronger scene craft.'], reasoningStage: 'review' },
-  { key: 'expand', label: ['扩写', 'Expand'], color: 'text-[var(--color-warning-text)]', prompt: ['扩写这部分，补充与情节有关的动作、感官和环境细节。', 'Expand this passage with plot-relevant action, sensory detail, and setting.'], reasoningStage: 'drafting' },
-  { key: 'continue', label: ['续写', 'Continue'], color: 'text-[var(--color-category-review-text)]', prompt: ['根据现有因果和人物动机，自然续写接下来的情节。', 'Continue naturally from the established causality and character motivation.'], reasoningStage: 'drafting' },
-  { key: 'dialogue', label: ['对话', 'Dialogue'], color: 'text-[var(--color-success-text)]', prompt: ['将这部分改写为有区分度、能推动冲突的自然对话。', 'Rewrite this passage as distinct, natural dialogue that advances the conflict.'], reasoningStage: 'drafting' },
-] satisfies readonly EditorAIAction[]
 
 export default function CodeMirrorEditor({
   content,
@@ -363,56 +348,26 @@ export default function CodeMirrorEditor({
     closeBubble()
   }
 
-  // AI 菜单：统一作为带选区引用的 Agent Quick Task 派发
-  const handleAIAction = async (action: EditorAIAction) => {
-    if (!selectionRange || !editorRef.current?.view) return
-    const view = editorRef.current.view
-    const selectedText = view.state.sliceDoc(selectionRange.from, selectionRange.to)
-    if (!selectedText.trim()) return
-
-    const fromLine = view.state.doc.lineAt(selectionRange.from).number
-    const toLine = view.state.doc.lineAt(Math.max(selectionRange.to - 1, selectionRange.from)).number
-    const citation: DraftPassageCitation = {
-      id: crypto.randomUUID(),
-      chapterNumber,
-      draftId,
-      version: draftVersion,
-      fromLine,
-      toLine,
-      quote: selectedText.slice(0, MAX_DRAFT_EXCERPT_CHARS),
-    }
-
+  // 选区 → 助手：引用构造与提示词在 useEditorAiHandoff，store 接线留在这里（组合点）。
+  const dispatchPrompt = useCallback((citation: DraftPassageCitation, prompt: string) => {
     useAgentStore.getState().addComposerCitation(citation)
     useLayoutStore.getState().openRightPanel('agent')
-    const promptText = uiText(...action.prompt)
-    void useAgentStore.getState().sendMessage(promptText)
-
-    closeBubble()
-  }
-
-  const handleAddToAssistant = (from: number, to: number) => {
-    if (!onAddToAssistant || !editorRef.current?.view) return
-    const view = editorRef.current.view
-    const quote = view.state.sliceDoc(from, to)
-    if (!quote.trim()) {
-      setContextMenu(null)
-      return
-    }
-    const fromLine = view.state.doc.lineAt(from).number
-    const toLine = view.state.doc.lineAt(Math.max(to - 1, from)).number
-    onAddToAssistant({
-      id: crypto.randomUUID(),
-      chapterNumber,
-      draftId,
-      version: draftVersion,
-      fromLine,
-      toLine,
-      quote: quote.slice(0, MAX_DRAFT_EXCERPT_CHARS),
-      filePath,
-    })
-    setContextMenu(null)
-    closeBubble()
-  }
+    void useAgentStore.getState().sendMessage(prompt)
+  }, [])
+  const closeContextMenu = useCallback(() => setContextMenu(null), [setContextMenu])
+  const { aiActions, runAIAction, addSelectionToAssistant } = useEditorAiHandoff({
+    viewRef: editorRef,
+    selectionRange,
+    uiText,
+    chapterNumber,
+    draftId,
+    draftVersion,
+    filePath,
+    onDispatchPrompt: dispatchPrompt,
+    onAddCitation: onAddToAssistant,
+    closeBubble,
+    closeContextMenu,
+  })
 
   // 固定 basicSetup 内存引用，防止 React 每次渲染生成新对象导致内部扩展被重载（搜索框消失的罪魁祸首）
   const cmBasicSetup = useMemo(() => ({
@@ -489,7 +444,7 @@ export default function CodeMirrorEditor({
               onMouseDown={event => {
                 event.preventDefault()
                 event.stopPropagation()
-                handleAddToAssistant(contextMenu.from, contextMenu.to)
+                addSelectionToAssistant(contextMenu.from, contextMenu.to)
               }}
             >
               {uiText('添加到助手', 'Add to assistant')}
@@ -582,7 +537,7 @@ export default function CodeMirrorEditor({
                 style={{ color: 'var(--color-accent)' }}
                 onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
                 onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
-                onClick={() => handleAddToAssistant(selectionRange.from, selectionRange.to)}
+                onClick={() => addSelectionToAssistant(selectionRange.from, selectionRange.to)}
               >
                 <MessageSquarePlus size={11} />
                 {uiText('添加到助手', 'Add to assistant')}
@@ -596,13 +551,13 @@ export default function CodeMirrorEditor({
           >
             <Sparkles size={11} />AI
           </div>
-          {AI_ACTIONS.map(action => (
+          {aiActions.map(action => (
             <button
               key={action.key}
               className={cn('p-1.5 rounded flex items-center gap-1 transition-colors', action.color)}
               onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
               onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
-              onClick={() => handleAIAction(action)}
+              onClick={() => runAIAction(action)}
             >
               <span className="text-[10px] tracking-widest">{uiText(...action.label)}</span>
             </button>
