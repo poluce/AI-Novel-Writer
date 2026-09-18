@@ -35,7 +35,7 @@
 
 ---
 
-## 二、现状盘点（步骤 1 完成时实测，共 694 行；步骤 3 后为 569 行）
+## 二、现状盘点（步骤 1 完成时实测，共 694 行；步骤 4 后为 398 行）
 
 | 段落 | 行数 | 性质 | 目标归属 |
 |---|---|---|---|
@@ -50,13 +50,13 @@
 | `applySelectionRange` | 8 | 两层接缝 | ✅ 步骤 2（跨层通知显式化） |
 | `handleUpdate` | 26 | 引擎面 + 组合 | **保持**（见 §三.3） |
 | 浮动条跟随定位 effect | 61 | 交互 | ✅ 步骤 2 |
-| `cmTheme` | 117 | 纯配置 | 步骤 4 |
-| `extensions` | 58 | 纯配置 | 步骤 4 |
+| `cmTheme` | 117 | 纯配置 | ✅ 步骤 4 |
+| `extensions` | 58 | 纯配置 | ✅ 步骤 4 |
 | `handleAddAnnotation` | 7 | 业务收尾 | 保持（组合点） |
 | `handleAIAction` | 27 | 业务 | ✅ 步骤 3 |
 | `handleContextMenu` | 10 | 交互 | ✅ 步骤 2 |
 | `handleAddToAssistant` | 25 | 业务 | ✅ 步骤 3 |
-| `cmBasicSetup` | 11 | 纯配置 | 步骤 4（并入 theme 模块） |
+| `cmBasicSetup` | 11 | 纯配置 | ✅ 步骤 4（并入 theme 模块） |
 | JSX（浮动条 / 右键菜单 / 状态栏 / `<CodeMirror>`） | 186 | 视图 | 步骤 5 |
 
 > 目标形态：步骤 2–5 完成后，主组件约 **220–260 行**，内容为 props → 状态 → 三个 hook → `<CodeMirror>` + `<EditorSelectionBubble>`。
@@ -204,7 +204,7 @@
 | 1 | 抽出批注 / 行内修订 hooks（778 → 694 行） | ✅ 已推送 | `5554483` |
 | 2 | `use-editor-bubble.ts`（694 → 610 行） | ✅ 已推送 | `b631544` |
 | 3 | `use-editor-ai-handoff.ts`（610 → 569 行） | ✅ 已推送 | `effef37` |
-| 4 | `editor-theme.ts` / `editor-search-phrases.ts` / `editor-extensions.ts` | ⬜ 待做 | — |
+| 4 | `editor-theme.ts` / `editor-search-phrases.ts` / `editor-extensions.ts`（+ 纯函数收口 `draft-annotations.ts`；569 → 398 行） | ✅ 已推送 | `4d6f134` |
 | 5 | `EditorSelectionBubble.tsx` | ⬜ 待做 | — |
 | 6 | `EditorSurfaceAdapter`（可选） | ⏸ 暂不做 | — |
 
