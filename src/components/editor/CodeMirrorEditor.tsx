@@ -7,7 +7,7 @@ import { languages } from '@codemirror/language-data'
 import { Compartment, EditorState } from '@codemirror/state'
 import { Decoration } from '@codemirror/view'
 import { openSearchPanel, closeSearchPanel, search } from '@codemirror/search'
-import { Sparkles, Bold, Check, Pencil, MessageSquarePlus } from 'lucide-react'
+import { Sparkles, Bold, Pencil, MessageSquarePlus } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import type { GenerationReasoningStage } from '../../shared/reasoning-types'
 import { countDraftUnits } from '../../shared/draft-units'
@@ -137,25 +137,8 @@ export default function CodeMirrorEditor({
   // ===== Bubble Menu 逻辑 =====
   const [bubbleOpen, setBubbleOpen] = useState(false)
   const [bubblePos, setBubblePos] = useState({ top: 0, left: 0 })
-  const [aiResult, setAiResult] = useState<string | null>(null)
-  const [aiError, setAiError] = useState<string | null>(null)
-  const [activeAIAction, setActiveAIAction] = useState<string | null>(null)
-  const [loadingDots, setLoadingDots] = useState('.')
   const [selectionRange, setSelectionRange] = useState<{ from: number, to: number } | null>(null)
   const selectionRangeRef = useRef<{ from: number, to: number } | null>(null)
-  const aiRequestSequenceRef = useRef(0)
-  const aiTargetRef = useRef<{
-    requestSequence: number
-    from: number
-    to: number
-    selectedText: string
-    documentText: string
-  } | null>(null)
-
-  useEffect(() => () => {
-    aiRequestSequenceRef.current += 1
-    aiTargetRef.current = null
-  }, [])
 
   useEffect(() => {
     if (!contextMenu) return
@@ -230,13 +213,6 @@ export default function CodeMirrorEditor({
     }
   }, [scrollToDiffRequestId, diffProposals])
 
-  useEffect(() => {
-    if (aiResult === '') {
-      const timer = setInterval(() => setLoadingDots(d => d.length >= 3 ? '.' : d + '.'), 400)
-      return () => clearInterval(timer)
-    }
-  }, [aiResult])
-
   /**
    * 选区变化的唯一入口：换了选区就丢掉半路输入的批注草稿（草稿属于上一个选区），
    * 选区没变时不动它。之前靠 effect 兜这件事，会在渲染后多跑一轮。
@@ -274,12 +250,10 @@ export default function CodeMirrorEditor({
       } else {
         applySelectionRange({ from: sel.from, to: sel.to })
         // 交由下方的 useEffect 进行精准防越界座标计算与位置同步
-        if (!aiResult) {
-          setBubbleOpen(true)
-        }
+        setBubbleOpen(true)
       }
     }
-  }, [onChange, onCharCountChange, aiResult, annotations, enableAnnotations, onAnnotationsChange, applySelectionRange])
+  }, [onChange, onCharCountChange, annotations, enableAnnotations, onAnnotationsChange, applySelectionRange])
 
   // 监听滚动与缩放，实时更新 Bubble Menu 坐标
   useEffect(() => {
@@ -563,44 +537,11 @@ export default function CodeMirrorEditor({
 
     useAgentStore.getState().addComposerCitation(citation)
     useLayoutStore.getState().openRightPanel('agent')
-    setActiveAIAction(uiText(...action.label))
     const promptText = uiText(...action.prompt)
     void useAgentStore.getState().sendMessage(promptText)
 
     setBubbleOpen(false)
     applySelectionRange(null)
-  }
-
-  const handleAcceptAI = () => {
-    const target = aiTargetRef.current
-    if (target && aiResult && editorRef.current?.view) {
-      const view = editorRef.current.view
-      if (!editable) {
-        setAiError(uiText(
-          '正文已变为只读，结果未应用；你仍可复制预览内容',
-          'The document is now read-only. The result was not applied; you can still copy the preview.',
-        ))
-        return
-      }
-      const targetStillCurrent = (
-        target.requestSequence === aiRequestSequenceRef.current
-        && view.state.doc.toString() === target.documentText
-        && view.state.sliceDoc(target.from, target.to) === target.selectedText
-      )
-      if (!targetStillCurrent) {
-        setAiError(uiText(
-          '正文或原目标已变化，结果未应用；你仍可复制预览内容',
-          'The document or original target changed. The result was not applied; you can still copy the preview.',
-        ))
-        return
-      }
-      view.dispatch({
-        changes: { from: target.from, to: target.to, insert: aiResult }
-      })
-    }
-    aiTargetRef.current = null
-    setAiResult(null)
-    setBubbleOpen(false)
   }
 
   const handleContextMenu = (event: MouseEvent) => {
@@ -634,14 +575,6 @@ export default function CodeMirrorEditor({
       filePath,
     })
     setContextMenu(null)
-    setBubbleOpen(false)
-  }
-
-  const handleRejectAI = () => {
-    aiRequestSequenceRef.current += 1
-    aiTargetRef.current = null
-    setAiResult(null)
-    setAiError(null)
     setBubbleOpen(false)
   }
 
@@ -684,12 +617,7 @@ export default function CodeMirrorEditor({
         }
       }}>
       <div className="flex-1 relative min-h-0 overflow-hidden"
-        onContextMenu={handleContextMenu}
-        onMouseDown={() => {
-          // 点击空白处关闭 Bubble Menu
-          if (aiResult) return;
-          // setBubbleOpen(false) 交给 handleUpdate 里面的 selection empty 判断即可
-        }}>
+        onContextMenu={handleContextMenu}>
         <div className="absolute inset-0">
           <CodeMirror
             ref={editorRef}
@@ -736,7 +664,7 @@ export default function CodeMirrorEditor({
       </div>
 
       {/* Bubble Menu */}
-      {bubbleOpen && (editable || aiResult !== null) && bubblePos.top !== 0 && (
+      {bubbleOpen && editable && bubblePos.top !== 0 && (
         <div
           className="fixed z-50 flex items-center gap-0.5 p-1 rounded-xl border select-none shadow-xl transform -translate-x-1/2 -translate-y-full"
           style={{
@@ -753,161 +681,96 @@ export default function CodeMirrorEditor({
             e.preventDefault()
           }}
         >
-          {aiResult !== null ? (
-            <div className="w-[360px] max-h-[260px] overflow-y-auto p-2">
-              <div
-                className="text-[10px] mb-1.5 font-medium flex items-center gap-1"
-                style={{ color: 'var(--color-text-muted)' }}
-              >
-                <Sparkles size={11} style={{ color: 'var(--color-accent)' }} /> {activeAIAction
-                  ? uiText(`${activeAIAction}预览`, `${activeAIAction} preview`)
-                  : uiText('AI 预览', 'AI preview')}
-              </div>
-              {/* 流式输入中显示动态内容 */}
-              {aiError ? (
-                <>
-                  <div
-                    className="text-xs leading-relaxed mb-3"
-                    style={{ color: 'var(--color-error-text)' }}
-                  >
-                    {aiError}
-                  </div>
-                  {aiResult && (
-                    <div
-                      className="text-xs whitespace-pre-wrap leading-relaxed mb-3"
-                      style={{ color: 'var(--color-text-secondary)' }}
-                    >
-                      {aiResult}
-                    </div>
-                  )}
-                </>
-              ) : aiResult === '' ? (
-                <div
-                  className="text-xs leading-relaxed mb-3"
-                  style={{ color: 'var(--color-text-muted)' }}
-                >
-                  {uiText('正在生成', 'Generating')} {loadingDots}
-                </div>
-              ) : (
-                <div
-                  className="text-xs whitespace-pre-wrap leading-relaxed mb-3"
-                  style={{ color: 'var(--color-text-secondary)' }}
-                >
-                  {aiResult}
-                </div>
-              )}
-              <div className="flex items-center gap-2 justify-end">
-                <button
-                  className="px-2.5 py-1 text-xs rounded-md transition-colors"
-                  style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}
-                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
-                  onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
-                  onClick={handleRejectAI}
-                >{uiText('取消', 'Cancel')}</button>
-                <button
-                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-md font-medium transition-colors"
-                  style={{ backgroundColor: 'var(--color-accent)', color: '#fff' }}
-                  onMouseEnter={e => (e.currentTarget.style.opacity = '0.9')}
-                  onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
-                  disabled={aiResult === '' || aiError !== null}
-                  onClick={handleAcceptAI}
-                ><Check size={12} aria-hidden="true" />{uiText('替换', 'Replace')}</button>
-              </div>
+          {enableAnnotations && mode === 'prose' && (
+            <div className="flex items-center gap-1 pr-1">
+              <Pencil size={11} style={{ color: 'var(--color-warning-text, #b45309)' }} />
+              <input
+                value={annotationNote}
+                maxLength={MAX_DRAFT_ANNOTATION_NOTE}
+                onChange={event => setAnnotationNote(event.target.value)}
+                onKeyDown={event => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault()
+                    handleAddAnnotation()
+                  }
+                }}
+                onFocus={() => { annotationInputFocusedRef.current = true }}
+                onBlur={() => { annotationInputFocusedRef.current = false }}
+                placeholder={uiText('这段有什么问题？', 'What is wrong with this passage?')}
+                className="w-[180px] px-1.5 py-1 text-[11px] rounded-md"
+                style={{
+                  background: 'var(--color-bg-elevated, var(--color-panel))',
+                  border: '1px solid var(--color-border)',
+                  color: 'var(--color-text)',
+                  outline: 'none',
+                }}
+                aria-label={uiText('选区标注', 'Passage note')}
+              />
+              <button
+                className="px-1.5 py-1 text-[10px] rounded-md font-medium"
+                style={{
+                  backgroundColor: annotationNote.trim() ? 'var(--color-accent)' : 'var(--color-hover)',
+                  color: annotationNote.trim() ? '#fff' : 'var(--color-text-muted)',
+                }}
+                disabled={!annotationNote.trim() || annotations.length >= MAX_DRAFT_ANNOTATIONS}
+                onClick={handleAddAnnotation}
+              >{uiText('标注', 'Note')}</button>
+              <div className="w-[1px] h-3 mx-1" style={{ backgroundColor: 'var(--color-border)' }} />
             </div>
-          ) : (
+          )}
+          {mode === 'document' && (
             <>
-              {enableAnnotations && mode === 'prose' && (
-                <div className="flex items-center gap-1 pr-1">
-                  <Pencil size={11} style={{ color: 'var(--color-warning-text, #b45309)' }} />
-                  <input
-                    value={annotationNote}
-                    maxLength={MAX_DRAFT_ANNOTATION_NOTE}
-                    onChange={event => setAnnotationNote(event.target.value)}
-                    onKeyDown={event => {
-                      if (event.key === 'Enter' && !event.shiftKey) {
-                        event.preventDefault()
-                        handleAddAnnotation()
-                      }
-                    }}
-                    onFocus={() => { annotationInputFocusedRef.current = true }}
-                    onBlur={() => { annotationInputFocusedRef.current = false }}
-                    placeholder={uiText('这段有什么问题？', 'What is wrong with this passage?')}
-                    className="w-[180px] px-1.5 py-1 text-[11px] rounded-md"
-                    style={{
-                      background: 'var(--color-bg-elevated, var(--color-panel))',
-                      border: '1px solid var(--color-border)',
-                      color: 'var(--color-text)',
-                      outline: 'none',
-                    }}
-                    aria-label={uiText('选区标注', 'Passage note')}
-                  />
-                  <button
-                    className="px-1.5 py-1 text-[10px] rounded-md font-medium"
-                    style={{
-                      backgroundColor: annotationNote.trim() ? 'var(--color-accent)' : 'var(--color-hover)',
-                      color: annotationNote.trim() ? '#fff' : 'var(--color-text-muted)',
-                    }}
-                    disabled={!annotationNote.trim() || annotations.length >= MAX_DRAFT_ANNOTATIONS}
-                    onClick={handleAddAnnotation}
-                  >{uiText('标注', 'Note')}</button>
-                  <div className="w-[1px] h-3 mx-1" style={{ backgroundColor: 'var(--color-border)' }} />
-                </div>
-              )}
-              {mode === 'document' && (
-                <>
-                  <button
-                    className="p-1 rounded"
-                    style={{ color: 'var(--color-text-secondary)' }}
-                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
-                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
-                    onClick={() => {
-                      // document模式下的格式转换
-                      if (selectionRange && editorRef.current?.view) {
-                        const view = editorRef.current.view
-                        const text = view.state.sliceDoc(selectionRange.from, selectionRange.to)
-                        view.dispatch({
-                          changes: { from: selectionRange.from, to: selectionRange.to, insert: `**${text}**` }
-                        })
-                      }
-                    }}
-                  ><Bold size={14} /></button>
-                  <div className="w-[1px] h-3 mx-1" style={{ backgroundColor: 'var(--color-border)' }} />
-                </>
-              )}
-              {onAddToAssistant && selectionRange && (
-                <>
-                  <button
-                    className="p-1.5 rounded flex items-center gap-1 text-[10px]"
-                    style={{ color: 'var(--color-accent)' }}
-                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
-                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
-                    onClick={() => handleAddToAssistant(selectionRange.from, selectionRange.to)}
-                  >
-                    <MessageSquarePlus size={11} />
-                    {uiText('添加到助手', 'Add to assistant')}
-                  </button>
-                  <div className="w-[1px] h-3 mx-1" style={{ backgroundColor: 'var(--color-border)' }} />
-                </>
-              )}
-              <div
-                className="flex items-center gap-0.5 pl-0.5 pr-1 text-[10px]"
-                style={{ color: 'var(--color-text-muted)' }}
-              >
-                <Sparkles size={11} />AI
-              </div>
-              {AI_ACTIONS.map(action => (
-                <button
-                  key={action.key}
-                  className={cn('p-1.5 rounded flex items-center gap-1 transition-colors', action.color)}
-                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
-                  onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
-                  onClick={() => handleAIAction(action)}
-                >
-                  <span className="text-[10px] tracking-widest">{uiText(...action.label)}</span>
-                </button>
-              ))}
+              <button
+                className="p-1 rounded"
+                style={{ color: 'var(--color-text-secondary)' }}
+                onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
+                onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                onClick={() => {
+                  // document模式下的格式转换
+                  if (selectionRange && editorRef.current?.view) {
+                    const view = editorRef.current.view
+                    const text = view.state.sliceDoc(selectionRange.from, selectionRange.to)
+                    view.dispatch({
+                      changes: { from: selectionRange.from, to: selectionRange.to, insert: `**${text}**` }
+                    })
+                  }
+                }}
+              ><Bold size={14} /></button>
+              <div className="w-[1px] h-3 mx-1" style={{ backgroundColor: 'var(--color-border)' }} />
             </>
           )}
+          {onAddToAssistant && selectionRange && (
+            <>
+              <button
+                className="p-1.5 rounded flex items-center gap-1 text-[10px]"
+                style={{ color: 'var(--color-accent)' }}
+                onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
+                onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                onClick={() => handleAddToAssistant(selectionRange.from, selectionRange.to)}
+              >
+                <MessageSquarePlus size={11} />
+                {uiText('添加到助手', 'Add to assistant')}
+              </button>
+              <div className="w-[1px] h-3 mx-1" style={{ backgroundColor: 'var(--color-border)' }} />
+            </>
+          )}
+          <div
+            className="flex items-center gap-0.5 pl-0.5 pr-1 text-[10px]"
+            style={{ color: 'var(--color-text-muted)' }}
+          >
+            <Sparkles size={11} />AI
+          </div>
+          {AI_ACTIONS.map(action => (
+            <button
+              key={action.key}
+              className={cn('p-1.5 rounded flex items-center gap-1 transition-colors', action.color)}
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
+              onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+              onClick={() => handleAIAction(action)}
+            >
+              <span className="text-[10px] tracking-widest">{uiText(...action.label)}</span>
+            </button>
+          ))}
         </div>
       )}
     </div>
