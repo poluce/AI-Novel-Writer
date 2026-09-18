@@ -18,6 +18,8 @@ import { registerExternalFileGrantController } from './controllers/external-file
 import { registerAppDataController } from './controllers/app-data-controller'
 import { registerSkinController } from './controllers/skin-controller'
 import { registerAgentController } from './pi/agent-ipc'
+import { setProjectDatabaseClosingHandler } from './database'
+import { abortPiOnProjectClose } from './pi/in-flight'
 import { skinService } from './services/skin-service'
 
 /**
@@ -28,6 +30,7 @@ export function registerIPCHandlers() {
   // 确保全局配置目录结构存在
   ensureVelaHome()
   setDiagnosticLogSink(appendVelaLog)
+  setProjectDatabaseClosingHandler(abortPiOnProjectClose)
 
   // 皮肤存储损坏或不可用时必须降级为经典皮肤，不能阻断其余 IPC 注册。
   try {

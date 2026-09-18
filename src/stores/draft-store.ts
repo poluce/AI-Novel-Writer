@@ -16,10 +16,10 @@ import {
   sameProjectPathKey,
   sameProjectSessionContext,
 } from '../shared/project-session-context'
+import { freezeOpenDraftTab, settleFrozenDraftMerge } from '../services/editor-tab-snapshot'
 import { useProjectStore } from './project-store'
 import { requireIpcSuccess } from '../services/ipc-result'
 import { countDraftUnits } from '../shared/draft-units'
-import { useEditorStore } from './editor-store'
 
 let loadAllDraftsRequestSequence = 0
 
@@ -266,16 +266,11 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
       }
       // 必须在第一次 await 前冻结标签；否则动态导入/身份解析期间的新输入
       // 会被误当成提交基准，并在完成回执到达时被覆盖。
-      const editorState = useEditorStore.getState()
-      const targetTab = editorState.tabs.find(t =>
-        t.projectKey === expectedProjectPath && t.filePath === filePath
+      const frozenTab = freezeOpenDraftTab(
+        expectedProjectPath,
+        filePath,
+        expectedDraftContent,
       )
-      const editorSnapshot = targetTab
-        ? {
-            content: targetTab.content ?? expectedDraftContent,
-            contentRevision: targetTab.contentRevision ?? 0,
-          }
-        : undefined
 
       const versionMatch = filePath.match(/v(\d+)/)
       const version = versionMatch ? parseInt(versionMatch[1]) : 1
@@ -348,9 +343,7 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
       )
       if (!isDraftProjectSessionCurrent(projectSession)) return staleProjectError()
 
-      if (targetTab && editorSnapshot) {
-        editorState.settleMergedRevision(targetTab.id, editorSnapshot, mergedText)
-      }
+      if (frozenTab) settleFrozenDraftMerge(frozenTab, mergedText)
 
       if (chapterNumber !== undefined) {
         await get().loadChapterDrafts(chapterNumber, expectedProjectPath, projectSession)

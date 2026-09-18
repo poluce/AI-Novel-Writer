@@ -9,8 +9,11 @@ import type {
   FileNode,
 } from '../shared/ipc-channels'
 import { alertError } from '../components/ui/AlertDialog'
-import { confirm } from '../components/ui/Confirm'
 import { appErrorMessage } from '../i18n/app-errors'
+import {
+  cancelProjectWorkflowsAndWait,
+  confirmAndCancelProjectWorkflows,
+} from '../services/project-workflow-gate'
 import { useEditorDraftLedgerStore } from './editor-draft-ledger-store'
 import { useLocaleStore } from './locale-store'
 import { requireIpcSuccess } from '../services/ipc-result'
@@ -92,39 +95,6 @@ function projectOperationCopy(operation: 'create' | 'open'): LocalizedProjectCop
   return operation === 'create'
     ? projectCopy('创建', 'create')
     : projectCopy('打开', 'open')
-}
-
-async function confirmAndCancelProjectWorkflows(
-  projectPath: string,
-  operation: 'create' | 'open' | 'close',
-  shouldContinue: () => boolean = () => true,
-): Promise<boolean> {
-  const { useWorkflowStore } = await import('./workflow-store')
-  const activeCount = useWorkflowStore.getState().activeRuns.filter(run => (
-    sameProjectPathKey(run.projectPath, projectPath)
-  )).length
-  if (activeCount > 0) {
-    const operationCopy = operation === 'create'
-      ? projectCopy('新建项目', 'create a project')
-      : operation === 'open'
-        ? projectCopy('打开其他项目', 'open another project')
-        : projectCopy('关闭项目', 'close the project')
-    const approved = await confirm(
-      projectText(
-        `当前项目有 ${activeCount} 个创作任务。继续${operationCopy.zhCNText}将取消并等待这些任务停止。`,
-        `This project has ${activeCount} active creative task${activeCount === 1 ? '' : 's'}. Continuing to ${operationCopy.enUSText} will cancel and wait for them to stop.`,
-      ),
-      {
-        title: projectText('创作任务仍在运行', 'Creative tasks are still running'),
-        confirmText: projectText('取消任务并继续', 'Cancel tasks and continue'),
-        danger: true,
-      },
-    )
-    if (!approved) return false
-  }
-  if (!shouldContinue()) return false
-  await useWorkflowStore.getState().cancelProjectWorkflowsAndWait(projectPath)
-  return shouldContinue()
 }
 
 function readConfigDraftLedger() {
@@ -865,8 +835,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     }
     set({ loading: true })
     try {
-      const { useWorkflowStore } = await import('./workflow-store')
-      await useWorkflowStore.getState().cancelProjectWorkflowsAndWait(activeProject.path)
+      await cancelProjectWorkflowsAndWait(activeProject.path)
       if (!sameProjectSessionContext(
         projectSession,
         projectSessionContextFromProject(get().currentProject),

@@ -10,11 +10,16 @@ import fs from 'node:fs'
 const require = createRequire(import.meta.url)
 const Database = require('better-sqlite3') as typeof import('better-sqlite3')
 import type BetterSqlite3 from 'better-sqlite3'
-import { abortPiOnProjectClose } from './pi/in-flight'
 import { ensureProjectSchema } from './database-schema'
 
 let projectDb: BetterSqlite3.Database | null = null
 let currentProjectPath: string | null = null
+let closingHandler: (() => void) | null = null
+
+/** 关库前的运行时熔断（例如中止在途 Pi）；由主进程启动时注册。 */
+export function setProjectDatabaseClosingHandler(handler: (() => void) | null): void {
+  closingHandler = handler
+}
 
 /** 初始化项目数据库（打开项目时调用） */
 export function initProjectDatabase(projectPath: string, importSourceSecret?: Buffer): void {
@@ -35,9 +40,9 @@ export function initProjectDatabase(projectPath: string, importSourceSecret?: Bu
 /** 关闭项目数据库 */
 export function closeProjectDatabase(): void {
   try {
-    abortPiOnProjectClose()
+    closingHandler?.()
   } catch (error) {
-    console.error('[Vela DB] 切书中止在途 AI 失败:', error)
+    console.error('[Vela DB] 关库前回调失败:', error)
   }
   // Clear the process-visible identity before closing the native handle. If
   // the close itself throws, callers still fail closed instead of treating a
