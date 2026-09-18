@@ -52,8 +52,7 @@ __screenshots__/
 .runtime/
 .vibe-owner.json
 
-# Never publish internal agent instructions, local review output, or compiler state.
-/AGENTS.md
+# Never publish internal temporary review output or local compiler state.
 /CONTEXT.md
 /.agents/
 /.claude/

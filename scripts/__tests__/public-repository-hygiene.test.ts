@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const prohibitedPaths = [
-  'AGENTS.md',
   'CONTEXT.md',
   'design-qa.md',
   'rule.md',
@@ -33,7 +32,6 @@ describe('public repository hygiene', () => {
     const rootGitignore = readFileSync('.gitignore', 'utf8')
 
     for (const entry of [
-      '/AGENTS.md',
       '/CONTEXT.md',
       '/docs/superpowers/',
       '/output/',

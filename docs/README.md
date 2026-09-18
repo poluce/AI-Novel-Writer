@@ -12,7 +12,7 @@
 | [`docs/agents/`](agents/) | Issue、领域文档和 Agent 协作规则 | 当前贡献流程；不得承载临时任务状态 |
 | [`docs/research/`](research/) | 有来源和时间边界的调研与底座选择 | 历史证据；不自动代表当前产品承诺 |
 
-根目录 `AGENTS.md` 与 `CONTEXT.md` 是可选的本机 Agent 上下文，按仓库卫生规则保持忽略，不是公共文档，也不能覆盖 [`docs/product-domain.md`](product-domain.md) 或 ADR。需要进入公共仓库的稳定产品边界写入领域词汇表或 ADR；公开用户行为同步到中英文 README。
+根目录 `AGENTS.md` 是仓库级 AI Agent 架构与工程规范指南，统一规范所有开发分支与并行环境下的 Agent 协作行为；`CONTEXT.md` 是可选的本机本地上下文，按仓库卫生规则保持忽略。公开用户行为同步到中英文 README。
 
 ## 新文档放置规则
 
