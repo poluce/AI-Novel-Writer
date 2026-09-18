@@ -16,6 +16,7 @@ import { captureAgentEditorSnapshot } from '../services/agent/editor-snapshot'
 import { createAgentExecutionContext } from '../services/agent/project-context'
 import { writingLanguageText } from '../shared/writing-language'
 import { projectSessionContextFromProject } from '../shared/project-session-context'
+import { readActiveProject } from '../services/active-project'
 import type { ProjectSessionContext } from '../shared/ipc-channels'
 import type { AssistantThinkingLevel } from '../shared/agent-runtime'
 import {
@@ -38,7 +39,6 @@ import type {
 } from '../shared/agent-events'
 import { handleRendererAction } from '../services/agent/renderer-actions'
 import { useLocaleStore } from './locale-store'
-import { useProjectStore } from './project-store'
 import type { Locale } from '../i18n/types'
 import { DEFAULT_AGENT_SCOPE, type AgentScope } from '../shared/agent-scope'
 
@@ -258,7 +258,7 @@ function toToolCallInfo(call: PiToolCallInfo): ToolCallInfo {
 
 /** 当前项目的产物上下文；没有打开项目时不生成卡片。 */
 export function currentArtifactContext(): ArtifactContext | null {
-  const project = useProjectStore.getState().currentProject
+  const project = readActiveProject()
   if (!project) return null
   return {
     projectPath: project.path,

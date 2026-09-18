@@ -11,13 +11,14 @@ import {
 } from '../services/draft-index'
 import type { DraftStatus } from '../shared/draft-status'
 import type { ProjectSessionContext } from '../shared/ipc-channels'
+import { sameProjectSessionContext } from '../shared/project-session-context'
 import {
-  projectSessionContextFromProject,
-  sameProjectPathKey,
-  sameProjectSessionContext,
-} from '../shared/project-session-context'
+  isActiveProjectSession,
+  matchActiveProjectSession,
+  readActiveProject,
+  readActiveProjectSession,
+} from '../services/active-project'
 import { freezeOpenDraftTab, settleFrozenDraftMerge } from '../services/editor-tab-snapshot'
-import { useProjectStore } from './project-store'
 import { requireIpcSuccess } from '../services/ipc-result'
 import { countDraftUnits } from '../shared/draft-units'
 
@@ -27,22 +28,11 @@ function currentDraftProjectSession(
   expectedProjectPath?: string,
   expectedProjectSession?: ProjectSessionContext,
 ): ProjectSessionContext | null {
-  const project = useProjectStore.getState().currentProject
-  const projectSession = projectSessionContextFromProject(project)
-  if (
-    !project
-    || !projectSession
-    || (expectedProjectPath && !sameProjectPathKey(project.path, expectedProjectPath))
-    || (expectedProjectSession && !sameProjectSessionContext(expectedProjectSession, projectSession))
-  ) return null
-  return projectSession
+  return matchActiveProjectSession(expectedProjectPath, expectedProjectSession)
 }
 
 function isDraftProjectSessionCurrent(projectSession: ProjectSessionContext): boolean {
-  return sameProjectSessionContext(
-    projectSession,
-    projectSessionContextFromProject(useProjectStore.getState().currentProject),
-  )
+  return isActiveProjectSession(projectSession)
 }
 
 function staleProjectError(): { success: false; error: string } {
@@ -133,7 +123,7 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
   },
 
   loadChapterDrafts: async (chapterNumber, expectedProjectPath, expectedProjectSession) => {
-    const project = useProjectStore.getState().currentProject
+    const project = readActiveProject()
     const projectSession = currentDraftProjectSession(expectedProjectPath, expectedProjectSession)
     if (!project || !projectSession) return
     const projectPath = expectedProjectPath ?? project.path
@@ -146,7 +136,7 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
         requestId !== loadAllDraftsRequestSequence
         || !sameProjectSessionContext(
           projectSession,
-          projectSessionContextFromProject(useProjectStore.getState().currentProject),
+          readActiveProjectSession(),
         )
       ) return
       const metas: DraftMeta[] = list.map((m) => ({
@@ -174,7 +164,7 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
   },
 
   loadAllDrafts: async (expectedProjectPath, expectedProjectSession) => {
-    const project = useProjectStore.getState().currentProject
+    const project = readActiveProject()
     const projectSession = currentDraftProjectSession(expectedProjectPath, expectedProjectSession)
     if (!project || !projectSession) return
     const projectPath = expectedProjectPath ?? project.path
@@ -218,7 +208,7 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
         requestId === loadAllDraftsRequestSequence
         && sameProjectSessionContext(
           projectSession,
-          projectSessionContextFromProject(useProjectStore.getState().currentProject),
+          readActiveProjectSession(),
         )
       ) {
         set({
@@ -232,7 +222,7 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
         requestId === loadAllDraftsRequestSequence
         && sameProjectSessionContext(
           projectSession,
-          projectSessionContextFromProject(useProjectStore.getState().currentProject),
+          readActiveProjectSession(),
         )
       ) {
         set({ loading: false, loadingProjectKey: null, loadingProjectSession: null })

@@ -16,11 +16,10 @@ import {
 import type { PromptBudgetReport } from '../services/generation/generation-harness'
 import {
   isProjectSessionContext,
-  projectSessionContextFromProject,
   sameProjectPathKey,
   sameProjectSessionContext,
 } from '../shared/project-session-context'
-import { useProjectStore } from './project-store'
+import { readActiveProject, readActiveProjectSession } from '../services/active-project'
 import { useLocaleStore } from './locale-store'
 import { onWorkflowRunStarted } from '../services/workflows/workflow-ui-bridge'
 import {
@@ -230,7 +229,7 @@ function isCurrentWorkflowSession(
   if (!sameProjectPathKey(projectSession.projectPath, projectPath)) return false
   return sameProjectSessionContext(
     projectSession,
-    projectSessionContextFromProject(useProjectStore.getState().currentProject),
+    readActiveProjectSession(),
   )
 }
 
@@ -432,8 +431,8 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
     if (definition.runId && get().activeRuns.some(run => run.id === definition.runId)) {
       return definition.runId
     }
-    const currentProject = useProjectStore.getState().currentProject
-    const currentProjectSession = projectSessionContextFromProject(currentProject)
+    const currentProject = readActiveProject()
+    const currentProjectSession = readActiveProjectSession()
     const suppliedProjectSession = definition.projectSession
     const projectSession = isProjectSessionContext(suppliedProjectSession)
       && currentProjectSession
@@ -586,7 +585,7 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
     }
     if (!sameProjectSessionContext(
       projectSession,
-      projectSessionContextFromProject(useProjectStore.getState().currentProject),
+      readActiveProjectSession(),
     )) {
       updateRunById(set, run.id, {
         status: 'failed',

@@ -1,11 +1,11 @@
 import { create } from 'zustand'
 import { ipc } from '../services/ipc-client'
 import type { ProjectSessionContext } from '../shared/ipc-channels'
+import { sameProjectSessionContext } from '../shared/project-session-context'
 import {
-  projectSessionContextFromProject,
-  sameProjectPathKey,
-  sameProjectSessionContext,
-} from '../shared/project-session-context'
+  isActiveProjectSession,
+  matchActiveProjectSession,
+} from '../services/active-project'
 import type {
   CharacterData,
   CharacterStateData,
@@ -17,7 +17,6 @@ import {
 } from '../services/character-roster-client'
 import { randomUUID } from '../utils/id'
 import { useEditorDraftLedgerStore } from './editor-draft-ledger-store'
-import { useProjectStore } from './project-store'
 import {
   CHARACTER_DRAFT_TAB,
   composeEditorDraftTabWriter,
@@ -136,22 +135,11 @@ function currentCharacterProjectSession(
   expectedProjectPath?: string,
   expectedProjectSession?: ProjectSessionContext,
 ): ProjectSessionContext | null {
-  const project = useProjectStore.getState().currentProject
-  const projectSession = projectSessionContextFromProject(project)
-  if (
-    !project
-    || !projectSession
-    || (expectedProjectPath && !sameProjectPathKey(project.path, expectedProjectPath))
-    || (expectedProjectSession && !sameProjectSessionContext(expectedProjectSession, projectSession))
-  ) return null
-  return projectSession
+  return matchActiveProjectSession(expectedProjectPath, expectedProjectSession)
 }
 
 function isCharacterProjectSessionCurrent(projectSession: ProjectSessionContext): boolean {
-  return sameProjectSessionContext(
-    projectSession,
-    projectSessionContextFromProject(useProjectStore.getState().currentProject),
-  )
+  return isActiveProjectSession(projectSession)
 }
 
 function valuesMatch(left: unknown, right: unknown): boolean {

@@ -15,8 +15,7 @@ import type {
 } from '../shared/ipc-channels'
 import type { CreativeStrategy, GenerationReasoningStage, ReasoningEffort } from '../shared/reasoning-types'
 import type { SubmitToolName } from '../shared/submit-contract'
-import { projectSessionContextFromProject } from '../shared/project-session-context'
-import { useProjectStore } from './project-store'
+import { readActiveProject, readActiveProjectSession } from '../services/active-project'
 
 /** 一次性生成的回调（正文不再流式：主进程只在完成时回一次） */
 interface StreamCallbacks {
@@ -274,10 +273,10 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
 
     const requestId = crypto.randomUUID()
     const projectSession = options?.projectSession
-      ?? projectSessionContextFromProject(useProjectStore.getState().currentProject)
+      ?? readActiveProjectSession()
       ?? undefined
     const creativeStrategy = options?.creativeStrategy
-      ?? useProjectStore.getState().currentProject?.novelConfig.creativeStrategy
+      ?? readActiveProject()?.novelConfig.creativeStrategy
       ?? 'auto'
 
     // 注册完成/失败事件监听
@@ -354,7 +353,7 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
     return ipc.invoke(
       'llm:test-connection',
       model,
-      useProjectStore.getState().currentProject?.novelConfig.creativeStrategy ?? 'auto',
+      readActiveProject()?.novelConfig.creativeStrategy ?? 'auto',
     )
   },
 
