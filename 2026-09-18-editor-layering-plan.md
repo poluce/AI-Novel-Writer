@@ -35,7 +35,7 @@
 
 ---
 
-## 二、现状盘点（步骤 1 完成时实测，共 694 行；步骤 4 后为 398 行）
+## 二、现状盘点（步骤 1 完成时实测，共 694 行；全部完成后为 289 行）
 
 | 段落 | 行数 | 性质 | 目标归属 |
 |---|---|---|---|
@@ -57,9 +57,12 @@
 | `handleContextMenu` | 10 | 交互 | ✅ 步骤 2 |
 | `handleAddToAssistant` | 25 | 业务 | ✅ 步骤 3 |
 | `cmBasicSetup` | 11 | 纯配置 | ✅ 步骤 4（并入 theme 模块） |
-| JSX（浮动条 / 右键菜单 / 状态栏 / `<CodeMirror>`） | 186 | 视图 | 步骤 5 |
+| JSX（浮动条 / 右键菜单 / 状态栏 / `<CodeMirror>`） | 186 | 视图 | ✅ 步骤 5 |
 
-> 目标形态：步骤 2–5 完成后，主组件约 **220–260 行**，内容为 props → 状态 → 三个 hook → `<CodeMirror>` + `<EditorSelectionBubble>`。
+> 目标形态与实际结果：预估主组件落在 **220–260 行**，实际 **289 行**——比预估多一点，
+> 差在 `handleUpdate`（引擎唯一更新入口，约 26 行）与 `handleBold`/`handleAddAnnotation`
+> 两个组合点，以及新写的接线注释。内容是 props → 状态 → 四个 hook → `<CodeMirror>` +
+> `<EditorSelectionBubble>` + `<EditorContextMenu>`，即计划想要的那层"引擎面 + 组合点"。
 
 ---
 
@@ -205,7 +208,14 @@
 | 2 | `use-editor-bubble.ts`（694 → 610 行） | ✅ 已推送 | `b631544` |
 | 3 | `use-editor-ai-handoff.ts`（610 → 569 行） | ✅ 已推送 | `effef37` |
 | 4 | `editor-theme.ts` / `editor-search-phrases.ts` / `editor-extensions.ts`（+ 纯函数收口 `draft-annotations.ts`；569 → 398 行） | ✅ 已推送 | `4d6f134` |
-| 5 | `EditorSelectionBubble.tsx` | ⬜ 待做 | — |
+| 5 | `EditorSelectionBubble.tsx` + 独立展示用例 6 条（398 → 289 行） | ✅ 已推送 | `10dc7ee` |
 | 6 | `EditorSurfaceAdapter`（可选） | ⏸ 暂不做 | — |
 
 > 步骤 1 的验证基线：浏览器套件 53 文件 / 311 用例全绿；完整 Node 套件 329 文件 / 327 通过（2860 用例通过 / 1 失败 / 10 skipped，失败项为 §5.4 的两条环境性问题）。
+>
+> 步骤 5 完成后的基线：浏览器套件 **54 文件 / 317 用例**全绿；完整 Node 套件 **2860 用例通过 / 1 失败 / 10 skipped**（同上两条环境性问题）。
+>
+> 最终形态：`CodeMirrorEditor.tsx` **289 行**（起点 915 行），拆出的模块为
+> `use-editor-bubble.ts`(164) / `use-editor-ai-handoff.ts`(105) / `use-draft-annotations.ts`(107) /
+> `use-draft-diff-decorations.ts`(76) / `editor-theme.ts`(146) / `editor-extensions.ts`(73) /
+> `editor-search-phrases.ts`(33) / `draft-annotations.ts`(43) / `EditorSelectionBubble.tsx`(199)。
