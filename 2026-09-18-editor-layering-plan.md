@@ -35,13 +35,13 @@
 
 ---
 
-## 二、现状盘点（步骤 1 完成时实测，共 694 行；步骤 2 后为 610 行）
+## 二、现状盘点（步骤 1 完成时实测，共 694 行；步骤 3 后为 569 行）
 
 | 段落 | 行数 | 性质 | 目标归属 |
 |---|---|---|---|
 | imports | 25 | — | 保持 |
 | `CodeMirrorEditorProps` | 22 | 契约 | 保持 |
-| `EditorAIAction` + `AI_ACTIONS` | 14 | 业务常量 | 步骤 3 |
+| `EditorAIAction` + `AI_ACTIONS` | 14 | 业务常量 | ✅ 步骤 3 |
 | 组件签名与 props 解构 | 20 | — | 保持 |
 | store 读取、`editorRef`、内容同步 state | 11 | 引擎面 | 保持（步骤 2 可评估） |
 | 外部内容同步 effect | 15 | 引擎面 | 保持 |
@@ -53,9 +53,9 @@
 | `cmTheme` | 117 | 纯配置 | 步骤 4 |
 | `extensions` | 58 | 纯配置 | 步骤 4 |
 | `handleAddAnnotation` | 7 | 业务收尾 | 保持（组合点） |
-| `handleAIAction` | 27 | 业务 | 步骤 3 |
+| `handleAIAction` | 27 | 业务 | ✅ 步骤 3 |
 | `handleContextMenu` | 10 | 交互 | ✅ 步骤 2 |
-| `handleAddToAssistant` | 25 | 业务 | 步骤 3 |
+| `handleAddToAssistant` | 25 | 业务 | ✅ 步骤 3 |
 | `cmBasicSetup` | 11 | 纯配置 | 步骤 4（并入 theme 模块） |
 | JSX（浮动条 / 右键菜单 / 状态栏 / `<CodeMirror>`） | 186 | 视图 | 步骤 5 |
 
@@ -203,7 +203,7 @@
 | 0 | 清掉"就地 AI 预览条"死代码（915 → 778 行） | ✅ 已推送 | `0e0c6fb` |
 | 1 | 抽出批注 / 行内修订 hooks（778 → 694 行） | ✅ 已推送 | `5554483` |
 | 2 | `use-editor-bubble.ts`（694 → 610 行） | ✅ 已推送 | `b631544` |
-| 3 | `use-editor-ai-handoff.ts` | ⬜ 待做 | — |
+| 3 | `use-editor-ai-handoff.ts`（610 → 569 行） | ✅ 已推送 | `effef37` |
 | 4 | `editor-theme.ts` / `editor-search-phrases.ts` / `editor-extensions.ts` | ⬜ 待做 | — |
 | 5 | `EditorSelectionBubble.tsx` | ⬜ 待做 | — |
 | 6 | `EditorSurfaceAdapter`（可选） | ⏸ 暂不做 | — |
