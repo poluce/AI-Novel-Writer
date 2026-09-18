@@ -1,32 +1,28 @@
 import type {
   CreationTaskKey,
-  ModelExecutionCapabilityEvidence,
-  ModelExecutionLeaseReceipt,
+  ModelProfile,
   ProjectSessionContext,
 } from '../../shared/ipc-channels'
 import type { CreativeStrategy, GenerationReasoningStage } from '../../shared/reasoning-types'
 import type { SubmitToolName } from '../../shared/submit-contract'
 import { projectSessionContextFromProject } from '../../shared/project-session-context'
-import { ipc } from '../ipc-client'
 import { useLLMStore } from '../../stores/llm-store'
 import { useProjectStore } from '../../stores/project-store'
 import { logFailure } from '../../shared/fail-log'
 import {
   assertGenerationHarnessPolicy,
   createGenerationHarness,
-  GenerationHarnessError,
   type GenerationHarnessPolicy,
   type GenerationMessage,
   type GenerationSession,
   type PhysicalGenerationPlan,
   type ProviderCompletion,
-  type ResolvedCapabilityEvidence,
 } from './generation-harness'
 
 export type GenerationRuntimeBudget = GenerationHarnessPolicy
 
-export interface LeaseCompletionRequest {
-  leaseId: string
+export interface GenerationCompletionRequest {
+  modelId: string
   projectSession?: ProjectSessionContext
   purpose: string
   creativeStrategy: CreativeStrategy
@@ -42,9 +38,8 @@ export interface LeaseCompletionRequest {
 export interface GenerationRuntimeEnvironment {
   snapshotDefaultModelId(taskKey?: CreationTaskKey): string | null
   snapshotCreativeStrategy?(): CreativeStrategy
-  beginModelExecution(modelId: string): Promise<ModelExecutionLeaseReceipt>
-  completeWithLease(request: LeaseCompletionRequest): Promise<ProviderCompletion>
-  closeModelExecution(leaseId: string): Promise<void>
+  snapshotModel?(modelId: string): ModelProfile | null
+  complete(request: GenerationCompletionRequest): Promise<ProviderCompletion>
 }
 
 export interface GenerationRuntimeScope {
@@ -77,10 +72,6 @@ export class GenerationRuntimeError extends Error {
       | 'NO_DEFAULT_MODEL'
       | 'MODEL_NOT_FOUND'
       | 'INVALID_BUDGET_SOURCE'
-      | 'LEASE_BEGIN_FAILED'
-      | 'LEASE_IDENTITY_MISMATCH'
-      | 'LEASE_CAPABILITY_INVALID'
-      | 'LEASE_CLOSE_FAILED'
       | 'RUNTIME_CLOSED',
     message: string,
   ) {
@@ -89,57 +80,18 @@ export class GenerationRuntimeError extends Error {
   }
 }
 
-function capabilityEvidenceFromLease(
-  evidence: ModelExecutionCapabilityEvidence,
-): ResolvedCapabilityEvidence {
-  const positiveInteger = (value: unknown): value is number => (
-    typeof value === 'number' && Number.isSafeInteger(value) && value > 0
-  )
-  const validSource = (value: unknown): boolean => [
-    'verified-provider-preset',
-    'pi-ai-model-registry',
-    'user-operational-cap',
-    'legacy-profile',
-    'unknown',
-  ].includes(String(value))
-  const source = evidence.source as unknown as Record<string, unknown>
-  const validContext = evidence.contextWindowTokens === null
-    || positiveInteger(evidence.contextWindowTokens)
-  const validFlags = [evidence.reasoning, evidence.structuredOutput, evidence.usage]
-    .every(value => value === null || typeof value === 'boolean')
-  const validSources = source !== null
-    && typeof source === 'object'
-    && validSource(source.contextWindowTokens)
-    && validSource(source.maxOutputTokens)
-    && validSource(source.featureFlags)
-  const validFingerprint = /^[a-f0-9]{64}$/u.test(evidence.subjectFingerprint)
-  if (
-    !validContext
-    || !positiveInteger(evidence.maxOutputTokens)
-    || !validFlags
-    || !validSources
-    || !validFingerprint
-  ) {
-    throw new GenerationRuntimeError('LEASE_CAPABILITY_INVALID', '模型执行租约的能力证据无效。')
-  }
-  return {
-    contextWindowTokens: evidence.contextWindowTokens,
-    maxOutputTokens: evidence.maxOutputTokens,
-    reasoning: evidence.reasoning,
-    structuredOutput: evidence.structuredOutput,
-    usage: evidence.usage,
-    source: { ...evidence.source },
-  }
-}
-
-function validateLeaseFingerprint(value: string): void {
-  if (!/^[a-f0-9]{64}$/u.test(value)) {
-    throw new GenerationRuntimeError('LEASE_CAPABILITY_INVALID', '模型执行租约的身份指纹无效。')
-  }
+function publicModelRevision(model: ModelProfile): string {
+  return [
+    model.id,
+    model.provider,
+    model.protocol,
+    model.modelName,
+    model.baseUrl,
+    String(model.maxTokens ?? ''),
+  ].join('\u0000')
 }
 
 function createDefaultEnvironment(): GenerationRuntimeEnvironment {
-  const leaseModels = new Map<string, string>()
   return {
     snapshotDefaultModelId: (taskKey?: CreationTaskKey) => {
       const store = useLLMStore.getState()
@@ -154,28 +106,10 @@ function createDefaultEnvironment(): GenerationRuntimeEnvironment {
     snapshotCreativeStrategy: () => (
       useProjectStore.getState().currentProject?.novelConfig.creativeStrategy ?? 'auto'
     ),
-    async beginModelExecution(modelId) {
-      const result = await ipc.invoke('llm:begin-execution-lease', modelId)
-      if (!result.success || !result.lease) {
-        if (result.errorCode === 'MODEL_NOT_FOUND') {
-          throw new GenerationRuntimeError(
-            'MODEL_NOT_FOUND',
-            '指定的生成模型不存在或已被删除。',
-          )
-        }
-        throw new GenerationRuntimeError(
-          'LEASE_BEGIN_FAILED',
-          result.error || '无法创建模型执行租约。',
-        )
-      }
-      leaseModels.set(result.lease.leaseId, result.lease.modelId)
-      return result.lease
-    },
-    completeWithLease(request) {
-      const frozenModelId = leaseModels.get(request.leaseId)
-      if (!frozenModelId) {
-        return Promise.reject(new Error('模型执行租约无效或已关闭'))
-      }
+    snapshotModel: (modelId) => (
+      useLLMStore.getState().models.find(model => model.id === modelId) ?? null
+    ),
+    complete(request) {
       const llmStore = useLLMStore.getState()
       return new Promise<ProviderCompletion>((resolve, reject) => {
         let requestId: string | null = null
@@ -191,16 +125,16 @@ function createDefaultEnvironment(): GenerationRuntimeEnvironment {
           if (settled) return
           settled = true
           cleanup()
-          logFailure('Generation', 'leased stream failed', error, {
+          logFailure('Generation', 'stream failed', error, {
             purpose: request.purpose,
-            leaseId: request.leaseId,
+            modelId: request.modelId,
           })
-          reject(new Error('模型租约请求失败'))
+          reject(new Error('模型请求失败'))
         }
         const cancel = () => {
           if (requestId) {
             llmStore.cancelGeneration(requestId).catch((cancelError) => {
-              logFailure('Generation', 'cancel leased stream failed', cancelError, {
+              logFailure('Generation', 'cancel stream failed', cancelError, {
                 purpose: request.purpose,
                 requestId,
               })
@@ -227,9 +161,8 @@ function createDefaultEnvironment(): GenerationRuntimeEnvironment {
             onDone: (content, usage, finishReason, artifact) => succeed({ content, usage, finishReason, artifact }),
             onError: fail,
           },
-          frozenModelId,
+          request.modelId,
           {
-            modelExecutionLeaseId: request.leaseId,
             projectSession: request.projectSession,
             purpose: request.purpose,
             creativeStrategy: request.creativeStrategy,
@@ -245,16 +178,6 @@ function createDefaultEnvironment(): GenerationRuntimeEnvironment {
         }).catch(fail)
       })
     },
-    async closeModelExecution(leaseId) {
-      const result = await ipc.invoke('llm:close-execution-lease', leaseId)
-      if (!result.success) {
-        throw new GenerationRuntimeError(
-          'LEASE_CLOSE_FAILED',
-          result.error || '关闭模型执行租约失败。',
-        )
-      }
-      leaseModels.delete(leaseId)
-    },
   }
 }
 
@@ -262,10 +185,7 @@ function freezeBudget(budget: GenerationRuntimeBudget): Readonly<GenerationRunti
   return Object.freeze({ ...budget })
 }
 
-/**
- * The sole renderer entry for one model-frozen generation run. It opens one
- * main-process lease and guarantees a close after every execute scope.
- */
+/** 一次生成运行：按当前模型 id 现查档案，不再签发执行租约。 */
 export async function createGenerationRuntime(
   options: CreateGenerationRuntimeOptions,
   environment: GenerationRuntimeEnvironment = createDefaultEnvironment(),
@@ -282,93 +202,47 @@ export async function createGenerationRuntime(
   const projectSession = sessionCandidate
     ? Object.freeze({ ...sessionCandidate })
     : undefined
-  // Validate before reading mutable renderer state or opening a billable model
-  // lease. Oversized plans therefore fail without any provider-side effect.
   assertGenerationHarnessPolicy(budget)
   const explicitModelId = options.modelId?.trim()
   if (Object.hasOwn(options, 'modelId') && !explicitModelId) {
     throw new GenerationRuntimeError('MODEL_NOT_FOUND', '指定的生成模型不存在或已被删除。')
   }
-  const frozenModelId = explicitModelId ?? environment.snapshotDefaultModelId(options.taskKey)
-  if (!frozenModelId) {
-    throw new GenerationRuntimeError('NO_DEFAULT_MODEL', '未配置默认生成模型。')
-  }
   const frozenCreativeStrategy = options.creativeStrategy
     ?? environment.snapshotCreativeStrategy?.()
     ?? 'auto'
 
-  let lease: ModelExecutionLeaseReceipt
-  try {
-    lease = await environment.beginModelExecution(frozenModelId)
-  } catch (error) {
-    if (error instanceof GenerationRuntimeError && error.code === 'MODEL_NOT_FOUND') {
-      throw new GenerationRuntimeError('MODEL_NOT_FOUND', '指定的生成模型不存在或已被删除。')
+  const resolveModelId = () => {
+    const modelId = explicitModelId ?? environment.snapshotDefaultModelId(options.taskKey)
+    if (!modelId) {
+      throw new GenerationRuntimeError('NO_DEFAULT_MODEL', '未配置默认生成模型。')
     }
-    throw new GenerationRuntimeError('LEASE_BEGIN_FAILED', '无法创建模型执行租约。')
-  }
-  if (lease.modelId !== frozenModelId) {
-    try {
-      await environment.closeModelExecution(lease.leaseId)
-    } catch { /* the identity failure remains authoritative */ }
-    throw new GenerationRuntimeError(
-      'LEASE_IDENTITY_MISMATCH',
-      '模型执行租约与已冻结的生成模型不一致。',
-    )
-  }
-
-  let resolvedCapabilities: ResolvedCapabilityEvidence
-  try {
-    validateLeaseFingerprint(lease.modelRevision)
-    validateLeaseFingerprint(lease.endpointFingerprint)
-    resolvedCapabilities = capabilityEvidenceFromLease(lease.capabilityEvidence)
-  } catch {
-    try {
-      await environment.closeModelExecution(lease.leaseId)
-    } catch { /* invalid evidence remains authoritative */ }
-    throw new GenerationRuntimeError('LEASE_CAPABILITY_INVALID', '模型执行租约的能力证据无效。')
-  }
-
-  let closed = false
-  let closePromise: Promise<void> | null = null
-  const close = async () => {
-    if (closed) return
-    if (closePromise) return closePromise
-    closePromise = environment.closeModelExecution(lease.leaseId)
-      .then(() => { closed = true })
-      .catch(() => {
-        closePromise = null
-        throw new GenerationRuntimeError('LEASE_CLOSE_FAILED', '关闭模型执行租约失败。')
-      })
-    return closePromise
+    return modelId
   }
 
   const harness = createGenerationHarness({
     modelSource: {
-      snapshotDefaultModel: () => ({
-        revision: lease.modelRevision,
-        model: {
-          id: lease.modelId,
-          provider: lease.provider,
-          protocol: lease.protocol,
-          modelName: lease.modelName,
-          baseUrl: '',
-          maxTokens: lease.capabilityEvidence.maxOutputTokens,
-        },
-        modelExecutionLeaseId: lease.leaseId,
-        endpointFingerprint: lease.endpointFingerprint,
-        resolvedCapabilities,
-      }),
+      snapshotDefaultModel: () => {
+        const modelId = resolveModelId()
+        const model = environment.snapshotModel?.(modelId)
+        if (!model) return null
+        return {
+          revision: publicModelRevision(model),
+          model: {
+            id: model.id,
+            provider: model.provider,
+            protocol: model.protocol,
+            modelName: model.modelName,
+            baseUrl: model.baseUrl,
+            maxTokens: model.maxTokens,
+            capabilities: model.capabilities,
+          },
+        }
+      },
     },
     completionPort: {
       complete(request) {
-        if (!request.modelExecutionLeaseId) {
-          return Promise.reject(new GenerationHarnessError(
-            'PROVIDER_REQUEST_FAILED',
-            '模型生成缺少执行租约。',
-          ))
-        }
-        return environment.completeWithLease({
-          leaseId: request.modelExecutionLeaseId,
+        return environment.complete({
+          modelId: request.modelId,
           projectSession,
           purpose: request.purpose,
           creativeStrategy: request.creativeStrategy,
@@ -383,23 +257,16 @@ export async function createGenerationRuntime(
     policy: budget,
     creativeStrategy: frozenCreativeStrategy,
   })
-  const session = harness.openSession()
+
+  let closed = false
+  const close = async () => { closed = true }
 
   return {
     async execute<T>(operation: (scope: GenerationRuntimeScope) => Promise<T>): Promise<T> {
       if (closed) throw new GenerationRuntimeError('RUNTIME_CLOSED', '模型生成运行时已关闭。')
-      let result: T
-      try {
-        result = await operation({ session })
-      } catch (error) {
-        try { await close() } catch { /* do not replace the operation failure */ }
-        throw error
-      }
-      // Lease disposal is cleanup, not part of the caller's domain outcome.
-      // Keep close() retryable for callers that retain the runtime; the
-      // main-process lease TTL bounds any genuinely unreachable cleanup.
-      try { await close() } catch { /* never turn a completed operation into a failure */ }
-      return result
+      resolveModelId()
+      const session = harness.openSession()
+      return operation({ session })
     },
     close,
   }

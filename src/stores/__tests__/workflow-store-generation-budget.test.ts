@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { LLMFinishReason, ModelExecutionLeaseReceipt } from '../../shared/ipc-channels'
+import type { LLMFinishReason } from '../../shared/ipc-channels'
 import {
   createGenerationRuntime,
   type GenerationRuntimeEnvironment,
@@ -19,42 +19,17 @@ const projectSession = {
   projectPath,
 }
 
-function leaseReceipt(): ModelExecutionLeaseReceipt {
-  return {
-    leaseId: 'model-execution-lease-a',
-    modelId: 'model-a',
-    provider: 'custom',
-    protocol: 'openai',
-    modelName: 'model-a-v1',
-    modelRevision: 'a'.repeat(64),
-    endpointFingerprint: 'b'.repeat(64),
-    capabilityEvidence: {
-      source: {
-        contextWindowTokens: 'unknown',
-        maxOutputTokens: 'legacy-profile',
-        featureFlags: 'unknown',
-      },
-      subjectFingerprint: 'c'.repeat(64),
-      contextWindowTokens: 16_384,
-      maxOutputTokens: 4096,
-      reasoning: false,
-      structuredOutput: true,
-      usage: true,
-    },
-    createdAt: 1000,
-    expiresAt: 61_000,
-  }
-}
-
 function environment(finishReason: LLMFinishReason): GenerationRuntimeEnvironment {
   return {
     snapshotDefaultModelId: () => 'model-a',
-    beginModelExecution: vi.fn().mockResolvedValue(leaseReceipt()),
-    completeWithLease: vi.fn().mockResolvedValue({
+    snapshotModel: (modelId) => ({
+      id: modelId, name: modelId, provider: 'custom', protocol: 'openai',
+      modelName: modelId, baseUrl: 'https://example.invalid', apiKey: '', maxTokens: 4096,
+    } as never),
+    complete: vi.fn().mockResolvedValue({
       content: finishReason === 'stop' ? '{"ok":true}' : '',
       finishReason,
     }),
-    closeModelExecution: vi.fn().mockResolvedValue(undefined),
   }
 }
 

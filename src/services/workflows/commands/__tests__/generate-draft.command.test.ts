@@ -854,7 +854,7 @@ describe('GenerateDraftCommand generation runtime boundary', () => {
     let selectedModelId: string | null = 'model-a'
     let call = 0
     const receipt = leaseReceipt()
-    const completeWithLease = vi.fn<GenerationRuntimeEnvironment['completeWithLease']>(async () => {
+    const complete = vi.fn<GenerationRuntimeEnvironment['complete']>(async () => {
       call += 1
       if (call === 1) {
         selectedModelId = 'model-b'
@@ -864,10 +864,9 @@ describe('GenerateDraftCommand generation runtime boundary', () => {
       return { content: `${'续'.repeat(700)}。`, finishReason: 'stop' }
     })
     const environment: GenerationRuntimeEnvironment = {
+      snapshotModel: (modelId: string) => ({ id: modelId, name: modelId, provider: 'custom' as const, protocol: 'openai' as const, modelName: modelId, baseUrl: 'https://example.invalid', apiKey: '', maxTokens: 8192 } as any),
       snapshotDefaultModelId: vi.fn(() => selectedModelId),
-      beginModelExecution: vi.fn(async () => receipt),
-      completeWithLease,
-      closeModelExecution: vi.fn().mockResolvedValue(undefined),
+      complete,
     }
     const createRuntime = vi.fn<GenerateDraftCommandDependencies['createRuntime']>(
       options => createGenerationRuntime(options, environment),
@@ -878,18 +877,16 @@ describe('GenerateDraftCommand generation runtime boundary', () => {
     await expect(command.execute({ step: {}, context, callbacks })).resolves.toContain('续')
 
     expect(environment.snapshotDefaultModelId).toHaveBeenCalledOnce()
-    expect(environment.beginModelExecution).toHaveBeenCalledOnce()
-    expect(environment.beginModelExecution).toHaveBeenCalledWith('model-a')
-    expect(completeWithLease).toHaveBeenCalledTimes(2)
-    expect(completeWithLease.mock.calls.map(([request]) => request.leaseId)).toEqual([
-      'draft-lease-a',
-      'draft-lease-a',
+    expect(complete).toHaveBeenCalledTimes(2)
+    expect(complete.mock.calls.map(([request]) => request.modelId)).toEqual([
+      'model-a',
+      'model-a',
     ])
-    expect(completeWithLease.mock.calls.map(([request]) => request.submitTool)).toEqual([
+    expect(complete.mock.calls.map(([request]) => request.submitTool)).toEqual([
       'submit_draft',
       'submit_draft',
     ])
-    expect(completeWithLease.mock.calls.map(([request]) => request.plan.maxOutputTokens)).toEqual([
+    expect(complete.mock.calls.map(([request]) => request.plan.maxOutputTokens)).toEqual([
       8192,
       8192,
     ])
@@ -2009,26 +2006,17 @@ describe('GenerateDraftCommand generation runtime boundary', () => {
   })
 
   it('does not locally reject a 30K prompt when lease context evidence is unknown', async () => {
-    const completeWithLease = vi.fn<GenerationRuntimeEnvironment['completeWithLease']>(async request => {
+    const complete = vi.fn<GenerationRuntimeEnvironment['complete']>(async request => {
       void request
       return { content: `${'正文'.repeat(2500)}。`, finishReason: 'stop' }
     })
     const environment: GenerationRuntimeEnvironment = {
       snapshotDefaultModelId: () => 'model-a',
-      beginModelExecution: async () => leaseReceipt({
-        capabilityEvidence: {
-          ...leaseReceipt().capabilityEvidence,
-          source: {
-            contextWindowTokens: 'unknown',
-            maxOutputTokens: 'user-operational-cap',
-            featureFlags: 'unknown',
-          },
-          contextWindowTokens: null,
-          maxOutputTokens: 8192,
-        },
-      }),
-      completeWithLease,
-      closeModelExecution: vi.fn().mockResolvedValue(undefined),
+      snapshotModel: (modelId: string) => ({
+        id: modelId, name: modelId, provider: 'custom' as const, protocol: 'openai' as const,
+        modelName: modelId, baseUrl: 'https://example.invalid', apiKey: '', maxTokens: 8192,
+      } as never),
+      complete,
     }
     const createRuntime = vi.fn<GenerateDraftCommandDependencies['createRuntime']>(
       options => createGenerationRuntime(options, environment),
@@ -2041,12 +2029,12 @@ describe('GenerateDraftCommand generation runtime boundary', () => {
 
     await expect(command.execute({ step: {}, context, callbacks })).resolves.toContain('正文')
 
-    expect(completeWithLease).toHaveBeenCalledOnce()
-    const physicalRequest = completeWithLease.mock.calls[0]![0]
+    expect(complete).toHaveBeenCalledOnce()
+    const physicalRequest = complete.mock.calls[0]![0]
     const promptChars = physicalRequest.messages.reduce((sum, message) => sum + message.content.length, 0)
     expect(promptChars).toBeGreaterThan(30_000)
-    expect(completeWithLease.mock.calls[0]?.[0].plan.maxOutputTokens).toBe(8192)
-    expect(completeWithLease.mock.calls[0]?.[0].submitTool).toBe('submit_draft')
+    expect(complete.mock.calls[0]?.[0].plan.maxOutputTokens).toBe(8192)
+    expect(complete.mock.calls[0]?.[0].submitTool).toBe('submit_draft')
   })
 
   it('accepts exactly 80% of the target without requesting a continuation', async () => {

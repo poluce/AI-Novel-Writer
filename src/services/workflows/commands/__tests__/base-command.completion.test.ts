@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { ModelExecutionLeaseReceipt } from '../../../../shared/ipc-channels'
 import type { StepCallbacks, WorkflowContext } from '../../../../stores/workflow-store'
 import {
   createGenerationRuntime,
@@ -90,34 +89,6 @@ const callbacks: StepCallbacks = {
   appendText: vi.fn(),
 }
 
-function leaseReceipt(overrides: Partial<ModelExecutionLeaseReceipt> = {}): ModelExecutionLeaseReceipt {
-  return {
-    leaseId: 'model-execution-lease-a',
-    modelId: 'model-a',
-    provider: 'custom',
-    protocol: 'openai',
-    modelName: 'unknown-model',
-    modelRevision: 'a'.repeat(64),
-    endpointFingerprint: 'b'.repeat(64),
-    capabilityEvidence: {
-      source: {
-        contextWindowTokens: 'unknown',
-        maxOutputTokens: 'user-operational-cap',
-        featureFlags: 'unknown',
-      },
-      subjectFingerprint: 'c'.repeat(64),
-      contextWindowTokens: null,
-      maxOutputTokens: 2048,
-      reasoning: null,
-      structuredOutput: true,
-      usage: null,
-    },
-    createdAt: 1000,
-    expiresAt: 61_000,
-    ...overrides,
-  }
-}
-
 function dependenciesFor(environment: GenerationRuntimeEnvironment): WorkflowGenerationRuntimeDependencies {
   return {
     createRuntime: (options: CreateGenerationRuntimeOptions): Promise<GenerationRuntime> => (
@@ -135,16 +106,15 @@ describe('BaseWorkflowCommand completion boundary', () => {
     { leasedCap: 16_384, expectedRequest: 8192 },
     { leasedCap: 8192, expectedRequest: 8192 },
   ])('keeps ordinary structured requests at $expectedRequest for a $leasedCap-capability lease', async ({ leasedCap, expectedRequest }) => {
-    const completeWithLease = vi.fn<GenerationRuntimeEnvironment['completeWithLease']>()
+    const complete = vi.fn<GenerationRuntimeEnvironment['complete']>()
       .mockResolvedValue({ content: '{"ok":true}', finishReason: 'stop' })
-    const baseLease = leaseReceipt()
     const environment: GenerationRuntimeEnvironment = {
+      snapshotModel: (modelId: string) => ({
+        id: modelId, name: modelId, provider: 'custom' as const, protocol: 'openai' as const,
+        modelName: modelId, baseUrl: 'https://example.invalid', apiKey: '', maxTokens: leasedCap,
+      } as never),
       snapshotDefaultModelId: () => 'model-a',
-      beginModelExecution: vi.fn().mockResolvedValue(leaseReceipt({
-        capabilityEvidence: { ...baseLease.capabilityEvidence, maxOutputTokens: leasedCap },
-      })),
-      completeWithLease,
-      closeModelExecution: vi.fn().mockResolvedValue(undefined),
+      complete,
     }
 
     await expect(new CompletionProbeCommand(dependenciesFor(environment)).execute({
@@ -153,7 +123,7 @@ describe('BaseWorkflowCommand completion boundary', () => {
       callbacks,
     })).resolves.toBe('{"ok":true}')
 
-    expect(completeWithLease.mock.calls[0]?.[0].plan.maxOutputTokens).toBe(expectedRequest)
+    expect(complete.mock.calls[0]?.[0].plan.maxOutputTokens).toBe(expectedRequest)
     expect(WORKFLOW_GENERATION_BUDGETS.structured.maxRequestedOutputTokens).toBe(131_072)
   })
 
@@ -161,16 +131,15 @@ describe('BaseWorkflowCommand completion boundary', () => {
     { leasedCap: 16_384, expectedRequest: 8192 },
     { leasedCap: 8192, expectedRequest: 8192 },
   ])('uses the bounded character-architecture policy without exceeding a $leasedCap-capability lease', async ({ leasedCap, expectedRequest }) => {
-    const completeWithLease = vi.fn<GenerationRuntimeEnvironment['completeWithLease']>()
+    const complete = vi.fn<GenerationRuntimeEnvironment['complete']>()
       .mockResolvedValue({ content: '{"ok":true}', finishReason: 'stop' })
-    const baseLease = leaseReceipt()
     const environment: GenerationRuntimeEnvironment = {
+      snapshotModel: (modelId: string) => ({
+        id: modelId, name: modelId, provider: 'custom' as const, protocol: 'openai' as const,
+        modelName: modelId, baseUrl: 'https://example.invalid', apiKey: '', maxTokens: leasedCap,
+      } as never),
       snapshotDefaultModelId: () => 'model-a',
-      beginModelExecution: vi.fn().mockResolvedValue(leaseReceipt({
-        capabilityEvidence: { ...baseLease.capabilityEvidence, maxOutputTokens: leasedCap },
-      })),
-      completeWithLease,
-      closeModelExecution: vi.fn().mockResolvedValue(undefined),
+      complete,
     }
 
     await new CompletionProbeCommand(dependenciesFor(environment), 'character-architecture').execute({
@@ -179,7 +148,7 @@ describe('BaseWorkflowCommand completion boundary', () => {
       callbacks,
     })
 
-    expect(completeWithLease.mock.calls[0]?.[0].plan.maxOutputTokens).toBe(expectedRequest)
+    expect(complete.mock.calls[0]?.[0].plan.maxOutputTokens).toBe(expectedRequest)
     expect(WORKFLOW_GENERATION_BUDGETS['character-architecture']).toEqual({
       maxAttempts: 12,
       maxRequestedOutputTokens: 98_304,
@@ -190,13 +159,15 @@ describe('BaseWorkflowCommand completion boundary', () => {
   })
 
   it('keeps ordinary generation single-shot and fail-closed while an unknown model uses its leased cap', async () => {
-    const completeWithLease = vi.fn<GenerationRuntimeEnvironment['completeWithLease']>()
+    const complete = vi.fn<GenerationRuntimeEnvironment['complete']>()
       .mockResolvedValue({ content: '半截结果', finishReason: 'length' })
     const environment: GenerationRuntimeEnvironment = {
+      snapshotModel: (modelId: string) => ({
+        id: modelId, name: modelId, provider: 'custom' as const, protocol: 'openai' as const,
+        modelName: modelId, baseUrl: 'https://example.invalid', apiKey: '', maxTokens: 2048,
+      } as never),
       snapshotDefaultModelId: () => 'model-a',
-      beginModelExecution: vi.fn().mockResolvedValue(leaseReceipt()),
-      completeWithLease,
-      closeModelExecution: vi.fn().mockResolvedValue(undefined),
+      complete,
     }
 
     await expect(new CompletionProbeCommand(dependenciesFor(environment)).execute({
@@ -205,18 +176,20 @@ describe('BaseWorkflowCommand completion boundary', () => {
       callbacks,
     })).rejects.toThrow('AI 输出达到模型最大长度，结果不完整')
 
-    expect(completeWithLease).toHaveBeenCalledOnce()
-    expect(completeWithLease.mock.calls[0]?.[0].plan.maxOutputTokens).toBe(2048)
+    expect(complete).toHaveBeenCalledOnce()
+    expect(complete.mock.calls[0]?.[0].plan.maxOutputTokens).toBe(2048)
   })
 
   it('keeps a protocol-error candidate visible while rejecting it as a completed workflow result', async () => {
-    const completeWithLease = vi.fn<GenerationRuntimeEnvironment['completeWithLease']>()
+    const complete = vi.fn<GenerationRuntimeEnvironment['complete']>()
       .mockResolvedValue({ content: '可恢复候选正文', finishReason: 'error' })
     const environment: GenerationRuntimeEnvironment = {
+      snapshotModel: (modelId: string) => ({
+        id: modelId, name: modelId, provider: 'custom' as const, protocol: 'openai' as const,
+        modelName: modelId, baseUrl: 'https://example.invalid', apiKey: '', maxTokens: 8192,
+      } as never),
       snapshotDefaultModelId: () => 'model-a',
-      beginModelExecution: vi.fn().mockResolvedValue(leaseReceipt()),
-      completeWithLease,
-      closeModelExecution: vi.fn().mockResolvedValue(undefined),
+      complete,
     }
     const appendText = vi.fn()
 
@@ -227,17 +200,19 @@ describe('BaseWorkflowCommand completion boundary', () => {
     })).rejects.toThrow()
 
     expect(appendText).toHaveBeenCalledWith('可恢复候选正文')
-    expect(completeWithLease).toHaveBeenCalledOnce()
+    expect(complete).toHaveBeenCalledOnce()
   })
 
   it('uses the frozen UI locale for an ordinary terminal failure', async () => {
-    const completeWithLease = vi.fn<GenerationRuntimeEnvironment['completeWithLease']>()
+    const complete = vi.fn<GenerationRuntimeEnvironment['complete']>()
       .mockResolvedValue({ content: '半截结果', finishReason: 'length' })
     const environment: GenerationRuntimeEnvironment = {
+      snapshotModel: (modelId: string) => ({
+        id: modelId, name: modelId, provider: 'custom' as const, protocol: 'openai' as const,
+        modelName: modelId, baseUrl: 'https://example.invalid', apiKey: '', maxTokens: 8192,
+      } as never),
       snapshotDefaultModelId: () => 'model-a',
-      beginModelExecution: vi.fn().mockResolvedValue(leaseReceipt()),
-      completeWithLease,
-      closeModelExecution: vi.fn().mockResolvedValue(undefined),
+      complete,
     }
 
     await expect(new CompletionProbeCommand(dependenciesFor(environment)).execute({
@@ -249,23 +224,21 @@ describe('BaseWorkflowCommand completion boundary', () => {
 
   it('shares one frozen lease and budget across a structured continuation after the default changes', async () => {
     let defaultModelId: string | null = 'model-a'
-    const beginModelExecution = vi.fn<GenerationRuntimeEnvironment['beginModelExecution']>()
-      .mockResolvedValue(leaseReceipt())
-    const completeWithLease = vi.fn<GenerationRuntimeEnvironment['completeWithLease']>()
+    const complete = vi.fn<GenerationRuntimeEnvironment['complete']>()
       .mockImplementation(async () => {
-        const call = completeWithLease.mock.calls.length
+        const call = complete.mock.calls.length
         defaultModelId = 'model-b'
         return call === 1
           ? { content: '{"blueprints":[', finishReason: 'length' }
           : { content: '{"blueprints":[]}', finishReason: 'stop' }
       })
-    const closeModelExecution = vi.fn<GenerationRuntimeEnvironment['closeModelExecution']>()
-      .mockResolvedValue(undefined)
     const environment: GenerationRuntimeEnvironment = {
       snapshotDefaultModelId: () => defaultModelId,
-      beginModelExecution,
-      completeWithLease,
-      closeModelExecution,
+      snapshotModel: (modelId) => ({
+        id: modelId, name: modelId, provider: 'custom', protocol: 'openai',
+        modelName: modelId, baseUrl: 'https://example.invalid', apiKey: '', maxTokens: 8192,
+      } as never),
+      complete,
     }
 
     await expect(new CompletionProbeCommand(dependenciesFor(environment)).execute({
@@ -274,23 +247,22 @@ describe('BaseWorkflowCommand completion boundary', () => {
       callbacks,
     })).resolves.toBe('{"blueprints":[]}')
 
-    expect(beginModelExecution).toHaveBeenCalledOnce()
-    expect(beginModelExecution).toHaveBeenCalledWith('model-a')
-    expect(completeWithLease).toHaveBeenCalledTimes(2)
-    expect(completeWithLease.mock.calls.map(([request]) => request.leaseId))
-      .toEqual(['workflow-lease-a', 'workflow-lease-a'])
-    expect(closeModelExecution).toHaveBeenCalledOnce()
+    expect(complete).toHaveBeenCalledTimes(2)
+    expect(complete.mock.calls.map(([request]) => request.modelId))
+      .toEqual(['model-a', 'model-a'])
   })
 
   it('ignores forged physical request controls at the semantic command boundary', async () => {
-    const completeWithLease = vi.fn<GenerationRuntimeEnvironment['completeWithLease']>()
+    const complete = vi.fn<GenerationRuntimeEnvironment['complete']>()
       .mockResolvedValueOnce({ content: '{"blueprints":[', finishReason: 'length' })
       .mockResolvedValueOnce({ content: '{"blueprints":[]}', finishReason: 'stop' })
     const environment: GenerationRuntimeEnvironment = {
+      snapshotModel: (modelId: string) => ({
+        id: modelId, name: modelId, provider: 'custom' as const, protocol: 'openai' as const,
+        modelName: modelId, baseUrl: 'https://example.invalid', apiKey: '', maxTokens: 2048,
+      } as never),
       snapshotDefaultModelId: () => 'model-a',
-      beginModelExecution: vi.fn().mockResolvedValue(leaseReceipt()),
-      completeWithLease,
-      closeModelExecution: vi.fn().mockResolvedValue(undefined),
+      complete,
     }
 
     await new CompletionProbeCommand(dependenciesFor(environment)).execute({
@@ -299,7 +271,7 @@ describe('BaseWorkflowCommand completion boundary', () => {
       callbacks,
     })
 
-    for (const [request] of completeWithLease.mock.calls) {
+    for (const [request] of complete.mock.calls) {
       expect(request.plan.maxOutputTokens).toBe(2048)
       expect(request).not.toHaveProperty('temperature')
       expect(request).not.toHaveProperty('maxTokens')
@@ -308,13 +280,15 @@ describe('BaseWorkflowCommand completion boundary', () => {
 
   it('exhausts the shared command budget before the domain commit callback', async () => {
     const commit = vi.fn()
-    const completeWithLease = vi.fn<GenerationRuntimeEnvironment['completeWithLease']>()
+    const complete = vi.fn<GenerationRuntimeEnvironment['complete']>()
       .mockResolvedValue({ content: '{"ok":true}', finishReason: 'stop' })
     const environment: GenerationRuntimeEnvironment = {
+      snapshotModel: (modelId: string) => ({
+        id: modelId, name: modelId, provider: 'custom' as const, protocol: 'openai' as const,
+        modelName: modelId, baseUrl: 'https://example.invalid', apiKey: '', maxTokens: 8192,
+      } as never),
       snapshotDefaultModelId: () => 'model-a',
-      beginModelExecution: vi.fn().mockResolvedValue(leaseReceipt()),
-      completeWithLease,
-      closeModelExecution: vi.fn().mockResolvedValue(undefined),
+      complete,
     }
 
     await expect(new CompletionProbeCommand(dependenciesFor(environment)).execute({
@@ -323,7 +297,7 @@ describe('BaseWorkflowCommand completion boundary', () => {
       callbacks,
     })).rejects.toMatchObject({ code: 'ATTEMPT_BUDGET_EXHAUSTED' })
 
-    expect(completeWithLease).toHaveBeenCalledTimes(WORKFLOW_GENERATION_BUDGETS.structured.maxAttempts)
+    expect(complete).toHaveBeenCalledTimes(WORKFLOW_GENERATION_BUDGETS.structured.maxAttempts)
     expect(commit).not.toHaveBeenCalled()
   })
 })

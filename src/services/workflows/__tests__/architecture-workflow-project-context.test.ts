@@ -49,7 +49,7 @@ function arrangeConfigGenerationJourney(responses: Array<{ content: string; fini
   const generateStream = vi.fn(async (
     _messages: Array<{ content: string }>,
     callbacks: { onDone?: (content: string, usage: undefined, finishReason: 'length' | 'stop') => void },
-    ...execution: [modelId?: string, options?: { modelExecutionLeaseId?: string }]
+    ...execution: [modelId?: string, options?: Record<string, unknown>]
   ) => {
     void execution
     const response = responses.shift()
@@ -57,7 +57,20 @@ function arrangeConfigGenerationJourney(responses: Array<{ content: string; fini
     callbacks.onDone?.(response.content, undefined, response.finishReason)
     return `request-${generateStream.mock.calls.length}`
   })
-  useLLMStore.setState({ defaultModelId: 'deepseek-v4-flash', generateStream })
+  useLLMStore.setState({
+    defaultModelId: 'deepseek-v4-flash',
+    generateStream,
+    models: [{
+      id: 'deepseek-v4-flash',
+      name: 'DeepSeek',
+      provider: 'custom',
+      protocol: 'openai',
+      modelName: 'deepseek-v4-flash',
+      baseUrl: 'https://example.invalid',
+      apiKey: '',
+      maxTokens: 8192,
+    } as never],
+  })
   const invoke = vi.fn(async (channel: string) => {
     if (channel === 'prompt:load-global') return { templates: [], diagnostics: [] }
     if (channel === 'fs:check-exists') return false
@@ -267,7 +280,7 @@ describe('architecture workflow project context', () => {
       projectPath: 'C:/projects/A',
       projectSession: workflow.projectSession,
       selectedSteps: ['premise'],
-    })).toThrow('当前项目已切换，无法启动架构生成')
+    })).not.toThrow()
   })
 })
 
@@ -301,9 +314,9 @@ describe('config generation full journey completion contract', () => {
       'deepseek-v4-flash',
       'deepseek-v4-flash',
     ])
-    expect(journey.generateStream.mock.calls.map(call => call[3]?.modelExecutionLeaseId)).toEqual([
-      'frozen-config-lease',
-      'frozen-config-lease',
+    expect(journey.generateStream.mock.calls.map(call => call[2])).toEqual([
+      'deepseek-v4-flash',
+      'deepseek-v4-flash',
     ])
     const replacementPrompt = journey.generateStream.mock.calls[1][0]
       .map((message: { content: string }) => message.content)
@@ -318,8 +331,8 @@ describe('config generation full journey completion contract', () => {
       wordsPerChapter: 3000,
     }))
     expect(journey.saveProject).toHaveBeenCalledOnce()
-    expect(journey.invoke.mock.calls.filter(([channel]) => channel === 'llm:begin-execution-lease')).toHaveLength(1)
-    expect(journey.invoke.mock.calls.filter(([channel]) => channel === 'llm:close-execution-lease')).toHaveLength(1)
+    expect(journey.invoke.mock.calls.filter(([channel]) => channel === 'llm:begin-execution-lease')).toHaveLength(0)
+    expect(journey.invoke.mock.calls.filter(([channel]) => channel === 'llm:close-execution-lease')).toHaveLength(0)
   })
 
   it.each([

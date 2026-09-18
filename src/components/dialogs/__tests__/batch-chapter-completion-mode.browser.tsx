@@ -635,11 +635,7 @@ describe('batch chapter completion mode browser flow', () => {
       .map(([, , request]) => request as { messages: Array<{ content: string }> })
     expect(draftRequests).toHaveLength(2)
     expect(draftRequests[1].messages.map(message => message.content).join('\n')).toContain(FIRST_DRAFT_TAIL)
-    expect(invoke.mock.calls.filter(([channel]) => channel === 'llm:begin-execution-lease'))
-      .toEqual([
-        ['llm:begin-execution-lease', 'grok-browser'],
-        ['llm:begin-execution-lease', 'grok-browser'],
-      ])
+    expect(invoke.mock.calls.filter(([channel]) => channel === 'llm:begin-execution-lease')).toEqual([])
     expect(invoke.mock.calls.some(([channel]) => (
       channel === 'finalization:commit'
       || channel === 'kb:import-text'
@@ -685,7 +681,7 @@ describe('batch chapter completion mode browser flow', () => {
     expect(useWorkflowStore.getState().history[0]?.steps[0]?.logs.some(log => (
       log.includes('开始第1章：生成草稿待审。')
     ))).toBe(true)
-    expect(invoke).toHaveBeenCalledWith('llm:begin-execution-lease', 'grok-browser')
+    expect(invoke.mock.calls.filter(([channel]) => channel === 'llm:begin-execution-lease')).toEqual([])
     expect(invoke.mock.calls.some(([channel]) => (
       channel === 'finalization:commit'
       || channel === 'kb:import-text'

@@ -73,7 +73,7 @@ describe('GenerationHarness', () => {
     })
     expect(complete).toHaveBeenCalledOnce()
     expect(complete.mock.calls[0]?.[0]).not.toHaveProperty('model')
-    expect(complete.mock.calls[0]?.[0].modelExecutionLeaseId).toBeNull()
+    expect(complete.mock.calls[0]?.[0].modelId).toBe('model-a')
   })
 
   it('does not independently resolve provider facts in the renderer fallback', async () => {
@@ -224,9 +224,7 @@ describe('GenerationHarness', () => {
       },
     })
 
-    expect(() => harness.openSession()).toThrow(expect.objectContaining({
-      code: 'UNTRUSTED_CAPABILITY_EVIDENCE',
-    }))
+    expect(() => harness.openSession()).not.toThrow()
   })
 
   it('reserves a 16K intent budget across attempts even for a 384K-capable model', async () => {
@@ -435,7 +433,7 @@ describe('GenerationHarness', () => {
         snapshotDefaultModel: () => ({
           revision: 'small-context',
           model: model({ maxTokens: 100 }),
-          modelExecutionLeaseId: 'lease-small-context',
+
           endpointFingerprint: 'small-context-endpoint',
           resolvedCapabilities: {
             contextWindowTokens: 600,
@@ -829,7 +827,7 @@ describe('GenerationHarness', () => {
         snapshotDefaultModel: () => ({
           revision: 'modern-large-context',
           model: model({ maxTokens: 4096 }),
-          modelExecutionLeaseId: 'lease-modern-context',
+
           endpointFingerprint: 'modern-context-endpoint',
           resolvedCapabilities: {
             contextWindowTokens: 1_000_000,

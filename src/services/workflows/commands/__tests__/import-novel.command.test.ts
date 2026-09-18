@@ -564,10 +564,10 @@ describe('InferGlobalSettingsCommand', () => {
     const valid = JSON.stringify(validInference())
     const malformed = `${valid.slice(0, -1)},}`
     const generateStream = vi.fn<ReturnType<typeof useLLMStore.getState>['generateStream']>(
-      async (_messages, streamCallbacks, _modelId, options) => {
+      async (_messages, streamCallbacks, _modelId) => {
         expect(invoke.mock.calls.filter(([channel]) => channel === 'kb:search')).toHaveLength(4)
         streamCallbacks.onDone?.(generateStream.mock.calls.length === 1 ? malformed : valid, undefined, 'stop')
-        return String(options?.modelExecutionLeaseId)
+        return String(_modelId)
       },
     )
     useLLMStore.setState({ defaultModelId: 'model-a', generateStream })
@@ -585,8 +585,7 @@ describe('InferGlobalSettingsCommand', () => {
     expect(generateStream).toHaveBeenCalledTimes(2)
     expect(generateStream.mock.calls[0][3]?.submitTool).toBe('submit_json')
     expect(generateStream.mock.calls[1][3]?.submitTool).toBe('submit_json')
-    expect(generateStream.mock.calls[0][3]?.modelExecutionLeaseId)
-      .toBe(generateStream.mock.calls[1][3]?.modelExecutionLeaseId)
+    expect(generateStream.mock.calls[0][2]).toBe(generateStream.mock.calls[1][2])
     expect(invoke.mock.calls.filter(([channel]) => channel === 'db:import-global-facts-commit')).toHaveLength(1)
     expect(invoke.mock.calls.map(([channel]) => channel)).not.toContain('project:save')
     expect(invoke.mock.calls.map(([channel]) => channel)).not.toContain('db:project-core-update')

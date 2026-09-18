@@ -77,7 +77,6 @@ interface LLMState {
       maxTokens?: number
       purpose?: string
       projectSession?: import('../shared/ipc-channels').ProjectSessionContext
-      modelExecutionLeaseId?: string
       creativeStrategy?: CreativeStrategy
       reasoningStage?: GenerationReasoningStage
       taskKey?: CreationTaskKey
@@ -323,7 +322,6 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
         taskKey,
         reasoningEffort: effectiveEffort,
         projectSession,
-        modelExecutionLeaseId: options?.modelExecutionLeaseId,
         messages,
         stream: true,
         responseFormat: options?.responseFormat as { type: 'json_object' | 'text' } | undefined,

@@ -13,10 +13,6 @@ import { resolveGenerationParameters, type ResolvedGenerationParameters } from '
 import { getCurrentProjectPath } from '../database'
 import { LLMHistoryRepository } from '../repositories/llm-repository'
 import { projectAccess } from '../services/project-access'
-import {
-  ModelExecutionLeaseError,
-  ModelExecutionLeaseRegistry,
-} from '../services/model-execution-lease'
 import { ModelDiscoveryService } from '../services/model-discovery-service'
 import { isSubmitToolName } from '../../src/shared/submit-contract'
 import { assertGenerationModelSupportsTools } from '../../src/shared/tool-calling-gate'
@@ -32,7 +28,6 @@ interface ActiveStream {
 
 const activeStreams = new Map<string, ActiveStream>()
 const CONNECTION_TEST_MAX_TOKENS = 1024
-const CLOSED_EXECUTION_LEASE_TOMBSTONE_TTL_MS = 5 * 60_000
 
 function loadModelConfigs(): ModelProfile[] {
   return readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
@@ -172,60 +167,12 @@ function recordProviderOutcome(
 }
 
 export function registerLLMController() {
-  const modelExecutionLeases = new ModelExecutionLeaseRegistry({ loadModel: getModelConfig })
   const modelDiscovery = new ModelDiscoveryService()
-  const closedExecutionLeaseTombstones = new Map<string, number>()
-
-  const pruneClosedExecutionLeaseTombstones = (now: number) => {
-    for (const [leaseId, expiresAt] of closedExecutionLeaseTombstones) {
-      if (expiresAt <= now) closedExecutionLeaseTombstones.delete(leaseId)
-    }
-  }
-
-  ipcMain.handle('llm:begin-execution-lease', async (_event, modelId: string) => {
-    try {
-      return { success: true, lease: modelExecutionLeases.begin(modelId) }
-    } catch (error) {
-      if (error instanceof ModelExecutionLeaseError && error.code === 'MODEL_NOT_FOUND') {
-        return {
-          success: false,
-          errorCode: 'MODEL_NOT_FOUND' as const,
-          error: '指定的生成模型不存在或已被删除。',
-        }
-      }
-      return {
-        success: false,
-        errorCode: 'LEASE_BEGIN_FAILED' as const,
-        error: '无法创建模型执行租约。',
-      }
-    }
-  })
-
-  ipcMain.handle('llm:close-execution-lease', async (_event, leaseId: string) => {
-    const now = Date.now()
-    pruneClosedExecutionLeaseTombstones(now)
-    if (modelExecutionLeases.close(leaseId)) {
-      closedExecutionLeaseTombstones.set(
-        leaseId,
-        now + CLOSED_EXECUTION_LEASE_TOMBSTONE_TTL_MS,
-      )
-      return { success: true }
-    }
-    if (closedExecutionLeaseTombstones.has(leaseId)) return { success: true }
-    return { success: false, error: '模型执行租约无效或已关闭' }
-  })
 
   ipcMain.handle('llm:generate-stream', async (event, requestId: string, request: LLMRequest) => {
     applyProxyConfig()
-    let model: ModelProfile | null
-    try {
-      model = request.modelExecutionLeaseId
-        ? modelExecutionLeases.resolve(request.modelExecutionLeaseId)
-        : getModelConfig(request.modelId)
-    } catch (error) {
-      return { requestId, started: false, error: String(error) }
-    }
-    if (!model) return { requestId, started: false }
+    const model = getModelConfig(request.modelId)
+    if (!model) return { requestId, started: false, error: '指定的生成模型不存在或已被删除。' }
     const generationParameters = resolveGenerationParameters(model, request)
 
     const abortController = new AbortController()

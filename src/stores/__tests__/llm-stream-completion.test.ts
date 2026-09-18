@@ -74,11 +74,11 @@ describe('LLM stream completion propagation', () => {
     expect(useLLMStore.getState().activeRequests.size).toBe(0)
   })
 
-  it('surfaces an expired model execution lease without replacing it with a generic start error', async () => {
+  it('surfaces a missing-model start error without replacing it with a generic message', async () => {
     mocks.invoke.mockResolvedValueOnce({
-      requestId: 'expired-lease-stream',
+      requestId: 'missing-model-stream',
       started: false,
-      error: '模型执行租约已过期',
+      error: '指定的生成模型不存在或已被删除。',
     })
     const onError = vi.fn()
 
@@ -86,10 +86,9 @@ describe('LLM stream completion propagation', () => {
       [{ role: 'user', content: '写正文' }],
       { onError },
       'model',
-      { modelExecutionLeaseId: 'expired-lease' },
-    )).rejects.toThrow('模型执行租约已过期')
+    )).rejects.toThrow('指定的生成模型不存在或已被删除。')
 
-    expect(onError).toHaveBeenCalledWith('模型执行租约已过期')
+    expect(onError).toHaveBeenCalledWith('指定的生成模型不存在或已被删除。')
     expect(useLLMStore.getState().activeRequests.size).toBe(0)
   })
 
@@ -107,14 +106,13 @@ describe('LLM stream completion propagation', () => {
     expect(useLLMStore.getState().activeRequests.size).toBe(0)
   })
 
-  it('forwards one frozen model execution lease through streaming requests', async () => {
-    mocks.invoke.mockImplementation(async () => ({ requestId: 'leased-stream', started: true }))
+  it('forwards the selected model id through streaming requests', async () => {
+    mocks.invoke.mockImplementation(async () => ({ requestId: 'stream', started: true }))
 
     const requestId = await useLLMStore.getState().generateStream(
       [{ role: 'user', content: 'continue' }],
       {},
       'model',
-      { modelExecutionLeaseId: 'opaque-model-lease' },
     )
 
     expect(requestId).toEqual(expect.any(String))
@@ -123,7 +121,6 @@ describe('LLM stream completion propagation', () => {
       expect.any(String),
       expect.objectContaining({
         modelId: 'model',
-        modelExecutionLeaseId: 'opaque-model-lease',
       }),
     )
   })

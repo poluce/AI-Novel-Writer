@@ -425,19 +425,6 @@ export type ModelDiscoveryRequest = Pick<
 >
 
 export interface LLMChannels {
-  'llm:begin-execution-lease': {
-    args: [modelId: string]
-    return: {
-      success: boolean
-      lease?: ModelExecutionLeaseReceipt
-      errorCode?: 'MODEL_NOT_FOUND' | 'LEASE_BEGIN_FAILED'
-      error?: string
-    }
-  }
-  'llm:close-execution-lease': {
-    args: [leaseId: string]
-    return: { success: boolean; error?: string }
-  }
   'llm:generate-stream': {
     args: [requestId: string, request: LLMRequest]
     return: { requestId: string; started: boolean; error?: string }
@@ -618,8 +605,6 @@ export interface AppDataChannels {
 
 export interface LLMRequest {
   modelId: string
-  /** Optional frozen main-process model snapshot; when present it is authoritative. */
-  modelExecutionLeaseId?: string
   /** Stable attribution for per-project call history. */
   purpose?: string
   /** Project-scoped product intent captured by the renderer for this request. */

@@ -79,11 +79,7 @@ export interface DefaultModelSnapshot {
     ModelProfile,
     'id' | 'provider' | 'protocol' | 'modelName' | 'baseUrl' | 'maxTokens' | 'capabilities'
   >
-  /** Main-process lease identity; the renderer never receives its model secret snapshot. */
-  modelExecutionLeaseId?: string
-  /** Authoritative non-secret identity supplied by the main-process lease receipt. */
   endpointFingerprint?: string
-  /** Authoritative non-secret capability evidence supplied by the main-process lease receipt. */
   resolvedCapabilities?: ResolvedCapabilityEvidence
 }
 
@@ -142,8 +138,7 @@ export interface PhysicalGenerationPlan {
 }
 
 export interface PhysicalGenerationRequest {
-  /** The only model authorization crossing the completion seam. */
-  modelExecutionLeaseId: string | null
+  modelId: string
   purpose: string
   creativeStrategy: CreativeStrategy
   reasoningStage: GenerationReasoningStage
@@ -529,14 +524,6 @@ export function createGenerationHarness(dependencies: {
         throw new GenerationHarnessError('INVALID_MODEL_REVISION', '默认模型配置缺少 revision。')
       }
 
-      const modelExecutionLeaseId = selected.modelExecutionLeaseId?.trim() || null
-      if (selected.resolvedCapabilities && !modelExecutionLeaseId) {
-        throw new GenerationHarnessError(
-          'UNTRUSTED_CAPABILITY_EVIDENCE',
-          '已解析模型能力必须来自主进程执行租约。',
-        )
-      }
-
       const frozenModel = freezeModel(selected.model)
       const frozenIdentity = Object.freeze({
         id: frozenModel.id,
@@ -693,7 +680,7 @@ export function createGenerationHarness(dependencies: {
           try {
             completion = await Promise.race([
               completionPort.complete({
-                modelExecutionLeaseId,
+                modelId: frozenModel.id,
                 purpose: task.purpose,
                 creativeStrategy,
                 reasoningStage: task.reasoningStage

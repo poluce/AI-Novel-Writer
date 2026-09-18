@@ -1048,19 +1048,7 @@ describe('GenerateCharactersCommand structured roster seam', () => {
         wordsPerChapter: 2_500,
         globalGuidance: authorGuidance,
       } as never,
-    }, createWorkflowRuntimeDependencies({
-      source: {
-        contextWindowTokens: 'verified-provider-preset',
-        maxOutputTokens: 'user-operational-cap',
-        featureFlags: 'verified-provider-preset',
-      },
-      subjectFingerprint: 'd'.repeat(64),
-      contextWindowTokens: 1_000_000,
-      maxOutputTokens: 8192,
-      reasoning: true,
-      structuredOutput: true,
-      usage: true,
-    }))
+    }, createWorkflowRuntimeDependencies())
 
     let failure: unknown
     try {

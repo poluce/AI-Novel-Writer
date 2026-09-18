@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash } from 'node:crypto'
 
 import { getBuiltinModel, getBuiltinProviders } from '@earendil-works/pi-ai/providers/all'
 
@@ -12,20 +12,6 @@ import {
   resolveModelProfileCapabilities,
 } from '../../src/shared/provider-presets'
 
-const DEFAULT_MODEL_EXECUTION_LEASE_TTL_MS = 4 * 60 * 60 * 1_000
-
-interface ModelExecutionLeaseRecord {
-  receipt: ModelExecutionLeaseReceipt
-  snapshot: ModelProfile
-}
-
-export interface ModelExecutionLeaseRegistryOptions {
-  loadModel: (modelId: string) => ModelProfile | null
-  createLeaseId?: () => string
-  now?: () => number
-  ttlMs?: number
-}
-
 export class ModelExecutionLeaseError extends Error {
   constructor(
     readonly code: 'MODEL_NOT_FOUND' | 'INVALID_OUTPUT_CAPABILITY',
@@ -34,10 +20,6 @@ export class ModelExecutionLeaseError extends Error {
     super(message)
     this.name = 'ModelExecutionLeaseError'
   }
-}
-
-function cloneModelProfile(model: ModelProfile): ModelProfile {
-  return structuredClone(model)
 }
 
 function sha256(value: unknown): string {
@@ -249,49 +231,4 @@ export function createModelExecutionLeaseReceipt(
   }
 }
 
-/** Main-process-only store for immutable model execution snapshots. */
-export class ModelExecutionLeaseRegistry {
-  private readonly records = new Map<string, ModelExecutionLeaseRecord>()
-  private readonly loadModel: (modelId: string) => ModelProfile | null
-  private readonly createLeaseId: () => string
-  private readonly now: () => number
-  private readonly ttlMs: number
 
-  constructor(options: ModelExecutionLeaseRegistryOptions) {
-    this.loadModel = options.loadModel
-    this.createLeaseId = options.createLeaseId ?? randomUUID
-    this.now = options.now ?? Date.now
-    this.ttlMs = options.ttlMs ?? DEFAULT_MODEL_EXECUTION_LEASE_TTL_MS
-  }
-
-  begin(modelId: string): ModelExecutionLeaseReceipt {
-    const model = this.loadModel(modelId)
-    if (!model) throw new ModelExecutionLeaseError('MODEL_NOT_FOUND', '未找到模型配置')
-
-    const createdAt = this.now()
-    const receipt = createModelExecutionLeaseReceipt(model, {
-      leaseId: this.createLeaseId(),
-      createdAt,
-      expiresAt: createdAt + this.ttlMs,
-    })
-    this.records.set(receipt.leaseId, {
-      receipt,
-      snapshot: cloneModelProfile(model),
-    })
-    return { ...receipt }
-  }
-
-  resolve(leaseId: string): ModelProfile {
-    const record = this.records.get(leaseId)
-    if (!record) throw new Error('模型执行租约无效')
-    if (this.now() >= record.receipt.expiresAt) {
-      this.records.delete(leaseId)
-      throw new Error('模型执行租约已过期')
-    }
-    return cloneModelProfile(record.snapshot)
-  }
-
-  close(leaseId: string): boolean {
-    return this.records.delete(leaseId)
-  }
-}
