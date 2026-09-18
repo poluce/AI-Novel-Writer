@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo, type MouseEvent } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import CodeMirror, { ReactCodeMirrorRef, EditorView, ViewUpdate } from '@uiw/react-codemirror'
 import { keymap } from '@codemirror/view'
@@ -22,6 +22,7 @@ import { MAX_DRAFT_EXCERPT_CHARS, type DraftPassageCitation } from '../../shared
 import { type DraftDiffProposal, buildDiffDecorations } from './draft-diff'
 import { annotationDecorations, useDraftAnnotations } from './use-draft-annotations'
 import { useDraftDiffDecorations } from './use-draft-diff-decorations'
+import { useEditorBubble } from './use-editor-bubble'
 
 export type CodeMirrorEditorProps = {
   content: string
@@ -83,7 +84,6 @@ export default function CodeMirrorEditor({
   const uiText = useLocaleStore(s => s.text)
   const uiLocale = useLocaleStore(s => s.locale)
   const editorRef = useRef<ReactCodeMirrorRef>(null)
-  const [contextMenu, setContextMenu] = useState<{ top: number; left: number; from: number; to: number } | null>(null)
 
   // 避免状态回路
   const lastEmittedContentRef = useRef(content)
@@ -106,25 +106,25 @@ export default function CodeMirrorEditor({
     }
   }, [content, onCharCountChange])
 
-  // ===== Bubble Menu 逻辑 =====
-  const [bubbleOpen, setBubbleOpen] = useState(false)
-  const [bubblePos, setBubblePos] = useState({ top: 0, left: 0 })
-  const [selectionRange, setSelectionRange] = useState<{ from: number, to: number } | null>(null)
-  const selectionRangeRef = useRef<{ from: number, to: number } | null>(null)
-
-  useEffect(() => {
-    if (!contextMenu) return
-    const close = () => setContextMenu(null)
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') close()
-    }
-    window.addEventListener('mousedown', close)
-    window.addEventListener('keydown', onKey)
-    return () => {
-      window.removeEventListener('mousedown', close)
-      window.removeEventListener('keydown', onKey)
-    }
-  }, [contextMenu])
+  // ===== 浮动条（Bubble Menu）=====
+  // 选区变化要清掉半路输入的批注草稿，而批注 hook 又需要浮动条持有的选区——
+  // 用一个稳定的回调 + ref 打通，避免两个 hook 的调用顺序形成环。接缝留在这里。
+  const clearAnnotationDraftRef = useRef<() => void>(() => {})
+  const handleSelectionChange = useCallback(() => { clearAnnotationDraftRef.current() }, [])
+  const {
+    bubbleOpen,
+    bubblePos,
+    selectionRange,
+    contextMenu,
+    setContextMenu,
+    openBubble,
+    closeBubble,
+    handleContextMenu,
+  } = useEditorBubble({
+    viewRef: editorRef,
+    onSelectionChange: handleSelectionChange,
+    contextMenuEnabled: Boolean(onAddToAssistant),
+  })
 
   // 行内修订（draft diff）的装饰与视口联动
   const { compartment: diffCompartment } = useDraftDiffDecorations({
@@ -152,16 +152,11 @@ export default function CodeMirrorEditor({
     selectionRange,
   })
 
-  /**
-   * 选区变化的唯一入口：换了选区就丢掉半路输入的批注草稿（草稿属于上一个选区），
-   * 选区没变时不动它。之前靠 effect 兜这件事，会在渲染后多跑一轮。
-   */
-  const applySelectionRange = useCallback((next: { from: number, to: number } | null) => {
-    const previous = selectionRangeRef.current
-    if (previous?.from === next?.from && previous?.to === next?.to) return
-    selectionRangeRef.current = next
-    clearAnnotationDraft()
-    setSelectionRange(next)
+  // 把批注层"清草稿"的能力交给浮动条层：选区一变就丢掉上一个选区的草稿。
+  // 用 effect 登记（渲染期写 ref 会被 react-hooks/refs 拦下）；clearAnnotationDraft
+  // 自身是稳定引用，所以这里实际只在挂载后跑一次。
+  useEffect(() => {
+    clearAnnotationDraftRef.current = clearAnnotationDraft
   }, [clearAnnotationDraft])
 
   const handleUpdate = useCallback((v: ViewUpdate) => {
@@ -179,76 +174,13 @@ export default function CodeMirrorEditor({
       const sel = v.state.selection.main
       if (sel.empty || sel.to - sel.from < 1) {
         if (annotationInputFocusedRef.current) return
-        setBubbleOpen(false)
-        applySelectionRange(null)
+        closeBubble()
       } else {
-        applySelectionRange({ from: sel.from, to: sel.to })
-        // 交由下方的 useEffect 进行精准防越界座标计算与位置同步
-        setBubbleOpen(true)
+        // 交由浮动条自己的 effect 进行精准防越界座标计算与位置同步
+        openBubble({ from: sel.from, to: sel.to })
       }
     }
-  }, [onChange, onCharCountChange, remapAnnotationsOnDocChange, applySelectionRange, annotationInputFocusedRef])
-
-  // 监听滚动与缩放，实时更新 Bubble Menu 坐标
-  useEffect(() => {
-    if (!bubbleOpen || !selectionRange || !editorRef.current?.view) return;
-
-    const view = editorRef.current.view;
-    const scrollDOM = view.scrollDOM;
-
-    let rafId: number;
-
-    const updatePosition = () => {
-      const sel = window.getSelection()
-      if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
-        const coords = view.coordsAtPos(selectionRange.from)
-        if (coords) {
-          setBubblePos({ top: coords.top, left: coords.left })
-        } else {
-          setBubbleOpen(false)
-        }
-        return
-      }
-
-      const range = sel.getRangeAt(0)
-      const rect = range.getBoundingClientRect()
-      const viewRect = scrollDOM.getBoundingClientRect()
-
-      // 判断选区是否整体完全在视口之外
-      if (rect.bottom < viewRect.top || rect.top > viewRect.bottom || rect.width === 0) {
-        setBubbleOpen(false)
-        return
-      }
-
-      let top = rect.top - 5 // 与选区顶部有些许间距
-      const left = rect.left + rect.width / 2
-
-      // 当用户圈选了一大段并向下滚动时，如果选区顶部滚出了视区，
-      // 我们让气泡悬浮在视区顶部边缘，直到选区底部也完全滚出视区。
-      if (top < viewRect.top + 45) {
-        top = Math.min(viewRect.top + 45, rect.bottom - 10)
-      }
-
-      setBubblePos({ top, left })
-    }
-
-    const onScrollOrResize = () => {
-      if (rafId) cancelAnimationFrame(rafId)
-      rafId = requestAnimationFrame(updatePosition)
-    }
-
-    scrollDOM.addEventListener('scroll', onScrollOrResize, { passive: true })
-    window.addEventListener('resize', onScrollOrResize, { passive: true })
-
-    // 初始化计算需要等待 CM 渲染映射完成，确保获取到正确的 DOM Range
-    rafId = requestAnimationFrame(updatePosition)
-
-    return () => {
-      scrollDOM.removeEventListener('scroll', onScrollOrResize)
-      window.removeEventListener('resize', onScrollOrResize)
-      if (rafId) cancelAnimationFrame(rafId)
-    }
-  }, [bubbleOpen, selectionRange])
+  }, [onChange, onCharCountChange, remapAnnotationsOnDocChange, openBubble, closeBubble, annotationInputFocusedRef])
 
   // 主题配置
   const cmTheme = useMemo(() => EditorView.theme({
@@ -428,8 +360,7 @@ export default function CodeMirrorEditor({
   // 批注落库交给 useDraftAnnotations；这里只做界面收尾（关浮动条、清选区）。
   const handleAddAnnotation = () => {
     if (!addAnnotation()) return
-    setBubbleOpen(false)
-    applySelectionRange(null)
+    closeBubble()
   }
 
   // AI 菜单：统一作为带选区引用的 Agent Quick Task 派发
@@ -456,18 +387,7 @@ export default function CodeMirrorEditor({
     const promptText = uiText(...action.prompt)
     void useAgentStore.getState().sendMessage(promptText)
 
-    setBubbleOpen(false)
-    applySelectionRange(null)
-  }
-
-  const handleContextMenu = (event: MouseEvent) => {
-    if (!onAddToAssistant || !editorRef.current?.view) return
-    const view = editorRef.current.view
-    const sel = view.state.selection.main
-    if (sel.empty) return
-    event.preventDefault()
-    setBubbleOpen(false)
-    setContextMenu({ top: event.clientY, left: event.clientX, from: sel.from, to: sel.to })
+    closeBubble()
   }
 
   const handleAddToAssistant = (from: number, to: number) => {
@@ -491,7 +411,7 @@ export default function CodeMirrorEditor({
       filePath,
     })
     setContextMenu(null)
-    setBubbleOpen(false)
+    closeBubble()
   }
 
   // 固定 basicSetup 内存引用，防止 React 每次渲染生成新对象导致内部扩展被重载（搜索框消失的罪魁祸首）
