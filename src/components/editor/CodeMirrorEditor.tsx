@@ -1,18 +1,11 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { createPortal } from 'react-dom'
 import CodeMirror, { ReactCodeMirrorRef, ViewUpdate } from '@uiw/react-codemirror'
 import { openSearchPanel, closeSearchPanel } from '@codemirror/search'
-import { Sparkles, Bold, Pencil, MessageSquarePlus } from 'lucide-react'
-import { cn } from '../../lib/utils'
 import { countDraftUnits } from '../../shared/draft-units'
 import { useLocaleStore } from '../../stores/locale-store'
 import { useAgentStore } from '../../stores/agent-store'
 import { useLayoutStore } from '../../stores/layout-store'
-import {
-  MAX_DRAFT_ANNOTATIONS,
-  MAX_DRAFT_ANNOTATION_NOTE,
-  type DraftAnnotation,
-} from '../../shared/draft-annotation'
+import { type DraftAnnotation } from '../../shared/draft-annotation'
 import { type DraftPassageCitation } from '../../shared/draft-excerpt'
 import { type DraftDiffProposal } from './draft-diff'
 import { useDraftAnnotations } from './use-draft-annotations'
@@ -21,6 +14,7 @@ import { useEditorBubble } from './use-editor-bubble'
 import { useEditorAiHandoff } from './use-editor-ai-handoff'
 import { buildEditorBasicSetup, buildEditorTheme } from './editor-theme'
 import { buildEditorExtensions } from './editor-extensions'
+import { EditorContextMenu, EditorSelectionBubble } from './EditorSelectionBubble'
 
 export type CodeMirrorEditorProps = {
   content: string
@@ -210,6 +204,16 @@ export default function CodeMirrorEditor({
   // 固定 basicSetup 内存引用，防止 React 每次渲染生成新对象导致内部扩展被重载（搜索框消失的罪魁祸首）
   const cmBasicSetup = useMemo(() => buildEditorBasicSetup(showLineNumbers), [showLineNumbers])
 
+  // document 模式下的格式转换：给选区套上 ** 强调标记。
+  const handleBold = () => {
+    if (!selectionRange || !editorRef.current?.view) return
+    const view = editorRef.current.view
+    const text = view.state.sliceDoc(selectionRange.from, selectionRange.to)
+    view.dispatch({
+      changes: { from: selectionRange.from, to: selectionRange.to, insert: `**${text}**` },
+    })
+  }
+
   return (
     <div className="relative h-full flex flex-col min-h-0"
       onKeyDownCapture={(e) => {
@@ -253,146 +257,33 @@ export default function CodeMirrorEditor({
             onUpdate={handleUpdate}
           />
         </div>
-        {contextMenu && onAddToAssistant && createPortal(
-          <div
-            className="fixed z-[80] py-1 rounded-md shadow-xl min-w-[168px]"
-            style={{
-              top: contextMenu.top,
-              left: contextMenu.left,
-              backgroundColor: 'var(--color-sidebar)',
-              border: '1px solid var(--color-border)',
-            }}
-            onMouseDown={event => {
-              event.preventDefault()
-              event.stopPropagation()
-            }}
-          >
-            <button
-              type="button"
-              className="w-full text-left px-3 py-1.5 text-xs hover:bg-[var(--color-hover)]"
-              onMouseDown={event => {
-                event.preventDefault()
-                event.stopPropagation()
-                addSelectionToAssistant(contextMenu.from, contextMenu.to)
-              }}
-            >
-              {uiText('添加到助手', 'Add to assistant')}
-            </button>
-          </div>,
-          document.body,
+        {contextMenu && onAddToAssistant && (
+          <EditorContextMenu
+            position={contextMenu}
+            label={uiText('添加到助手', 'Add to assistant')}
+            onSelect={() => addSelectionToAssistant(contextMenu.from, contextMenu.to)}
+          />
         )}
       </div>
 
       {/* Bubble Menu */}
-      {bubbleOpen && editable && bubblePos.top !== 0 && (
-        <div
-          className="fixed z-50 flex items-center gap-0.5 p-1 rounded-xl border select-none shadow-xl transform -translate-x-1/2 -translate-y-full"
-          style={{
-            top: bubblePos.top,
-            left: bubblePos.left,
-            backgroundColor: 'var(--color-sidebar)',
-            borderColor: 'var(--color-border)',
-          }}
-          onMouseDown={(e) => {
-            if ((e.target as HTMLElement).closest('input, textarea')) {
-              e.stopPropagation()
-              return
-            }
-            e.preventDefault()
-          }}
-        >
-          {enableAnnotations && mode === 'prose' && (
-            <div className="flex items-center gap-1 pr-1">
-              <Pencil size={11} style={{ color: 'var(--color-warning-text, #b45309)' }} />
-              <input
-                value={annotationNote}
-                maxLength={MAX_DRAFT_ANNOTATION_NOTE}
-                onChange={event => setAnnotationNote(event.target.value)}
-                onKeyDown={event => {
-                  if (event.key === 'Enter' && !event.shiftKey) {
-                    event.preventDefault()
-                    handleAddAnnotation()
-                  }
-                }}
-                onFocus={() => { annotationInputFocusedRef.current = true }}
-                onBlur={() => { annotationInputFocusedRef.current = false }}
-                placeholder={uiText('这段有什么问题？', 'What is wrong with this passage?')}
-                className="w-[180px] px-1.5 py-1 text-[11px] rounded-md"
-                style={{
-                  background: 'var(--color-bg-elevated, var(--color-panel))',
-                  border: '1px solid var(--color-border)',
-                  color: 'var(--color-text)',
-                  outline: 'none',
-                }}
-                aria-label={uiText('选区标注', 'Passage note')}
-              />
-              <button
-                className="px-1.5 py-1 text-[10px] rounded-md font-medium"
-                style={{
-                  backgroundColor: annotationNote.trim() ? 'var(--color-accent)' : 'var(--color-hover)',
-                  color: annotationNote.trim() ? '#fff' : 'var(--color-text-muted)',
-                }}
-                disabled={!annotationNote.trim() || annotations.length >= MAX_DRAFT_ANNOTATIONS}
-                onClick={handleAddAnnotation}
-              >{uiText('标注', 'Note')}</button>
-              <div className="w-[1px] h-3 mx-1" style={{ backgroundColor: 'var(--color-border)' }} />
-            </div>
-          )}
-          {mode === 'document' && (
-            <>
-              <button
-                className="p-1 rounded"
-                style={{ color: 'var(--color-text-secondary)' }}
-                onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
-                onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
-                onClick={() => {
-                  // document模式下的格式转换
-                  if (selectionRange && editorRef.current?.view) {
-                    const view = editorRef.current.view
-                    const text = view.state.sliceDoc(selectionRange.from, selectionRange.to)
-                    view.dispatch({
-                      changes: { from: selectionRange.from, to: selectionRange.to, insert: `**${text}**` }
-                    })
-                  }
-                }}
-              ><Bold size={14} /></button>
-              <div className="w-[1px] h-3 mx-1" style={{ backgroundColor: 'var(--color-border)' }} />
-            </>
-          )}
-          {onAddToAssistant && selectionRange && (
-            <>
-              <button
-                className="p-1.5 rounded flex items-center gap-1 text-[10px]"
-                style={{ color: 'var(--color-accent)' }}
-                onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
-                onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
-                onClick={() => addSelectionToAssistant(selectionRange.from, selectionRange.to)}
-              >
-                <MessageSquarePlus size={11} />
-                {uiText('添加到助手', 'Add to assistant')}
-              </button>
-              <div className="w-[1px] h-3 mx-1" style={{ backgroundColor: 'var(--color-border)' }} />
-            </>
-          )}
-          <div
-            className="flex items-center gap-0.5 pl-0.5 pr-1 text-[10px]"
-            style={{ color: 'var(--color-text-muted)' }}
-          >
-            <Sparkles size={11} />AI
-          </div>
-          {aiActions.map(action => (
-            <button
-              key={action.key}
-              className={cn('p-1.5 rounded flex items-center gap-1 transition-colors', action.color)}
-              onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
-              onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
-              onClick={() => runAIAction(action)}
-            >
-              <span className="text-[10px] tracking-widest">{uiText(...action.label)}</span>
-            </button>
-          ))}
-        </div>
-      )}
+      <EditorSelectionBubble
+        open={bubbleOpen && editable}
+        position={bubblePos}
+        uiText={uiText}
+        annotationVisible={Boolean(enableAnnotations && mode === 'prose')}
+        annotationNote={annotationNote}
+        annotationCount={annotations.length}
+        onAnnotationNoteChange={setAnnotationNote}
+        onAnnotationInputFocusChange={(focused: boolean) => { annotationInputFocusedRef.current = focused }}
+        onAddAnnotation={handleAddAnnotation}
+        boldVisible={mode === 'document'}
+        onBold={handleBold}
+        addToAssistantVisible={Boolean(onAddToAssistant && selectionRange)}
+        onAddToAssistant={() => { if (selectionRange) addSelectionToAssistant(selectionRange.from, selectionRange.to) }}
+        aiActions={aiActions}
+        onRunAIAction={runAIAction}
+      />
     </div>
   )
 }
