@@ -216,6 +216,6 @@
 > 步骤 5 完成后的基线：浏览器套件 **54 文件 / 317 用例**全绿；完整 Node 套件 **2860 用例通过 / 1 失败 / 10 skipped**（同上两条环境性问题）。
 >
 > 最终形态：`CodeMirrorEditor.tsx` **289 行**（起点 915 行），拆出的模块为
-> `use-editor-bubble.ts`(164) / `use-editor-ai-handoff.ts`(105) / `use-draft-annotations.ts`(107) /
+> `use-editor-bubble.ts`(164) / `use-editor-ai-handoff.ts`(105) / `use-draft-annotations.ts`(100) /
 > `use-draft-diff-decorations.ts`(76) / `editor-theme.ts`(146) / `editor-extensions.ts`(73) /
 > `editor-search-phrases.ts`(33) / `draft-annotations.ts`(43) / `EditorSelectionBubble.tsx`(199)。
