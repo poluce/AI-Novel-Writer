@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import { Download, ExternalLink, RefreshCw } from 'lucide-react'
 
 import { countUnsavedEditorItems } from '../../stores/editor-unsaved'
+import { useEditorDraftLedgerStore } from '../../stores/editor-draft-ledger-store'
 import { useEditorStore } from '../../stores/editor-store'
 import { useLocaleStore } from '../../stores/locale-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
@@ -18,7 +19,7 @@ export function UpdateSection() {
   const text = useLocaleStore(s => s.text)
   const locale = useLocaleStore(s => s.locale)
   const tabs = useEditorStore(s => s.tabs)
-  const draftLedgers = useEditorStore(s => s.draftLedgers)
+  const draftLedgers = useEditorDraftLedgerStore(s => s.draftLedgers)
   const activeRuns = useWorkflowStore(s => s.activeRuns)
   const [showWorkflowBlockingDialog, setShowWorkflowBlockingDialog] = useState(false)
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false)

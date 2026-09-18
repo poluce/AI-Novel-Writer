@@ -36,7 +36,9 @@ import { confirm } from '../ui/Confirm'
 import { globalEventBus } from '../../shared/event-bus'
 import { shouldRefreshBlueprints } from './blueprint-refresh'
 import { useLocaleStore } from '../../stores/locale-store'
-import { registerEditorExitSaveHandler, useEditorStore } from '../../stores/editor-store'
+import { useEditorDraftLedgerStore } from '../../stores/editor-draft-ledger-store'
+import { registerEditorExitSaveHandler } from '../../stores/editor-store'
+import { composeEditorDraftTabWriter } from '../../stores/project-editor-draft-ledger'
 import {
   CHAPTER_CARD_TAB_ID,
   captureBlueprintSnapshots,
@@ -70,7 +72,7 @@ const ROLE_COLORS: Record<string, string> = {
 
 function readDraftLedgerFromFixedTab() {
   return parseChapterCardDraftLedger(
-    useEditorStore.getState().draftLedgers[CHAPTER_CARD_TAB_ID],
+    useEditorDraftLedgerStore.getState().draftLedgers[CHAPTER_CARD_TAB_ID],
   )
 }
 
@@ -169,14 +171,13 @@ export default function ChapterCardEditor({
       !isCurrentProjectSession(projectSession)
       || !sameProjectSessionContext(dataProjectSessionRef.current, projectSession)
     ) return
-    const store = useEditorStore.getState()
     const ledger = updateChapterCardProjectDraft(
       readDraftLedgerFromFixedTab(),
       projectKey,
       nextBlueprints,
       nextDirty,
     )
-    persistChapterCardDraftLedger(store, ledger)
+    persistChapterCardDraftLedger(composeEditorDraftTabWriter(), ledger)
     applyVisibleDraftState(nextBlueprints, nextDirty)
   }, [applyVisibleDraftState])
 

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { globalEventBus } from '../../shared/event-bus'
 import { useCharacterStore } from '../../stores/character-store'
 import { useDraftStore } from '../../stores/draft-store'
+import { useEditorDraftLedgerStore } from '../../stores/editor-draft-ledger-store'
 import { useEditorStore } from '../../stores/editor-store'
 import { useProjectStore } from '../../stores/project-store'
 import {
@@ -43,8 +44,8 @@ beforeEach(() => {
   useEditorStore.setState({
     tabs: [],
     activeTabId: null,
-    draftLedgers: {},
   })
+  useEditorDraftLedgerStore.setState({ draftLedgers: {} })
 })
 
 afterEach(() => {
@@ -161,6 +162,8 @@ describe('ProjectService REFRESH_RESOURCE project identity', () => {
         dirty: true,
       }],
       activeTabId: 'dirty-tab',
+    })
+    useEditorDraftLedgerStore.setState({
       draftLedgers: { config: '{"version":1,"projects":[]}' },
     })
 
@@ -169,7 +172,9 @@ describe('ProjectService REFRESH_RESOURCE project identity', () => {
     expect(useEditorStore.getState()).toMatchObject({
       tabs: [expect.objectContaining({ id: 'dirty-tab', dirty: true })],
       activeTabId: 'dirty-tab',
-      draftLedgers: { config: '{"version":1,"projects":[]}' },
+    })
+    expect(useEditorDraftLedgerStore.getState().draftLedgers).toEqual({
+      config: '{"version":1,"projects":[]}',
     })
   })
 
@@ -193,7 +198,6 @@ describe('ProjectService REFRESH_RESOURCE project identity', () => {
         projectSessionLease: 'lease-B',
       }],
       activeTabId: 'draft-7',
-      draftLedgers: {},
     })
     initProjectService()
 
@@ -250,7 +254,6 @@ describe('ProjectService REFRESH_RESOURCE project identity', () => {
         projectSessionLease: 'lease-B',
       }],
       activeTabId: 'draft-7',
-      draftLedgers: {},
     })
     initProjectService()
 

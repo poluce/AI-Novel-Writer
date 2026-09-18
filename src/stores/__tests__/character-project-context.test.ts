@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { ProjectData } from '../../shared/ipc-channels'
 import { EMPTY_CARD, useCharacterStore, type CharacterCard } from '../character-store'
-import { useEditorStore } from '../editor-store'
+import { useEditorDraftLedgerStore } from '../editor-draft-ledger-store'
+import { resetEditorSessionStores } from '../editor-store'
 import { useProjectStore } from '../project-store'
 import {
   CHARACTER_DRAFT_TAB,
@@ -79,7 +80,7 @@ function rosterReadFromCards(cards: CharacterCard[]) {
 
 function currentLedger() {
   return parseProjectEditorDraftLedger<CharacterCard[]>(
-    useEditorStore.getState().draftLedgers[CHARACTER_DRAFT_TAB.id],
+    useEditorDraftLedgerStore.getState().draftLedgers[CHARACTER_DRAFT_TAB.id],
   )
 }
 
@@ -113,7 +114,7 @@ beforeEach(() => {
     }
     return result
   })
-  useEditorStore.setState({ tabs: [], activeTabId: null, draftLedgers: {} })
+  resetEditorSessionStores()
   useProjectStore.setState({ currentProject: project(PROJECT_A), fileTree: [], loading: false })
   useCharacterStore.getState().reset()
 })
@@ -123,7 +124,7 @@ describe('character store project context', () => {
     const persistedCharacter = { ...character('旧角色'), role: 'supporting' as const }
     const legacyDraftCharacter = { ...persistedCharacter } as Partial<CharacterCard>
     delete legacyDraftCharacter.role
-    useEditorStore.setState({
+    useEditorDraftLedgerStore.setState({
       draftLedgers: {
         [CHARACTER_DRAFT_TAB.id]: JSON.stringify({
           version: 1,
@@ -152,7 +153,7 @@ describe('character store project context', () => {
       draftValue: ['opaque', { futureField: true }],
       metadata: { legacyRenames: [{ from: '旧名', to: '新名' }] },
     }
-    useEditorStore.setState({
+    useEditorDraftLedgerStore.setState({
       draftLedgers: {
         [CHARACTER_DRAFT_TAB.id]: JSON.stringify({
           version: 1,
@@ -175,7 +176,7 @@ describe('character store project context', () => {
       { ...EMPTY_CARD, name: 'A 草稿', notes: '本地修改' },
     ])
     const persistedLedger = JSON.parse(
-      useEditorStore.getState().draftLedgers[CHARACTER_DRAFT_TAB.id],
+      useEditorDraftLedgerStore.getState().draftLedgers[CHARACTER_DRAFT_TAB.id],
     ) as { projects: unknown[] }
     expect(persistedLedger.projects).toContainEqual(projectBOpaqueDraft)
   })
@@ -324,7 +325,7 @@ describe('character store project context', () => {
     invoke.mockResolvedValueOnce([character('A 角色')])
     await useCharacterStore.getState().load(PROJECT_A)
     useCharacterStore.getState().updateField('A 角色', 'notes', '未保存草稿')
-    const ledgerBeforeFailure = useEditorStore.getState().draftLedgers[CHARACTER_DRAFT_TAB.id]
+    const ledgerBeforeFailure = useEditorDraftLedgerStore.getState().draftLedgers[CHARACTER_DRAFT_TAB.id]
 
     invoke.mockRejectedValueOnce(new Error('database busy'))
     await useCharacterStore.getState().load(PROJECT_A)
@@ -344,7 +345,7 @@ describe('character store project context', () => {
       loadingProjectKey: null,
       lastError: 'database busy',
     })
-    expect(useEditorStore.getState().draftLedgers[CHARACTER_DRAFT_TAB.id])
+    expect(useEditorDraftLedgerStore.getState().draftLedgers[CHARACTER_DRAFT_TAB.id])
       .toBe(ledgerBeforeFailure)
     expect(invoke).toHaveBeenCalledTimes(2)
   })

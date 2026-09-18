@@ -6,9 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useLocaleStore } from '../../../stores/locale-store'
 import { useProjectStore } from '../../../stores/project-store'
 import { useWorkflowStore } from '../../../stores/workflow-store'
+import { useEditorDraftLedgerStore } from '../../../stores/editor-draft-ledger-store'
 import {
   registerEditorExitSaveHandler,
-  useEditorStore,
+  resetEditorSessionStores, useEditorStore,
 } from '../../../stores/editor-store'
 import TitleBar from '../TitleBar'
 
@@ -32,7 +33,7 @@ function deferred<T>() {
 
 beforeEach(() => {
   useEditorStore.getState().clearTabs()
-  useEditorStore.setState({ tabs: [], activeTabId: null, draftLedgers: {} })
+  resetEditorSessionStores()
   useProjectStore.setState({
     currentProject: {
       id: 'native-exit',
@@ -119,7 +120,7 @@ describe('TitleBar native exit settlement', () => {
     await expect.element(page.getByText('保存期间仍有未保存修改，已取消退出')).toBeVisible()
     expect(invoke).not.toHaveBeenCalledWith('window:resolve-close', 'close-save-race', 'proceed')
     expect(useEditorStore.getState().tabs[0]).toMatchObject({ content: 'ABC', dirty: true })
-    useEditorStore.setState({
+    useEditorDraftLedgerStore.setState({
       draftLedgers: {
         config: JSON.stringify({
           version: 1,
@@ -131,7 +132,7 @@ describe('TitleBar native exit settlement', () => {
     invoke.mockImplementation(async (channel: string) => {
       if (channel === 'window:close') {
         ledgerWasClearedBeforeReclose = JSON.parse(
-          useEditorStore.getState().draftLedgers.config,
+          useEditorDraftLedgerStore.getState().draftLedgers.config,
         ).projects.length === 0
         closeRequested?.({ requestId: 'close-after-discard' })
       }
@@ -144,7 +145,7 @@ describe('TitleBar native exit settlement', () => {
     expect(invoke).toHaveBeenCalledWith('window:resolve-close', 'close-after-discard', 'proceed')
     expect(ledgerWasClearedBeforeReclose).toBe(true)
     expect(useEditorStore.getState().tabs.some(tab => tab.dirty)).toBe(false)
-    expect(JSON.parse(useEditorStore.getState().draftLedgers.config).projects).toEqual([])
+    expect(JSON.parse(useEditorDraftLedgerStore.getState().draftLedgers.config).projects).toEqual([])
     await expect.element(page.getByRole('dialog')).not.toBeInTheDocument()
   })
 
@@ -194,7 +195,7 @@ describe('TitleBar native exit settlement', () => {
   })
 
   it('blocks native close while the current project has an active workflow', async () => {
-    useEditorStore.setState({ tabs: [], draftLedgers: {} })
+    resetEditorSessionStores()
     useWorkflowStore.setState({
       activeRuns: [{ projectPath: PROJECT, status: 'running' }] as never,
     })

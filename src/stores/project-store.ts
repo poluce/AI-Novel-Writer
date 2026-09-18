@@ -11,7 +11,7 @@ import type {
 import { alertError } from '../components/ui/AlertDialog'
 import { confirm } from '../components/ui/Confirm'
 import { appErrorMessage } from '../i18n/app-errors'
-import { useEditorStore } from './editor-store'
+import { useEditorDraftLedgerStore } from './editor-draft-ledger-store'
 import { useLocaleStore } from './locale-store'
 import { requireIpcSuccess } from '../services/ipc-result'
 import {
@@ -23,6 +23,7 @@ import {
 } from '../shared/project-session-context'
 import {
   CONFIG_DRAFT_TAB,
+  composeEditorDraftTabWriter,
   discardProjectEditorDraft,
   getProjectEditorDraft,
   mergeObjectDraftWithRemote,
@@ -128,12 +129,12 @@ async function confirmAndCancelProjectWorkflows(
 
 function readConfigDraftLedger() {
   return parseProjectEditorDraftLedger<NovelConfig>(
-    useEditorStore.getState().draftLedgers[CONFIG_DRAFT_TAB.id],
+    useEditorDraftLedgerStore.getState().draftLedgers[CONFIG_DRAFT_TAB.id],
   )
 }
 
 function persistConfigDraftLedger(ledger: ReturnType<typeof readConfigDraftLedger>) {
-  persistProjectEditorDraftLedger(useEditorStore.getState(), CONFIG_DRAFT_TAB, ledger)
+  persistProjectEditorDraftLedger(composeEditorDraftTabWriter(), CONFIG_DRAFT_TAB, ledger)
 }
 
 /**

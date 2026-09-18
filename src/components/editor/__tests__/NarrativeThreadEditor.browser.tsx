@@ -7,7 +7,7 @@ import type { ProjectData } from '../../../shared/ipc-channels'
 import { useProjectStore } from '../../../stores/project-store'
 import { useLocaleStore } from '../../../stores/locale-store'
 import { useLLMStore } from '../../../stores/llm-store'
-import { useEditorStore } from '../../../stores/editor-store'
+import { resetEditorSessionStores, useEditorStore } from '../../../stores/editor-store'
 import { useWorkflowStore } from '../../../stores/workflow-store'
 import type { NarrativeThreadCandidateGenerator } from '../../../services/narrative-thread-candidate-generator'
 import {
@@ -134,7 +134,7 @@ beforeEach(() => {
     defaultModelId: 'glm',
     loaded: true,
   })
-  useEditorStore.setState({ tabs: [], activeTabId: null, draftLedgers: {} })
+  resetEditorSessionStores()
   useWorkflowStore.setState({ globalLogs: [] })
   setActiveProjectSessionContext({ projectId: project.id, leaseId: project.sessionLease!, projectPath: PROJECT_PATH })
   installIpc()

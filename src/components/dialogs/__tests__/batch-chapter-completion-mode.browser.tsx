@@ -9,7 +9,7 @@ import { setActiveProjectSessionContext } from '../../../shared/project-session-
 import { clearProjectCustomPrompts } from '../../../services/prompt-templates'
 import { disposeProjectService, initProjectService } from '../../../services/project-service'
 import { useDraftStore } from '../../../stores/draft-store'
-import { useEditorStore } from '../../../stores/editor-store'
+import { resetEditorSessionStores, useEditorStore } from '../../../stores/editor-store'
 import { useLayoutStore } from '../../../stores/layout-store'
 import { useLLMStore } from '../../../stores/llm-store'
 import { useLocaleStore } from '../../../stores/locale-store'
@@ -450,7 +450,7 @@ beforeEach(() => {
     startWorkflow: originalWorkflowState.startWorkflow,
     addLog: originalWorkflowState.addLog,
   })
-  useEditorStore.setState({ tabs: [], activeTabId: null, draftLedgers: {} })
+  resetEditorSessionStores()
   useLayoutStore.setState({ bottomPanelOpen: true, bottomTab: 'tasks' })
   useDraftStore.setState({
     draftsByChapter: {},

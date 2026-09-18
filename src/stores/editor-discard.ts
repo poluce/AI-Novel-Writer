@@ -5,11 +5,13 @@ import {
   persistChapterCardDraftLedger,
 } from '../components/editor/chapter-card-draft-ledger'
 import { useCharacterStore } from './character-store'
+import { useEditorDraftLedgerStore } from './editor-draft-ledger-store'
 import { useEditorStore } from './editor-store'
 import { useProjectStore } from './project-store'
 import {
   CHARACTER_DRAFT_TAB,
   CONFIG_DRAFT_TAB,
+  composeEditorDraftTabWriter,
   createEmptyProjectEditorDraftLedger,
   parseProjectEditorDraftLedger,
 } from './project-editor-draft-ledger'
@@ -80,10 +82,10 @@ export function discardAndCloseEditorTab(
       useProjectStore.getState().discardNovelConfigDraft(projectKey, expectedProjectSession)
     } else if (tab.type === 'chapter-card') {
       const ledger = parseChapterCardDraftLedger(
-        useEditorStore.getState().draftLedgers[CHAPTER_CARD_TAB_ID],
+        useEditorDraftLedgerStore.getState().draftLedgers[CHAPTER_CARD_TAB_ID],
       )
       persistChapterCardDraftLedger(
-        useEditorStore.getState(),
+        composeEditorDraftTabWriter(),
         discardChapterCardProjectDraft(ledger, projectKey),
       )
     }
@@ -114,12 +116,11 @@ export function discardCurrentProjectEditorChanges(
   useCharacterStore.getState().discardDraft(projectKey, expectedProjectSession)
   useProjectStore.getState().discardNovelConfigDraft(projectKey, expectedProjectSession)
 
-  const editor = useEditorStore.getState()
   const chapterLedger = parseChapterCardDraftLedger(
-    editor.draftLedgers[CHAPTER_CARD_TAB_ID],
+    useEditorDraftLedgerStore.getState().draftLedgers[CHAPTER_CARD_TAB_ID],
   )
   persistChapterCardDraftLedger(
-    editor,
+    composeEditorDraftTabWriter(),
     discardChapterCardProjectDraft(chapterLedger, projectKey),
   )
 
@@ -135,17 +136,18 @@ export function discardCurrentProjectEditorChanges(
  */
 export function discardAllEditorChanges(): void {
   const editorBeforeDiscard = useEditorStore.getState()
+  const ledgersBeforeDiscard = useEditorDraftLedgerStore.getState().draftLedgers
   const dirtyTabIds = new Set(
     editorBeforeDiscard.tabs.filter(tab => tab.dirty).map(tab => tab.id),
   )
   const characterLedger = parseProjectEditorDraftLedger<unknown>(
-    editorBeforeDiscard.draftLedgers[CHARACTER_DRAFT_TAB.id],
+    ledgersBeforeDiscard[CHARACTER_DRAFT_TAB.id],
   )
   const configLedger = parseProjectEditorDraftLedger<unknown>(
-    editorBeforeDiscard.draftLedgers[CONFIG_DRAFT_TAB.id],
+    ledgersBeforeDiscard[CONFIG_DRAFT_TAB.id],
   )
   const chapterLedger = parseChapterCardDraftLedger(
-    editorBeforeDiscard.draftLedgers[CHAPTER_CARD_TAB_ID],
+    ledgersBeforeDiscard[CHAPTER_CARD_TAB_ID],
   )
 
   const currentProjectSession = projectSessionContextFromProject(
@@ -170,16 +172,16 @@ export function discardAllEditorChanges(): void {
     }
   }
 
-  const editor = useEditorStore.getState()
-  editor.setDraftLedger(
+  const writer = composeEditorDraftTabWriter()
+  writer.setDraftLedger(
     CHARACTER_DRAFT_TAB.id,
     JSON.stringify(createEmptyProjectEditorDraftLedger()),
   )
-  editor.setDraftLedger(
+  writer.setDraftLedger(
     CONFIG_DRAFT_TAB.id,
     JSON.stringify(createEmptyProjectEditorDraftLedger()),
   )
-  persistChapterCardDraftLedger(editor, {
+  persistChapterCardDraftLedger(writer, {
     ...chapterLedger,
     projects: [],
   })

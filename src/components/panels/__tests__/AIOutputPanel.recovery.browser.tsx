@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { RecoveryCandidate } from '../../../shared/recovery-candidate'
 import { setActiveProjectSessionContext } from '../../../shared/project-session-context'
-import { saveDirtyEditorChangesForExit, useEditorStore } from '../../../stores/editor-store'
+import { saveDirtyEditorChangesForExit, resetEditorSessionStores, useEditorStore } from '../../../stores/editor-store'
 import { useLayoutStore } from '../../../stores/layout-store'
 import { useProjectStore } from '../../../stores/project-store'
 import { useWorkflowStore } from '../../../stores/workflow-store'
@@ -66,7 +66,7 @@ beforeEach(() => {
     } as never,
   })
   setActiveProjectSessionContext(session)
-  useEditorStore.setState({ tabs: [], activeTabId: null, draftLedgers: {} })
+  resetEditorSessionStores()
   useLayoutStore.setState({ sidebarView: 'project' })
   storedCandidate = candidate()
   invoke = vi.fn(async (channel: string, candidateId?: string, visibleText?: string) => {

@@ -4,7 +4,8 @@ import { createRoot, type Root } from 'react-dom/client'
 
 import type { ProjectData } from '../../../../shared/ipc-channels'
 import { useCharacterStore, type CharacterCard } from '../../../../stores/character-store'
-import { useEditorStore } from '../../../../stores/editor-store'
+import { useEditorDraftLedgerStore } from '../../../../stores/editor-draft-ledger-store'
+import { resetEditorSessionStores, useEditorStore } from '../../../../stores/editor-store'
 import { useLayoutStore } from '../../../../stores/layout-store'
 import { useLocaleStore } from '../../../../stores/locale-store'
 import { useProjectStore } from '../../../../stores/project-store'
@@ -94,7 +95,7 @@ beforeEach(() => {
   useLayoutStore.setState(originalLayoutState)
   useLocaleStore.setState(originalLocaleState)
   useProjectStore.setState(originalProjectState)
-  useEditorStore.setState({ tabs: [], activeTabId: null, draftLedgers: {} })
+  resetEditorSessionStores()
   useProjectStore.setState({ currentProject: project(), fileTree: [], loading: false })
   useLayoutStore.setState({ sidebarView: 'characters' })
   useLocaleStore.setState({ locale: 'zh-CN' })
@@ -118,7 +119,7 @@ describe('Sidebar legacy character rendering', () => {
     const persistedBaseCard = { name: '旧角色', role: 'supporting' } as CharacterCard
     const legacyDraftCard = { name: '旧角色' } as CharacterCard
     installVelaApi(rosterRead())
-    useEditorStore.setState({
+    useEditorDraftLedgerStore.setState({
       draftLedgers: {
         [CHARACTER_DRAFT_TAB.id]: JSON.stringify({
           version: 1,

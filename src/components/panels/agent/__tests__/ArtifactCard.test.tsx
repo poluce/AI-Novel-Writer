@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { openArtifactInEditor } from '../artifact-open'
 import { ipc } from '../../../../services/ipc-client'
-import { useEditorStore } from '../../../../stores/editor-store'
+import { resetEditorSessionStores, useEditorStore } from '../../../../stores/editor-store'
 import { useProjectStore } from '../../../../stores/project-store'
 import { setActiveProjectSessionContext } from '../../../../shared/project-session-context'
 
@@ -21,7 +21,7 @@ function deferred<T>() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  useEditorStore.setState({ tabs: [], activeTabId: null, draftLedgers: {} })
+  resetEditorSessionStores()
   useProjectStore.setState({
     currentProject: {
       id: 'A',

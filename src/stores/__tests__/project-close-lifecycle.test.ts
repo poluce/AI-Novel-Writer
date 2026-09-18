@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { ProjectData } from '../../shared/ipc-channels'
+import { useEditorDraftLedgerStore } from '../editor-draft-ledger-store'
 import { useEditorStore } from '../editor-store'
 import { useLocaleStore } from '../locale-store'
 import { useProjectStore } from '../project-store'
@@ -108,8 +109,8 @@ beforeEach(() => {
       dirty: true,
     }],
     activeTabId: 'a-tab',
-    draftLedgers: {},
   })
+  useEditorDraftLedgerStore.setState({ draftLedgers: {} })
   useWorkflowStore.setState({
     activeRuns: [],
     history: [],
@@ -241,6 +242,8 @@ describe('project close lifecycle', () => {
         { id: 'b-tab', name: 'B', type: 'config', projectKey: bPath, dirty: true },
       ],
       activeTabId: 'a-tab',
+    })
+    useEditorDraftLedgerStore.setState({
       draftLedgers: {
         config: JSON.stringify({
           version: 1,
@@ -258,7 +261,7 @@ describe('project close lifecycle', () => {
     expect(useEditorStore.getState().tabs).toEqual([
       expect.objectContaining({ id: 'b-tab', projectKey: bPath, dirty: true }),
     ])
-    expect(JSON.parse(useEditorStore.getState().draftLedgers.config).projects).toEqual([
+    expect(JSON.parse(useEditorDraftLedgerStore.getState().draftLedgers.config).projects).toEqual([
       expect.objectContaining({ projectKey: bPath }),
     ])
     expect(useEditorStore.getState().activeTabId).toBe('b-tab')
@@ -786,6 +789,8 @@ describe('project close lifecycle', () => {
         },
       ],
       activeTabId: 'chapter-a',
+    })
+    useEditorDraftLedgerStore.setState({
       draftLedgers: {
         config: JSON.stringify({
           version: 1,
@@ -822,8 +827,8 @@ describe('project close lifecycle', () => {
       expect(useProjectStore.getState().currentProject).toBeNull()
       expect(useEditorStore.getState().tabs).toHaveLength(3)
       expect(useEditorStore.getState().tabs.every(tab => tab.dirty)).toBe(true)
-      expect(useEditorStore.getState().draftLedgers).toHaveProperty('config')
-      expect(useEditorStore.getState().draftLedgers).toHaveProperty('character-editor-drafts')
+      expect(useEditorDraftLedgerStore.getState().draftLedgers).toHaveProperty('config')
+      expect(useEditorDraftLedgerStore.getState().draftLedgers).toHaveProperty('character-editor-drafts')
       expect(mocks.disableProjectBindingsPreservingDrafts).toHaveBeenCalledWith(project('A').path)
       expect(mocks.onProjectClosed).not.toHaveBeenCalled()
       expect(mocks.alertError).toHaveBeenCalledWith(

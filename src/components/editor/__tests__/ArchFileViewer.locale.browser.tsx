@@ -113,7 +113,7 @@ describe('ArchFileViewer locale', () => {
       id: 'arch-save-error', name: '故事前提', type: 'arch-file',
       projectKey: PROJECT_PATH, filePath: 'vela://core/premise',
       content: '未保存的故事前提', savedContent: '', dirty: true,
-    }], draftLedgers: {} })
+    }] })
     await act(async () => root.render(
       <ArchFileViewer tabId="arch-save-error" filePath="vela://core/premise"
         projectKey={PROJECT_PATH} content="未保存的故事前提" savedContent="" />,
@@ -134,7 +134,7 @@ describe('ArchFileViewer locale', () => {
       id: 'arch-inactive', name: '故事前提', type: 'arch-file',
       projectKey: PROJECT_PATH, filePath: 'vela://core/premise',
       content: '待保存内容', savedContent: '', dirty: true,
-    }], draftLedgers: {} })
+    }] })
     await act(async () => root.render(
       <ArchFileViewer tabId="arch-inactive" filePath="vela://core/premise"
         projectKey={PROJECT_PATH} content="待保存内容" savedContent="" />,

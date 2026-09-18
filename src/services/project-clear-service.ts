@@ -1,5 +1,6 @@
 import { ipc } from './ipc-client'
 import { useDraftStore } from '../stores/draft-store'
+import { useEditorDraftLedgerStore } from '../stores/editor-draft-ledger-store'
 import { useEditorStore, type EditorTab } from '../stores/editor-store'
 import { useProjectStore } from '../stores/project-store'
 import { useWorkflowStore } from '../stores/workflow-store'
@@ -126,7 +127,7 @@ export async function clearProjectData(
   const dirtyTabs = tabsToClose.filter(tab => tab.dirty)
   const hiddenDraftLabels = affectedHiddenDraftLabels(
     scopes,
-    editorState.draftLedgers ?? {},
+    useEditorDraftLedgerStore.getState().draftLedgers,
     projectPath,
   )
   const unsavedLabels = [...new Set([

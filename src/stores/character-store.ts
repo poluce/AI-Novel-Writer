@@ -16,10 +16,11 @@ import {
   characterRosterEntriesFromCards,
 } from '../services/character-roster-client'
 import { randomUUID } from '../utils/id'
-import { useEditorStore } from './editor-store'
+import { useEditorDraftLedgerStore } from './editor-draft-ledger-store'
 import { useProjectStore } from './project-store'
 import {
   CHARACTER_DRAFT_TAB,
+  composeEditorDraftTabWriter,
   discardProjectEditorDraft,
   getProjectEditorDraft,
   mergeNamedRecordDraftWithRemote,
@@ -77,7 +78,7 @@ function normalizeCharacterState(value: unknown): CharacterCurrentState | undefi
 
 function readCharacterDraftLedger(projectKey: string) {
   const ledger = parseProjectEditorDraftLedger<unknown>(
-    useEditorStore.getState().draftLedgers[CHARACTER_DRAFT_TAB.id],
+    useEditorDraftLedgerStore.getState().draftLedgers[CHARACTER_DRAFT_TAB.id],
   )
   return {
     version: 1 as const,
@@ -128,7 +129,7 @@ function normalizeCharacterCards(value: unknown): CharacterCard[] {
 }
 
 function persistCharacterDraftLedger(ledger: ReturnType<typeof readCharacterDraftLedger>) {
-  persistProjectEditorDraftLedger(useEditorStore.getState(), CHARACTER_DRAFT_TAB, ledger)
+  persistProjectEditorDraftLedger(composeEditorDraftTabWriter(), CHARACTER_DRAFT_TAB, ledger)
 }
 
 function currentCharacterProjectSession(

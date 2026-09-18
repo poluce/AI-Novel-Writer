@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { applyToolCallResult, handleRendererAction } from '../agent-store'
-import { useEditorStore } from '../editor-store'
+import { resetEditorSessionStores, useEditorStore } from '../editor-store'
 import { useLayoutStore } from '../layout-store'
 import { useProjectStore } from '../project-store'
 import { useLocaleStore } from '../locale-store'
@@ -23,7 +23,7 @@ beforeEach(() => {
       novelConfig: { writingLanguage: 'zh-CN' },
     } as never,
   })
-  useEditorStore.setState({ tabs: [], activeTabId: null, draftLedgers: {} })
+  resetEditorSessionStores()
   useLayoutStore.setState({ sidebarOpen: true, sidebarView: 'project', activeRailItem: 'project' })
 })
 

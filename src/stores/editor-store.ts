@@ -2,6 +2,7 @@ import { create } from 'zustand'
 
 import type { DraftStatus } from '../shared/draft-status'
 import { sameProjectPathKey } from '../shared/project-session-context'
+import { useEditorDraftLedgerStore } from './editor-draft-ledger-store'
 import { countUnsavedEditorItems } from './editor-unsaved'
 
 export interface EditorTabSaveSnapshot {
@@ -65,18 +66,10 @@ interface EditorState {
   tabs: EditorTab[]
   /** 当前活跃的 Tab ID */
   activeTabId: string | null
-  /**
-   * 编辑器后台草稿账本。
-   *
-   * 账本是技术状态，不是用户文件，不能混入可关闭的 tabs。
-   */
-  draftLedgers: Record<string, string>
 
   // ===== Actions =====
   /** 打开文件（如果已打开则激活） */
   openFile: (tab: EditorTab) => void
-  /** 写入后台草稿账本。 */
-  setDraftLedger: (key: string, content: string) => void
   /** 同步某项目可见内置编辑器的未保存状态。 */
   setProjectEditorDirty: (
     type: Extract<EditorTab['type'], 'character' | 'config' | 'chapter-card'>,
@@ -195,17 +188,24 @@ function hasBackgroundProjectDraft(
   }
 }
 
+export function resetEditorSessionStores(): void {
+  useEditorStore.setState({ tabs: [], activeTabId: null })
+  useEditorDraftLedgerStore.setState({ draftLedgers: {} })
+}
+
 export const useEditorStore = create<EditorState>()((set, get) => ({
   tabs: [],
   activeTabId: null,
-  draftLedgers: {},
 
   openFile: (tab) => {
     const projectScopedTab = {
       ...tab,
       id: createProjectScopedEditorTabId(tab.id, tab.type, tab.projectKey),
     }
-    const tabWithDraftState = hasBackgroundProjectDraft(get().draftLedgers, projectScopedTab)
+    const tabWithDraftState = hasBackgroundProjectDraft(
+      useEditorDraftLedgerStore.getState().draftLedgers,
+      projectScopedTab,
+    )
       ? { ...projectScopedTab, dirty: true }
       : projectScopedTab
     // diff 类型每次内容不同，只按 id 精确匹配（不走 filePath 去重）
@@ -266,15 +266,6 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         activeTabId: tabWithDraftState.id,
       }))
     }
-  },
-
-  setDraftLedger: (key, content) => {
-    set((state) => ({
-      draftLedgers: {
-        ...state.draftLedgers,
-        [key]: content,
-      },
-    }))
   },
 
   setProjectEditorDirty: (type, projectKey, dirty) => {
@@ -399,36 +390,21 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     for (const tab of get().tabs) {
       if (tab.projectKey === projectKey) removeEditorExitSaveHandlers(tab)
     }
+    useEditorDraftLedgerStore.getState().clearProjectLedgers(projectKey)
     set((state) => {
       const tabs = state.tabs.filter(tab => tab.projectKey !== projectKey)
-      const draftLedgers = Object.fromEntries(
-        Object.entries(state.draftLedgers).map(([key, content]) => {
-          try {
-            const parsed = JSON.parse(content) as {
-              version?: unknown
-              projects?: Array<{ projectKey?: unknown }>
-            }
-            if (parsed.version !== 1 || !Array.isArray(parsed.projects)) return [key, content]
-            return [key, JSON.stringify({
-              ...parsed,
-              projects: parsed.projects.filter(project => project.projectKey !== projectKey),
-            })]
-          } catch {
-            return [key, content]
-          }
-        }),
-      )
       const activeTabId = state.activeTabId && tabs.some(tab => tab.id === state.activeTabId)
         ? state.activeTabId
         : (tabs.at(-1)?.id ?? null)
-      return { tabs, activeTabId, draftLedgers }
+      return { tabs, activeTabId }
     })
   },
 }))
 
 export async function saveDirtyEditorChangesForExit(currentProjectKey: string | undefined): Promise<void> {
   const initial = useEditorStore.getState()
-  if (countUnsavedEditorItems(initial.tabs, initial.draftLedgers) === 0) return
+  const initialLedgers = useEditorDraftLedgerStore.getState().draftLedgers
+  if (countUnsavedEditorItems(initial.tabs, initialLedgers) === 0) return
 
   const handlers = new Set<EditorExitSaveHandler>()
   for (const tab of initial.tabs) {
@@ -442,7 +418,7 @@ export async function saveDirtyEditorChangesForExit(currentProjectKey: string | 
     handlers.add(handler)
   }
 
-  for (const [ledgerKey, content] of Object.entries(initial.draftLedgers)) {
+  for (const [ledgerKey, content] of Object.entries(initialLedgers)) {
     const type = Object.entries(BACKGROUND_LEDGER_BY_EDITOR_TYPE)
       .find(([, key]) => key === ledgerKey)?.[0] as EditorTab['type'] | undefined
     if (!type || !content) continue
@@ -468,7 +444,7 @@ export async function saveDirtyEditorChangesForExit(currentProjectKey: string | 
   for (const handler of handlers) await handler.save()
 
   const settled = useEditorStore.getState()
-  if (countUnsavedEditorItems(settled.tabs, settled.draftLedgers) !== 0) {
+  if (countUnsavedEditorItems(settled.tabs, useEditorDraftLedgerStore.getState().draftLedgers) !== 0) {
     throw new Error('保存期间仍有未保存修改，已取消退出')
   }
 }

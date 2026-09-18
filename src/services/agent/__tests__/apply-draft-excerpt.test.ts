@@ -50,7 +50,6 @@ describe('applyDraftExcerptReplace', () => {
         contentRevision: 1,
       }],
       activeTabId: 'tab-1',
-      draftLedgers: {},
     })
   })
 

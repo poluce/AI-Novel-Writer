@@ -197,7 +197,7 @@ describe('DraftEditor revision source binding', () => {
         projectKey: PROJECT_PATH, projectSessionLease: PROJECT_SESSION.leaseId, contentRevision: 1,
       },
     ]
-    useEditorStore.setState({ tabs, activeTabId: 'draft-7', draftLedgers: {} })
+    useEditorStore.setState({ tabs, activeTabId: 'draft-7' })
     invoke.mockImplementation(async (channel: string, ...args: unknown[]) => {
       if (channel === 'db:draft-get-meta') {
         const id = Number(args[0])

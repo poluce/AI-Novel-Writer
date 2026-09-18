@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   registerEditorExitSaveHandler,
   saveDirtyEditorChangesForExit,
-  useEditorStore,
+  resetEditorSessionStores, useEditorStore,
 } from '../editor-store'
 
 const PROJECT_A = 'C:\\novels\\exit-a'
@@ -11,7 +11,7 @@ const PROJECT_B = 'C:\\novels\\exit-b'
 
 beforeEach(() => {
   useEditorStore.getState().clearTabs()
-  useEditorStore.setState({ tabs: [], activeTabId: null, draftLedgers: {} })
+  resetEditorSessionStores()
 })
 
 describe('editor exit save settlement', () => {

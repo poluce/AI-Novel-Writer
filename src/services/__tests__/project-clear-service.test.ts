@@ -40,6 +40,7 @@ const loadAllDrafts = vi.fn()
 const clearTabs = vi.fn()
 const closeTab = vi.fn()
 const hasActiveRun = vi.fn()
+const ledger = vi.hoisted(() => ({ draftLedgers: {} as Record<string, string> }))
 
 vi.mock('../../stores/project-store', () => ({
   useProjectStore: {
@@ -64,10 +65,15 @@ vi.mock('../../stores/editor-store', () => ({
   useEditorStore: {
     getState: vi.fn(() => ({
       tabs: [],
-      draftLedgers: {},
       clearTabs,
       closeTab,
     })),
+  },
+}))
+
+vi.mock('../../stores/editor-draft-ledger-store', () => ({
+  useEditorDraftLedgerStore: {
+    getState: () => ({ draftLedgers: ledger.draftLedgers }),
   },
 }))
 
@@ -96,9 +102,9 @@ beforeEach(() => {
     reset: draftReset,
     loadAllDrafts,
   } as never)
+  ledger.draftLedgers = {}
   vi.mocked(useEditorStore.getState).mockReturnValue({
     tabs: [],
-    draftLedgers: {},
     clearTabs,
     closeTab,
   } as never)
@@ -171,7 +177,6 @@ describe('clearProjectData', () => {
         { id: 'config', name: '小说配置', type: 'config', projectKey: projectPath, dirty: true },
         { id: 'character-a', name: '角色A', type: 'character', projectKey: projectPath, dirty: true },
       ],
-      draftLedgers: {},
       clearTabs,
       closeTab,
     } as never)
@@ -181,14 +186,14 @@ describe('clearProjectData', () => {
   })
 
   it('blocks destructive clear when an affected draft remains after its tab was closed', async () => {
+    ledger.draftLedgers = {
+      config: JSON.stringify({
+        version: 1,
+        projects: [{ projectKey: projectPath, baseValue: { genre: 'old' }, draftValue: { genre: 'unsaved' } }],
+      }),
+    }
     vi.mocked(useEditorStore.getState).mockReturnValue({
       tabs: [],
-      draftLedgers: {
-        config: JSON.stringify({
-          version: 1,
-          projects: [{ projectKey: projectPath, baseValue: { genre: 'old' }, draftValue: { genre: 'unsaved' } }],
-        }),
-      },
       clearTabs,
       closeTab,
     } as never)
@@ -198,18 +203,18 @@ describe('clearProjectData', () => {
   })
 
   it('ignores hidden drafts from other projects or unselected clear scopes', async () => {
+    ledger.draftLedgers = {
+      config: JSON.stringify({
+        version: 1,
+        projects: [{ projectKey: 'C:/novels/project-b', baseValue: {}, draftValue: { genre: 'B' } }],
+      }),
+      'chapter-card-editor': JSON.stringify({
+        version: 1,
+        projects: [{ projectKey: projectPath, baseValue: [], draftValue: [{ chapter: 1 }] }],
+      }),
+    }
     vi.mocked(useEditorStore.getState).mockReturnValue({
       tabs: [],
-      draftLedgers: {
-        config: JSON.stringify({
-          version: 1,
-          projects: [{ projectKey: 'C:/novels/project-b', baseValue: {}, draftValue: { genre: 'B' } }],
-        }),
-        'chapter-card-editor': JSON.stringify({
-          version: 1,
-          projects: [{ projectKey: projectPath, baseValue: [], draftValue: [{ chapter: 1 }] }],
-        }),
-      },
       clearTabs,
       closeTab,
     } as never)
@@ -221,14 +226,14 @@ describe('clearProjectData', () => {
   })
 
   it('does not block creative-field clearing for character cards that the repository does not delete', async () => {
+    ledger.draftLedgers = {
+      'character-editor-drafts': JSON.stringify({
+        version: 1,
+        projects: [{ projectKey: projectPath, baseValue: [], draftValue: [{ name: '保留角色' }] }],
+      }),
+    }
     vi.mocked(useEditorStore.getState).mockReturnValue({
       tabs: [],
-      draftLedgers: {
-        'character-editor-drafts': JSON.stringify({
-          version: 1,
-          projects: [{ projectKey: projectPath, baseValue: [], draftValue: [{ name: '保留角色' }] }],
-        }),
-      },
       clearTabs,
       closeTab,
     } as never)
@@ -245,7 +250,6 @@ describe('clearProjectData', () => {
         { id: 'chapter-card-editor', name: '章节蓝图', type: 'chapter-card', projectKey: projectPath },
         { id: 'character-a', name: '角色A', type: 'character', projectKey: projectPath, dirty: true },
       ],
-      draftLedgers: {},
       clearTabs,
       closeTab,
     } as never)
@@ -262,7 +266,6 @@ describe('clearProjectData', () => {
         { id: 'project-a-draft', name: 'A 草稿', type: 'chapter', projectKey: projectPath },
         { id: 'project-b-dirty-draft', name: 'B 未保存草稿', type: 'chapter', projectKey: 'C:/novels/project-b', dirty: true },
       ],
-      draftLedgers: {},
       clearTabs,
       closeTab,
     } as never)

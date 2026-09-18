@@ -5,7 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { useWorkflowStore, type WorkflowRun } from '../../../stores/workflow-store'
 import { useLocaleStore } from '../../../stores/locale-store'
 import { useProjectStore } from '../../../stores/project-store'
-import { useEditorStore } from '../../../stores/editor-store'
+import { resetEditorSessionStores, useEditorStore } from '../../../stores/editor-store'
 import AIOutputPanel from '../AIOutputPanel'
 import type { PromptBudgetReport } from '../../../services/generation/generation-harness'
 
@@ -150,7 +150,7 @@ beforeEach(() => {
       novelConfig: {},
     } as never,
   })
-  useEditorStore.setState({ tabs: [], activeTabId: null, draftLedgers: {} })
+  resetEditorSessionStores()
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)

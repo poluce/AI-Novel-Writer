@@ -1,4 +1,5 @@
-import type { EditorTab } from './editor-store'
+import { useEditorDraftLedgerStore } from './editor-draft-ledger-store'
+import { useEditorStore, type EditorTab } from './editor-store'
 
 export interface ProjectEditorDraft<T> {
   projectKey: string
@@ -230,6 +231,18 @@ export function rebaseProjectEditorDraft<T>(
   return {
     ledger: setProjectEditorDraft(ledger, projectKey, remoteValue, value),
     value,
+  }
+}
+
+/** 拼出账本写入器：Tab 视图在 editor-store，账本在独立 ledger store。 */
+export function composeEditorDraftTabWriter(): DraftTabWriter {
+  const editor = useEditorStore.getState()
+  const ledgers = useEditorDraftLedgerStore.getState()
+  return {
+    tabs: editor.tabs,
+    draftLedgers: ledgers.draftLedgers,
+    setDraftLedger: ledgers.setDraftLedger,
+    setProjectEditorDirty: editor.setProjectEditorDirty,
   }
 }
 

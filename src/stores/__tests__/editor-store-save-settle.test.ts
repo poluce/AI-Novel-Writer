@@ -22,7 +22,6 @@ beforeEach(() => {
       dirty: true,
     }],
     activeTabId: 'draft-a',
-    draftLedgers: {},
   })
 })
 

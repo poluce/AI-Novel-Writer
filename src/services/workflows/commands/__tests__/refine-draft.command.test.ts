@@ -8,7 +8,7 @@ import {
   type HumanConfirmedReviewSnapshotInput,
 } from '../../../../shared/human-confirmed-review'
 import type { ModelExecutionLeaseReceipt } from '../../../../shared/ipc-channels'
-import { useEditorStore } from '../../../../stores/editor-store'
+import { resetEditorSessionStores, useEditorStore } from '../../../../stores/editor-store'
 import { useProjectStore } from '../../../../stores/project-store'
 import type { StepCallbacks, WorkflowContext } from '../../../../stores/workflow-store'
 import {
@@ -246,14 +246,14 @@ beforeEach(() => {
       novelConfig: { globalGuidance: '', wordsPerChapter: 3000 },
     } as never,
   })
-  useEditorStore.setState({ tabs: [], activeTabId: null, draftLedgers: {} })
+  resetEditorSessionStores()
 })
 
 afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   useProjectStore.setState({ currentProject: null })
-  useEditorStore.setState({ tabs: [], activeTabId: null, draftLedgers: {} })
+  resetEditorSessionStores()
 })
 
 describe('RefineDraftCommand bounded visible completion', () => {

@@ -14,7 +14,8 @@ import {
   discardCurrentProjectEditorChanges,
 } from '../editor-discard'
 import { useCharacterStore, type CharacterCard } from '../character-store'
-import { useEditorStore } from '../editor-store'
+import { useEditorDraftLedgerStore } from '../editor-draft-ledger-store'
+import { resetEditorSessionStores, useEditorStore } from '../editor-store'
 import { countUnsavedEditorItems, countUnsavedEditorItemsForProject } from '../editor-unsaved'
 import { useProjectStore } from '../project-store'
 import {
@@ -117,7 +118,7 @@ beforeEach(() => {
     }
     return result
   })
-  useEditorStore.setState({ tabs: [], activeTabId: null, draftLedgers: {} })
+  resetEditorSessionStores()
   useProjectStore.setState({ currentProject: project('A'), fileTree: [], loading: false })
   useCharacterStore.setState({
     characters: [character('旧名')],
@@ -182,7 +183,7 @@ describe('editor discard semantics', () => {
     expect(useCharacterStore.getState().selectedName).toBe('旧名')
     expect(useEditorStore.getState().tabs.map(tab => tab.id)).toEqual(['character-b'])
     const ledger = parseProjectEditorDraftLedger<CharacterCard[]>(
-      useEditorStore.getState().draftLedgers[CHARACTER_DRAFT_TAB.id],
+      useEditorDraftLedgerStore.getState().draftLedgers[CHARACTER_DRAFT_TAB.id],
     )
     expect(getProjectEditorDraft(ledger, project('A').path)).toBeUndefined()
     expect(getCharacterDraftRenames(ledger, project('A').path)).toEqual([])
@@ -226,11 +227,13 @@ describe('editor discard semantics', () => {
       [chapter(1, 'B 未保存')],
       new Set([1]),
     )
-    useEditorStore.setState((state) => ({
+    useEditorDraftLedgerStore.setState((state) => ({
       draftLedgers: {
         ...state.draftLedgers,
         [CHAPTER_CARD_TAB_ID]: JSON.stringify(chapterLedger),
       },
+    }))
+    useEditorStore.setState({
       tabs: [
         {
           id: 'config-a',
@@ -255,19 +258,19 @@ describe('editor discard semantics', () => {
         },
       ],
       activeTabId: 'config-a',
-    }))
+    })
 
     discardAndCloseEditorTab('config-a', projectSession('A'))
     expect(useProjectStore.getState().currentProject?.novelConfig.coreOutline).toBe('已保存 A')
     const configLedger = parseProjectEditorDraftLedger<ProjectData['novelConfig']>(
-      useEditorStore.getState().draftLedgers[CONFIG_DRAFT_TAB.id],
+      useEditorDraftLedgerStore.getState().draftLedgers[CONFIG_DRAFT_TAB.id],
     )
     expect(getProjectEditorDraft(configLedger, project('A').path)).toBeUndefined()
     expect(getProjectEditorDraft(configLedger, project('B').path)?.draftValue.coreOutline).toBe('B 未保存')
 
     discardAndCloseEditorTab('chapter-a', projectSession('A'))
     const remainingChapterLedger = parseChapterCardDraftLedger(
-      useEditorStore.getState().draftLedgers[CHAPTER_CARD_TAB_ID],
+      useEditorDraftLedgerStore.getState().draftLedgers[CHAPTER_CARD_TAB_ID],
     )
     expect(getChapterCardProjectDraft(remainingChapterLedger, project('A').path)).toBeUndefined()
     expect(getChapterCardProjectDraft(remainingChapterLedger, project('B').path)?.blueprints[0]?.title)
@@ -287,10 +290,10 @@ describe('editor discard semantics', () => {
       }],
       activeTabId: 'character-a',
     })
-    const before = useEditorStore.getState().draftLedgers[CHARACTER_DRAFT_TAB.id]
+    const before = useEditorDraftLedgerStore.getState().draftLedgers[CHARACTER_DRAFT_TAB.id]
 
     // 取消按钮只关闭确认对话框，不调用 discardAndCloseEditorTab。
-    expect(useEditorStore.getState().draftLedgers[CHARACTER_DRAFT_TAB.id]).toBe(before)
+    expect(useEditorDraftLedgerStore.getState().draftLedgers[CHARACTER_DRAFT_TAB.id]).toBe(before)
     expect(useCharacterStore.getState().characters[0]?.name).toBe('新名')
     expect(useEditorStore.getState().tabs[0]?.id).toBe('character-a')
   })
@@ -300,7 +303,7 @@ describe('editor discard semantics', () => {
     expect(useEditorStore.getState().tabs).toEqual([])
     expect(countUnsavedEditorItems(
       useEditorStore.getState().tabs,
-      useEditorStore.getState().draftLedgers,
+      useEditorDraftLedgerStore.getState().draftLedgers,
     )).toBe(1)
 
     useEditorStore.getState().openFile({
@@ -312,7 +315,7 @@ describe('editor discard semantics', () => {
     expect(useEditorStore.getState().tabs[0]?.dirty).toBe(true)
     expect(countUnsavedEditorItems(
       useEditorStore.getState().tabs,
-      useEditorStore.getState().draftLedgers,
+      useEditorDraftLedgerStore.getState().draftLedgers,
     )).toBe(1)
   })
 
@@ -333,7 +336,7 @@ describe('editor discard semantics', () => {
     )
     const characterLedger = setProjectEditorDraft(
       parseProjectEditorDraftLedger<CharacterCard[]>(
-        useEditorStore.getState().draftLedgers[CHARACTER_DRAFT_TAB.id],
+        useEditorDraftLedgerStore.getState().draftLedgers[CHARACTER_DRAFT_TAB.id],
       ),
       project('B').path,
       [character('角色 B')],
@@ -341,19 +344,21 @@ describe('editor discard semantics', () => {
     )
     const configLedger = setProjectEditorDraft(
       parseProjectEditorDraftLedger<ProjectData['novelConfig']>(
-        useEditorStore.getState().draftLedgers[CONFIG_DRAFT_TAB.id],
+        useEditorDraftLedgerStore.getState().draftLedgers[CONFIG_DRAFT_TAB.id],
       ),
       project('B').path,
       project('B').novelConfig,
       { ...project('B').novelConfig, coreOutline: 'B 未保存' },
     )
-    useEditorStore.setState((state) => ({
+    useEditorDraftLedgerStore.setState((state) => ({
       draftLedgers: {
         ...state.draftLedgers,
         [CHARACTER_DRAFT_TAB.id]: JSON.stringify(characterLedger),
         [CONFIG_DRAFT_TAB.id]: JSON.stringify(configLedger),
         [CHAPTER_CARD_TAB_ID]: JSON.stringify(chapterLedger),
       },
+    }))
+    useEditorStore.setState({
       tabs: [
         {
           id: 'arch-a',
@@ -385,17 +390,17 @@ describe('editor discard semantics', () => {
         },
       ],
       activeTabId: 'arch-a',
-    }))
+    })
     const requestInstall = vi.fn(async () => {
       expect(useCharacterStore.getState().characters[0]?.name).toBe('旧名')
       expect(useProjectStore.getState().currentProject?.novelConfig.coreOutline).toBe('已保存 A')
       expect(getChapterCardProjectDraft(
-        parseChapterCardDraftLedger(useEditorStore.getState().draftLedgers[CHAPTER_CARD_TAB_ID]),
+        parseChapterCardDraftLedger(useEditorDraftLedgerStore.getState().draftLedgers[CHAPTER_CARD_TAB_ID]),
         project('A').path,
       )).toBeUndefined()
       expect(countUnsavedEditorItems(
         useEditorStore.getState().tabs,
-        useEditorStore.getState().draftLedgers,
+        useEditorDraftLedgerStore.getState().draftLedgers,
       )).toBe(0)
       expect(useEditorStore.getState().tabs.find(tab => tab.id === 'arch-a')).toBeUndefined()
       expect(useEditorStore.getState().tabs.find(tab => tab.id === 'pinned-a')).toMatchObject({
@@ -413,7 +418,7 @@ describe('editor discard semantics', () => {
     expect(useEditorStore.getState().tabs.find(tab => tab.id === 'arch-b')).toBeUndefined()
     expect(countUnsavedEditorItems(
       useEditorStore.getState().tabs,
-      useEditorStore.getState().draftLedgers,
+      useEditorDraftLedgerStore.getState().draftLedgers,
     )).toBe(0)
   })
 
@@ -424,6 +429,8 @@ describe('editor discard semantics', () => {
         { id: 'legacy-dirty', name: '未归属草稿', type: 'chapter', dirty: true },
       ],
       activeTabId: 'legacy-dirty',
+    })
+    useEditorDraftLedgerStore.setState({
       draftLedgers: {
         [CHARACTER_DRAFT_TAB.id]: 'corrupt character ledger',
         [CONFIG_DRAFT_TAB.id]: 'corrupt config ledger',
@@ -437,12 +444,12 @@ describe('editor discard semantics', () => {
     })
     expect(countUnsavedEditorItems(
       useEditorStore.getState().tabs,
-      useEditorStore.getState().draftLedgers,
+      useEditorDraftLedgerStore.getState().draftLedgers,
     )).toBe(4)
     const requestInstall = vi.fn(async () => {
       expect(countUnsavedEditorItems(
         useEditorStore.getState().tabs,
-        useEditorStore.getState().draftLedgers,
+        useEditorDraftLedgerStore.getState().draftLedgers,
       )).toBe(0)
       throw new Error('仍未退出')
     })
@@ -452,7 +459,7 @@ describe('editor discard semantics', () => {
     expect(useEditorStore.getState().activeTabId).toBeNull()
     expect(countUnsavedEditorItems(
       useEditorStore.getState().tabs,
-      useEditorStore.getState().draftLedgers,
+      useEditorDraftLedgerStore.getState().draftLedgers,
     )).toBe(0)
   })
 

@@ -22,6 +22,7 @@ import {
 import { useProjectStore } from '../../stores/project-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { useThemeStore, type Theme } from '../../stores/theme-store'
+import { useEditorDraftLedgerStore } from '../../stores/editor-draft-ledger-store'
 import { useEditorStore } from '../../stores/editor-store'
 import { saveDirtyEditorChangesForExit } from '../../stores/editor-store'
 import { countUnsavedEditorItems } from '../../stores/editor-unsaved'
@@ -60,7 +61,9 @@ export default function TitleBar() {
   const openProject = useProjectStore((s) => s.openProject)
   const { theme, setTheme } = useThemeStore()
   const { zoom, zoomIn, zoomOut, zoomReset } = useThemeStore()
-  const hasDirty = useEditorStore((s) => countUnsavedEditorItems(s.tabs, s.draftLedgers) > 0)
+  const tabs = useEditorStore(s => s.tabs)
+  const draftLedgers = useEditorDraftLedgerStore(s => s.draftLedgers)
+  const hasDirty = countUnsavedEditorItems(tabs, draftLedgers) > 0
   const openSettings = useLayoutStore(s => s.openSettings)
   const openNewProject = useLayoutStore(s => s.openNewProject)
   const openExport = useLayoutStore(s => s.openExport)
@@ -81,7 +84,7 @@ export default function TitleBar() {
       return
     }
     const editor = useEditorStore.getState()
-    if (countUnsavedEditorItems(editor.tabs, editor.draftLedgers) === 0) {
+    if (countUnsavedEditorItems(editor.tabs, useEditorDraftLedgerStore.getState().draftLedgers) === 0) {
       void flushAgentConversations(projectSessionContextFromProject(useProjectStore.getState().currentProject))
         .catch((error) => console.error('[TitleBar] 保存助手会话失败:', error))
         .then(() => ipc.invoke('window:resolve-close', requestId, 'proceed'))

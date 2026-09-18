@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { setActiveProjectSessionContext } from '../../../shared/project-session-context'
 import type { ProjectData } from '../../../shared/ipc-channels'
-import { useEditorStore } from '../../../stores/editor-store'
+import { resetEditorSessionStores, useEditorStore } from '../../../stores/editor-store'
 import { useLayoutStore } from '../../../stores/layout-store'
 import { useLLMStore } from '../../../stores/llm-store'
 import { useProjectStore } from '../../../stores/project-store'
@@ -67,7 +67,7 @@ beforeEach(async () => {
     updatedAt: '',
   }
   useProjectStore.setState({ currentProject: project, fileTree: [], loading: false })
-  useEditorStore.setState({ tabs: [], activeTabId: null, draftLedgers: {} })
+  resetEditorSessionStores()
   useLayoutStore.setState({ sidebarOpen: true, sidebarView: 'project', activeRailItem: 'project' })
   useLLMStore.setState({
     models: [],

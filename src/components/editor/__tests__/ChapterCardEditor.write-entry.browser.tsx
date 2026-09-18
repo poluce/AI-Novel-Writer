@@ -5,7 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import type { ProjectData } from '../../../shared/ipc-channels'
 import type { AuthoritativeChapterSequence } from '../../../shared/author-manuscript-import'
 import type { ChapterBlueprint } from '../../../services/workflows/directory-workflow'
-import { useEditorStore } from '../../../stores/editor-store'
+import { resetEditorSessionStores, useEditorStore } from '../../../stores/editor-store'
 import { useLayoutStore } from '../../../stores/layout-store'
 import { useProjectStore } from '../../../stores/project-store'
 import { toast } from '../../ui/Toast'
@@ -112,7 +112,7 @@ async function renderEditor() {
 }
 
 beforeEach(() => {
-  useEditorStore.setState({ tabs: [], activeTabId: null, draftLedgers: {} })
+  resetEditorSessionStores()
   useLayoutStore.setState({ chapterCreationOpen: false, chapterCreationPrefill: null })
   useProjectStore.setState({ currentProject: project(), fileTree: [], loading: false })
   installIpc()

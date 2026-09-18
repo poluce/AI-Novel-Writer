@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createHash } from 'node:crypto'
 
 import type { StepCallbacks, WorkflowContext } from '../../../../stores/workflow-store'
-import { useEditorStore } from '../../../../stores/editor-store'
+import { resetEditorSessionStores, useEditorStore } from '../../../../stores/editor-store'
 import { useLLMStore } from '../../../../stores/llm-store'
 import { useProjectStore } from '../../../../stores/project-store'
 import {
@@ -182,7 +182,7 @@ beforeEach(() => {
       },
     } as never,
   })
-  useEditorStore.setState({ tabs: [], activeTabId: null, draftLedgers: {} })
+  resetEditorSessionStores()
 })
 
 afterEach(() => {

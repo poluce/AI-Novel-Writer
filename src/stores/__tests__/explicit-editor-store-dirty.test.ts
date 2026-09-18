@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { ProjectData } from '../../shared/ipc-channels'
 import { useCharacterStore, type CharacterCard } from '../character-store'
+import { useEditorDraftLedgerStore } from '../editor-draft-ledger-store'
 import { useEditorStore } from '../editor-store'
 import { useProjectStore } from '../project-store'
 import {
@@ -125,7 +126,7 @@ function deferred<T>() {
 }
 
 function draftLedgerContent(key: string): string | undefined {
-  return useEditorStore.getState().draftLedgers[key]
+  return useEditorDraftLedgerStore.getState().draftLedgers[key]
 }
 
 function visibleEditor(type: 'character' | 'config') {
@@ -153,8 +154,8 @@ beforeEach(() => {
       },
     ],
     activeTabId: 'config',
-    draftLedgers: {},
   })
+  useEditorDraftLedgerStore.setState({ draftLedgers: {} })
   useProjectStore.setState({ currentProject: project(), fileTree: [], loading: false })
   useCharacterStore.setState({
     characters: [character('主角')],
