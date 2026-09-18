@@ -4,18 +4,18 @@
  * currentState 子结构已拍平为 cs_* 前缀列，杜绝 JSON 大字段。
  */
 import { getProjectDb } from '../database'
-import {
-    normalizeCharacterRole,
-    type CharacterRole,
-} from '../../src/shared/character-role'
+import { normalizeCharacterRole } from '../../src/shared/character-role'
 import type {
-    CharacterRosterCharacterState,
     CharacterStateFieldProvenance,
     CharacterStateTextField,
 } from '../../src/shared/character-roster'
+import type {
+    CharacterData,
+    CharacterRenameData,
+    CharacterStateData,
+} from '../../src/shared/contracts/character'
 
-/** 角色卡动态状态 */
-export type CharacterStateData = CharacterRosterCharacterState
+export type { CharacterData, CharacterRenameData, CharacterStateData } from '../../src/shared/contracts/character'
 
 function parseProvenance(value: unknown): Partial<Record<CharacterStateTextField, CharacterStateFieldProvenance>> {
     if (typeof value !== 'string' || !value.trim()) return {}
@@ -27,28 +27,6 @@ function parseProvenance(value: unknown): Partial<Record<CharacterStateTextField
     } catch {
         return {}
     }
-}
-
-/** 角色卡完整数据（前端驼峰接口） */
-export interface CharacterData {
-    name: string
-    role: CharacterRole
-    gender: string
-    age: string
-    appearance: string
-    personality: string
-    background: string
-    abilities: string
-    motivation: string
-    relationships: string
-    arc: string
-    notes: string
-    currentState?: CharacterStateData
-}
-
-export interface CharacterRenameData {
-    originalName: string
-    newName: string
 }
 
 function rowToData(row: Record<string, unknown>): CharacterData {

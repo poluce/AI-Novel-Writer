@@ -20,7 +20,25 @@ import type { AgentEditorSnapshot, PiAgentEvent, RendererAction, RendererActionR
 import type { AgentPromptHistoryTurn } from './agent-conversation-archive'
 import type { AssistantThinkingLevel } from './agent-runtime'
 import type { AgentTurnRefusalCode } from './agent-turn-refusal'
-import type { DraftStatus } from './draft-status'
+import type {
+  BlueprintCharacterSyncOperation,
+  BlueprintRangeCommitReceipt,
+  BlueprintRangeCommitRequest,
+} from './contracts/blueprint-commit'
+import type { CharacterData } from './contracts/character'
+import type { DraftFull, DraftMeta, ExpectedDraftSource } from './contracts/draft'
+import type { BlueprintData } from './blueprint'
+import type {
+  FinalizedDraftExportAuthorityReceipt,
+  FinalizedDraftExportSnapshot,
+} from './contracts/finalization'
+import type { PostProcessRunData, PostProcessStepData } from './contracts/post-process'
+import type {
+  ProjectCoreData,
+  ProjectCoreSynopsisCommitRequest,
+} from './contracts/project-core'
+import type { ReviewFull, ReviewMeta } from './contracts/review'
+import type { RevisionFull, RevisionMeta } from './contracts/revision'
 import type { DraftAnnotation } from './draft-annotation'
 import type {
   RecoveryCandidate,
@@ -249,13 +267,7 @@ export interface ProjectSessionContext {
 }
 
 /** Renderer-captured source draft contract revalidated by the main-process write transaction. */
-export interface ExpectedDraftSource {
-  id: number
-  chapterNumber: number
-  version: number
-  status: DraftStatus
-  content: string
-}
+export type { ExpectedDraftSource } from './contracts/draft'
 
 export type SourceDraftGuardErrorCode = 'SOURCE_DRAFT_CHANGED'
 
@@ -726,28 +738,24 @@ export interface ProjectClearOptions {
 
 export type ProjectClearScope = 'creativeFields' | 'blueprints' | 'generatedText'
 
-// ===== 引入 DB 类型 =====
-import type {
-  ProjectCoreData,
-  ProjectCoreSynopsisCommitRequest,
-} from '../../electron/repositories/project-core-repository'
-import type {
+export type {
   BlueprintCharacterSyncOperation,
-  BlueprintData,
   BlueprintRangeCommitReceipt,
   BlueprintRangeCommitRequest,
-} from '../../electron/repositories/blueprint-repository'
-import type {
   CharacterData,
-} from '../../electron/repositories/character-repository'
-import type { DraftMeta, DraftFull } from '../../electron/repositories/draft-repository'
-import type {
+  DraftFull,
+  DraftMeta,
   FinalizedDraftExportAuthorityReceipt,
   FinalizedDraftExportSnapshot,
-} from '../../electron/repositories/finalization-repository'
-import type { RevisionMeta, RevisionFull } from '../../electron/repositories/revision-repository'
-import type { ReviewMeta, ReviewFull } from '../../electron/repositories/review-repository'
-import type { PostProcessRunData, PostProcessStepData } from '../../electron/repositories/post-process-repository'
+  PostProcessRunData,
+  PostProcessStepData,
+  ProjectCoreData,
+  ProjectCoreSynopsisCommitRequest,
+  ReviewFull,
+  ReviewMeta,
+  RevisionFull,
+  RevisionMeta,
+}
 import type {
   CharacterRosterCommitReceipt,
   CharacterRosterCommitRequest,

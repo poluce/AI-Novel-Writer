@@ -1,4 +1,4 @@
-import type { CharacterRenameData } from '../../electron/repositories/character-repository'
+import type { CharacterRenameData } from '../shared/contracts/character'
 import {
   getProjectEditorDraft,
   mergeObjectDraftWithRemote,

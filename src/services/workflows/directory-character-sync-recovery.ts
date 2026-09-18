@@ -1,7 +1,7 @@
 import type {
   BlueprintCharacterSyncCompletionReceipt,
   BlueprintCharacterSyncOperation,
-} from '../../../electron/repositories/blueprint-repository'
+} from '../../shared/contracts/blueprint-commit'
 import type { ProjectSessionContext } from '../../shared/ipc-channels'
 import { ipc } from '../ipc-client'
 import { syncBlueprintCharacterCandidates } from './blueprint-character-sync'

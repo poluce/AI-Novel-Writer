@@ -1,4 +1,4 @@
-import type { CharacterData, CharacterStateData } from '../../../electron/repositories/character-repository'
+import type { CharacterData, CharacterStateData } from '../../shared/contracts/character'
 import {
   parseArchitectureCharacterRoster,
   parseModelCharacterCards,

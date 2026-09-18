@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { FileText, RotateCcw } from 'lucide-react'
-import type { BlueprintCharacterSyncOperation } from '../../../electron/repositories/blueprint-repository'
+import type { BlueprintCharacterSyncOperation } from '../../shared/contracts/blueprint-commit'
 import { useProjectStore } from '../../stores/project-store'
 import { toast } from '../ui/Toast'
 import { useLocaleStore } from '../../stores/locale-store'

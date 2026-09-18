@@ -12,6 +12,17 @@ import {
     type WritingLanguage,
 } from '../../src/shared/writing-language'
 import { resolveNarrativeThreadDormantThreshold } from '../../src/shared/narrative-thread'
+import type {
+    ProjectCoreData,
+    ProjectCoreSynopsisCommitRequest,
+    ProjectCoreSynopsisExpected,
+} from '../../src/shared/contracts/project-core'
+
+export type {
+    ProjectCoreData,
+    ProjectCoreSynopsisCommitRequest,
+    ProjectCoreSynopsisExpected,
+}
 
 /** project_core 表行类型 */
 export interface ProjectCoreRow {
@@ -41,52 +52,6 @@ export interface ProjectCoreRow {
     character_states: string
     created_at: string
     updated_at: string
-}
-
-/** 前端使用的驼峰命名接口 */
-export interface ProjectCoreData {
-    projectName: string
-    genre: string
-    subGenre: string
-    targetAudience: string
-    totalChapters: number
-    wordsPerChapter: number
-    writingLanguage: WritingLanguage
-    creativeStrategy: CreativeStrategy
-    narrativeThreadDormantChapterThreshold: number
-    plotStructure: string
-    narrativePov: string
-    writingStyle: string
-    referenceWorks: string
-    globalGuidance: string
-    goldenFinger: string
-    coreOutline: string
-    worldSetting: string
-    protagonistProfile: string
-    premise: string
-    worldbuilding: string
-    charactersArch: string
-    synopsis: string
-    characterStates: string
-}
-
-export type ProjectCoreSynopsisExpected = Pick<ProjectCoreData,
-    | 'synopsis'
-    | 'premise'
-    | 'charactersArch'
-    | 'worldbuilding'
-    | 'genre'
-    | 'totalChapters'
-    | 'wordsPerChapter'
-    | 'writingLanguage'
-    | 'plotStructure'
-    | 'narrativePov'
-    | 'globalGuidance'
->
-
-export interface ProjectCoreSynopsisCommitRequest {
-    synopsis: string
-    expected: ProjectCoreSynopsisExpected
 }
 
 /** 数据库行 → 前端数据 */

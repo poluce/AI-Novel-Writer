@@ -3,7 +3,7 @@ import {
   injectWritingSkillIntoSession,
   type CommandExecuteParams,
 } from './base-command'
-import type { BlueprintRangeCommitReceipt } from '../../../../electron/repositories/blueprint-repository'
+import type { BlueprintRangeCommitReceipt } from '../../../shared/contracts/blueprint-commit'
 import { composePromptSystemRole, resolvePromptTemplate } from '../../prompt-templates'
 import { logFailure } from '../../../shared/fail-log'
 import { DirectoryPromptBuilder } from '../../prompts/prompt-builder'

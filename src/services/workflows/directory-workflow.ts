@@ -17,11 +17,11 @@ import {
 } from '../../shared/project-session-context'
 import { ipc } from '../ipc-client'
 import { PromptBudgetExceededError } from '../generation/generation-harness'
+import type { BlueprintData } from '../../shared/blueprint'
 import type {
-  BlueprintData,
   BlueprintRangeCommitMode,
   BlueprintRangeCommitReceipt,
-} from '../../../electron/repositories/blueprint-repository'
+} from '../../shared/contracts/blueprint-commit'
 import { requireWorkflowProjectSession } from './workflow-project-session'
 
 // ==========================================

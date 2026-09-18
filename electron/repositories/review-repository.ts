@@ -5,23 +5,11 @@
  */
 import { getProjectDb } from '../database'
 import { ContentRepository } from './content-repository'
-import type { ExpectedDraftSource } from '../../src/shared/ipc-channels'
+import type { ExpectedDraftSource } from '../../src/shared/contracts/draft'
+import type { ReviewFull, ReviewMeta } from '../../src/shared/contracts/review'
 import { assertExpectedDraftSource, SourceDraftChangedError } from './draft-source-guard'
 
-/** 审稿元数据 */
-export interface ReviewMeta {
-    id: number
-    baseDraftId: number
-    reviewIndex: number
-    contentId: number
-    createdAt: string
-}
-
-/** 审稿完整数据（含报告正文） */
-export interface ReviewFull extends ReviewMeta {
-    content: string
-    sourceDraft: ExpectedDraftSource | null
-}
+export type { ReviewFull, ReviewMeta }
 
 function rowToSourceDraft(row: Record<string, unknown>): ExpectedDraftSource | null {
     if (

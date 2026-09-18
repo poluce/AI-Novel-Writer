@@ -1,4 +1,4 @@
-import type { CharacterData } from '../../electron/repositories/character-repository'
+import type { CharacterData } from '../shared/contracts/character'
 import type {
   CharacterRosterEntry,
   CharacterRosterRelationship,

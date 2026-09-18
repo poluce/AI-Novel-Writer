@@ -2,34 +2,20 @@ import { createHash } from 'node:crypto'
 import { getProjectDb } from '../database'
 import { countDraftUnits } from '../../src/shared/draft-units'
 import { invalidateContinuityProjectionFrom } from './summary-repository'
+import type {
+  FinalizationCommitInput,
+  FinalizationRecord,
+  FinalizedDraftExportAuthorityReceipt,
+  FinalizedDraftExportSnapshot,
+  PublicationStatus,
+} from '../../src/shared/contracts/finalization'
 
-export type PublicationStatus = 'pending' | 'published'
-
-export interface FinalizationCommitInput {
-  finalizationId: string
-  draftId: number
-  chapterNumber: number
-  chapterTitle: string
-  content: string
-  contentHash: string
-  contentRevision: number
-  targetFileName: string
-}
-
-export interface FinalizationRecord {
-  finalizationId: string
-  draftId: number
-  chapterNumber: number
-  chapterTitle: string
-  /** outbox 内冻结的不可变正文；发布和重试绝不回读 contents.body。 */
-  contentSnapshot: string
-  contentHash: string
-  contentRevision: number
-  targetFileName: string
-  knowledgeDocumentId: string
-  publicationStatus: PublicationStatus
-  lastError: string
-  publishedAt: string | null
+export type {
+  FinalizationCommitInput,
+  FinalizationRecord,
+  FinalizedDraftExportAuthorityReceipt,
+  FinalizedDraftExportSnapshot,
+  PublicationStatus,
 }
 
 interface FinalizationRow {
@@ -46,24 +32,6 @@ interface FinalizationRow {
   published_at: string | null
   content_snapshot: string
 }
-
-export interface FinalizedDraftExportSnapshot {
-  draftId: number
-  chapterNumber: number
-  version: number
-  title: string
-  content: string
-  finalizationId: string | null
-  contentHash: string
-}
-
-export type FinalizedDraftExportAuthorityReceipt = ReadonlyArray<Readonly<{
-  draftId: number
-  chapterNumber: number
-  version: number
-  finalizationId: string | null
-  contentHash: string
-}>>
 
 interface FinalizedDraftExportRow {
   draft_id: number

@@ -6,45 +6,20 @@
  */
 import { getProjectDb } from '../database'
 import { ContentRepository } from './content-repository'
-import type { ExpectedDraftSource } from '../../src/shared/ipc-channels'
+import type { ExpectedDraftSource } from '../../src/shared/contracts/draft'
+import type {
+    MergeRevisionReceipt,
+    MergeRevisionRequest,
+    RevisionFull,
+    RevisionMeta,
+} from '../../src/shared/contracts/revision'
 import { assertExpectedDraftSource, SourceDraftChangedError } from './draft-source-guard'
 
-/** 修稿元数据（不含正文） */
-export interface RevisionMeta {
-    id: number
-    baseDraftId: number
-    revisionIndex: number
-    revisionType: string
-    status: string
-    mergedToDraftId: number | null
-    userPrompt: string
-    reviewSourceId: number | null
-    contentId: number
-    wordCount: number
-    createdAt: string
-    updatedAt: string
-}
-
-/** 修稿完整数据（含正文） */
-export interface RevisionFull extends RevisionMeta {
-    content: string
-    sourceDraft: ExpectedDraftSource | null
-}
-
-export interface MergeRevisionRequest {
-    revisionId: number
-    targetDraftId: number
-    expectedDraftContent: string
-    mergedContent: string
-    wordCount: number
-}
-
-export interface MergeRevisionReceipt {
-    revisionId: number
-    targetDraftId: number
-    status: 'revised'
-    wordCount: number
-    idempotent: boolean
+export type {
+    MergeRevisionReceipt,
+    MergeRevisionRequest,
+    RevisionFull,
+    RevisionMeta,
 }
 
 function rowToSourceDraft(row: Record<string, unknown>): ExpectedDraftSource | null {

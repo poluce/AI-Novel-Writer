@@ -6,31 +6,9 @@
  */
 import { getProjectDb } from '../database'
 import { randomUUID } from 'node:crypto'
+import type { PostProcessRunData, PostProcessStepData } from '../../src/shared/contracts/post-process'
 
-/** 跑批实例 */
-export interface PostProcessRunData {
-    id: string
-    triggerSourceType: string
-    triggerSourceId: string
-    sourceLabel: string
-    allCriticalPassed: boolean
-    createdAt: string
-    updatedAt: string
-}
-
-/** 步骤明细 */
-export interface PostProcessStepData {
-    id: number
-    runId: string
-    stepKey: string
-    label: string
-    critical: boolean
-    ok: boolean
-    errorMsg: string
-    attemptCount: number
-    completedAt: string
-    lastAttemptAt: string
-}
+export type { PostProcessRunData, PostProcessStepData }
 
 export class PostProcessRepository {
     /**

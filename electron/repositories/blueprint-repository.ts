@@ -9,6 +9,21 @@ import { getProjectDb } from '../database'
 import { CharacterRosterRepository } from './character-roster-repository'
 import { blueprintCharacterSyncFactError } from '../../src/shared/blueprint-character-sync-evidence'
 import type { BlueprintData } from '../../src/shared/blueprint'
+import type {
+    BlueprintCharacterSyncCompletionReceipt,
+    BlueprintCharacterSyncOperation,
+    BlueprintRangeCommitMode,
+    BlueprintRangeCommitReceipt,
+    BlueprintRangeCommitRequest,
+} from '../../src/shared/contracts/blueprint-commit'
+
+export type {
+    BlueprintCharacterSyncCompletionReceipt,
+    BlueprintCharacterSyncOperation,
+    BlueprintRangeCommitMode,
+    BlueprintRangeCommitReceipt,
+    BlueprintRangeCommitRequest,
+}
 
 /** 蓝图行类型（DB 蛇形命名） */
 export interface BlueprintRow {
@@ -28,58 +43,6 @@ export interface BlueprintRow {
 
 /** 前端使用的驼峰接口；定义在 shared，供渲染层与提案校验共用。 */
 export type { BlueprintData } from '../../src/shared/blueprint'
-
-export type BlueprintRangeCommitMode = 'full' | 'replace-range'
-
-export interface BlueprintRangeCommitRequest {
-    mode: BlueprintRangeCommitMode
-    operationId: string
-    startChapter: number
-    endChapter: number
-    blueprints: BlueprintData[]
-}
-
-export interface BlueprintRangeCommitReceipt {
-    mode: BlueprintRangeCommitMode
-    operationId: string
-    payloadHash: string
-    idempotent: boolean
-    startChapter: number
-    endChapter: number
-    chapterNumbers: number[]
-    snapshot: BlueprintData[]
-    /** Frozen generation facts required to replay character-candidate sync. */
-    characterSyncInput: BlueprintData[]
-    /** Durable post-commit work item; it survives renderer/app restarts. */
-    characterSyncOperation: BlueprintCharacterSyncOperation
-}
-
-export interface BlueprintCharacterSyncCompletionReceipt {
-    blueprintCommitOperationId: string
-    operationId: string
-    status: 'committed' | 'already-satisfied'
-    /** Hash/revision evidence only; the authoritative roster snapshot stays in its fact tables. */
-    rosterReceipt?: {
-        operationId: string
-        payloadHash: string
-        revision: number
-        idempotent: boolean
-    }
-}
-
-export interface BlueprintCharacterSyncOperation {
-    operationId: string
-    blueprintCommitOperationId: string
-    blueprintCommitPayloadHash: string
-    status: 'pending' | 'completed'
-    startChapter: number
-    endChapter: number
-    characterSyncInput: BlueprintData[]
-    completionReceipt?: BlueprintCharacterSyncCompletionReceipt
-    createdAt: string
-    updatedAt: string
-    completedAt?: string
-}
 
 interface BlueprintCommitOperationRow {
     operation_id: string

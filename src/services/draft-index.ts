@@ -8,9 +8,9 @@ import { ipc } from './ipc-client'
 import type { DraftStatus } from '../shared/draft-status'
 
 // 导入后端的类型定义
-import type { DraftMeta as DB_DraftMeta } from '../../electron/repositories/draft-repository'
-import type { RevisionMeta as DB_RevisionMeta } from '../../electron/repositories/revision-repository'
-import type { ReviewMeta as DB_ReviewMeta } from '../../electron/repositories/review-repository'
+import type { DraftMeta as DB_DraftMeta } from '../shared/contracts/draft'
+import type { RevisionMeta as DB_RevisionMeta } from '../shared/contracts/revision'
+import type { ReviewMeta as DB_ReviewMeta } from '../shared/contracts/review'
 
 // ===== DraftMeta 兼容类型 =====
 export interface DraftMeta {

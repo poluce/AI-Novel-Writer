@@ -15,7 +15,7 @@ import type { FileWriteCommitState, ProjectSessionContext } from '../shared/ipc-
 import type {
   FinalizedDraftExportAuthorityReceipt,
   FinalizedDraftExportSnapshot,
-} from '../../electron/repositories/finalization-repository'
+} from '../shared/contracts/finalization'
 import {
   getActiveProjectSessionContext,
   sameProjectPathKey,

@@ -8,7 +8,7 @@ import {
   type ImportRunExecutionLease,
 } from '../../shared/import-run'
 import type { ImportGlobalFactsReceipt } from '../../shared/import-global-facts'
-import type { BlueprintRangeCommitReceipt } from '../../../electron/repositories/blueprint-repository'
+import type { BlueprintRangeCommitReceipt } from '../../shared/contracts/blueprint-commit'
 import type { FinalizedDraftImportReceipt } from '../../shared/finalized-draft-import'
 import { sameProjectSessionContext, projectSessionContextFromProject } from '../../shared/project-session-context'
 import { ipc } from '../ipc-client'

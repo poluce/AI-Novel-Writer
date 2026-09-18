@@ -22,7 +22,7 @@ import {
 import { characterArchitecturePrompts, promptLanguageText } from '../../prompt-language'
 import type { WorkflowContext } from '../../../stores/workflow-store'
 import type { NovelConfig, ProjectSessionContext } from '../../../shared/ipc-channels'
-import type { ProjectCoreSynopsisExpected } from '../../../../electron/repositories/project-core-repository'
+import type { ProjectCoreSynopsisExpected } from '../../../shared/contracts/project-core'
 import type { WritingLanguage } from '../../../shared/writing-language'
 import {
   CHARACTER_ROSTER_SCHEMA_VERSION,

@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import type { BlueprintData } from '../../../shared/blueprint'
-import type { DraftMeta } from '../../../../electron/repositories/draft-repository'
+import type { DraftMeta } from '../../../shared/contracts/draft'
 import type { NarrativeThreadView } from '../../../shared/narrative-thread'
 import { sameProjectSessionContext, projectSessionContextFromProject } from '../../../shared/project-session-context'
 import type {

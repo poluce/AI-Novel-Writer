@@ -9,6 +9,9 @@ import type BetterSqlite3 from 'better-sqlite3'
 import { getProjectDb } from '../database'
 import { ContentRepository } from './content-repository'
 import type { DraftSourceDependency } from '../../src/shared/draft-source-dependency'
+import type { DraftFull, DraftMeta } from '../../src/shared/contracts/draft'
+
+export type { DraftFull, DraftMeta }
 
 const DRAFT_META_SELECT = `
   SELECT drafts.*, finalization_outbox.chapter_title
@@ -16,27 +19,6 @@ const DRAFT_META_SELECT = `
   LEFT JOIN finalization_outbox
     ON drafts.status = 'finalized' AND finalization_outbox.draft_id = drafts.id
 `
-
-/** 草稿元数据（不含正文，适合列表查询） */
-export interface DraftMeta {
-    id: number
-    chapterNumber: number
-    chapterTitle?: string
-    version: number
-    status: string
-    source: string
-    contentId: number
-    wordCount: number
-    sourceDependencies: DraftSourceDependency[]
-    dependenciesStale: boolean
-    createdAt: string
-    updatedAt: string
-}
-
-/** 草稿完整数据（含正文） */
-export interface DraftFull extends DraftMeta {
-    content: string
-}
 
 function sha256(value: string): string {
     return createHash('sha256').update(value, 'utf8').digest('hex')

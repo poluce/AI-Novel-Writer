@@ -30,7 +30,7 @@ import { retryDirectoryCharacterSync } from '../directory-character-sync-recover
 import type {
   BlueprintRangeCommitReceipt,
   BlueprintRangeCommitRequest,
-} from '../../../../electron/repositories/blueprint-repository'
+} from '../../../shared/contracts/blueprint-commit'
 import {
   blueprintSemanticGenerationContract,
   parseBlueprintSemanticResponseText,

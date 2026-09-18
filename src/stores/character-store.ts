@@ -9,7 +9,7 @@ import {
 import type {
   CharacterData,
   CharacterStateData,
-} from '../../electron/repositories/character-repository'
+} from '../shared/contracts/character'
 import { normalizeCharacterRole } from '../shared/character-role'
 import {
   characterCardFromRosterEntry,

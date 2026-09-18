@@ -1,4 +1,4 @@
-import type { FinalizationResult } from '../../electron/services/finalization-service'
+import type { FinalizationResult } from '../shared/contracts/finalization'
 import { getActiveProjectSessionContext, sameProjectSessionContext } from '../shared/project-session-context'
 import type { ProjectSessionContext } from '../shared/ipc-channels'
 import type { FinalizationSnapshot } from './finalization-snapshot'
