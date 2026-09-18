@@ -4,8 +4,7 @@ import CodeMirror, { ReactCodeMirrorRef, EditorView, ViewUpdate } from '@uiw/rea
 import { keymap } from '@codemirror/view'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { languages } from '@codemirror/language-data'
-import { Compartment, EditorState } from '@codemirror/state'
-import { Decoration } from '@codemirror/view'
+import { EditorState } from '@codemirror/state'
 import { openSearchPanel, closeSearchPanel, search } from '@codemirror/search'
 import { Sparkles, Bold, Pencil, MessageSquarePlus } from 'lucide-react'
 import { cn } from '../../lib/utils'
@@ -21,6 +20,8 @@ import {
 } from '../../shared/draft-annotation'
 import { MAX_DRAFT_EXCERPT_CHARS, type DraftPassageCitation } from '../../shared/draft-excerpt'
 import { type DraftDiffProposal, buildDiffDecorations } from './draft-diff'
+import { annotationDecorations, useDraftAnnotations } from './use-draft-annotations'
+import { useDraftDiffDecorations } from './use-draft-diff-decorations'
 
 export type CodeMirrorEditorProps = {
   content: string
@@ -59,31 +60,6 @@ const AI_ACTIONS = [
   { key: 'dialogue', label: ['对话', 'Dialogue'], color: 'text-[var(--color-success-text)]', prompt: ['将这部分改写为有区分度、能推动冲突的自然对话。', 'Rewrite this passage as distinct, natural dialogue that advances the conflict.'], reasoningStage: 'drafting' },
 ] satisfies readonly EditorAIAction[]
 
-function annotationDecorations(annotations: readonly DraftAnnotation[], docLength = Number.POSITIVE_INFINITY) {
-  return Decoration.set(
-    annotations
-      .filter(item => item.from >= 0 && item.to > item.from && item.to <= docLength)
-      .sort((left, right) => left.from - right.from || left.to - right.to)
-      .map(item => Decoration.mark({ class: 'cm-draft-annotation' }).range(item.from, item.to)),
-    true,
-  )
-}
-
-function remapAnnotation(annotation: DraftAnnotation, update: ViewUpdate): DraftAnnotation {
-  const from = update.changes.mapPos(annotation.from, 1)
-  const to = update.changes.mapPos(annotation.to, -1)
-  const doc = update.state.doc
-  if (from < to && from <= doc.length && to <= doc.length && doc.sliceString(from, to) === annotation.quote) {
-    return from === annotation.from && to === annotation.to ? annotation : { ...annotation, from, to }
-  }
-  const index = doc.toString().indexOf(annotation.quote)
-  if (index >= 0) {
-    return { ...annotation, from: index, to: index + annotation.quote.length }
-  }
-  if (annotation.from === -1 && annotation.to === -1) return annotation
-  return { ...annotation, from: -1, to: -1 }
-}
-
 export default function CodeMirrorEditor({
   content,
   editable = true,
@@ -107,10 +83,6 @@ export default function CodeMirrorEditor({
   const uiText = useLocaleStore(s => s.text)
   const uiLocale = useLocaleStore(s => s.locale)
   const editorRef = useRef<ReactCodeMirrorRef>(null)
-  const [annotationCompartment] = useState(() => new Compartment())
-  const [diffCompartment] = useState(() => new Compartment())
-  const annotationInputFocusedRef = useRef(false)
-  const [annotationNote, setAnnotationNote] = useState('')
   const [contextMenu, setContextMenu] = useState<{ top: number; left: number; from: number; to: number } | null>(null)
 
   // 避免状态回路
@@ -154,64 +126,31 @@ export default function CodeMirrorEditor({
     }
   }, [contextMenu])
 
-  // 用被动 effect：CodeMirror 的 view 是在子组件的 effect 里建的，父组件要等它建好
-  // 之后才能 reconfigure（批注在真实流程里本来就是异步加载完才到）。
-  useEffect(() => {
-    const view = editorRef.current?.view
-    if (!view) return
-    view.dispatch({
-      effects: annotationCompartment.reconfigure(
-        EditorView.decorations.of(annotationDecorations(annotations, view.state.doc.length)),
-      ),
-    })
-  }, [annotationCompartment, annotations])
+  // 行内修订（draft diff）的装饰与视口联动
+  const { compartment: diffCompartment } = useDraftDiffDecorations({
+    viewRef: editorRef,
+    proposals: diffProposals,
+    content: editorContent,
+    locale: uiLocale,
+    scrollToRequestId: scrollToDiffRequestId,
+  })
 
-  // 行内草稿修改差异对比装饰更新
-  useEffect(() => {
-    const view = editorRef.current?.view
-    if (!view) return
-    view.dispatch({
-      effects: diffCompartment.reconfigure(
-        EditorView.decorations.of(buildDiffDecorations(diffProposals, view.state.doc.toString(), uiLocale)),
-      ),
-    })
-  }, [diffCompartment, diffProposals, editorContent, uiLocale])
-
-  // 当新增差异提案时，自动平滑滚动到首处修改位置
-  const prevDiffCountRef = useRef(0)
-  useEffect(() => {
-    const count = diffProposals?.length ?? 0
-    if (count > 0 && prevDiffCountRef.current === 0 && editorRef.current?.view) {
-      const view = editorRef.current.view
-      const first = diffProposals[0]
-      if (first?.oldText) {
-        const idx = view.state.doc.toString().indexOf(first.oldText)
-        if (idx >= 0) {
-          view.dispatch({
-            effects: EditorView.scrollIntoView(idx, { y: 'center' }),
-          })
-        }
-      }
-    }
-    prevDiffCountRef.current = count
-  }, [diffProposals])
-
-  // 外部主动请求滚动定位到首处差异位置
-  useEffect(() => {
-    if (!scrollToDiffRequestId || !editorRef.current?.view || !diffProposals?.length) return
-    const view = editorRef.current.view
-    const first = diffProposals[0]
-    if (first?.oldText) {
-      const idx = view.state.doc.toString().indexOf(first.oldText)
-      if (idx >= 0) {
-        view.dispatch({
-          effects: EditorView.scrollIntoView(idx, { y: 'center' }),
-          selection: { anchor: idx },
-        })
-        view.focus()
-      }
-    }
-  }, [scrollToDiffRequestId, diffProposals])
+  // 草稿批注：装饰、区间重映射与落库
+  const {
+    compartment: annotationCompartment,
+    note: annotationNote,
+    setNote: setAnnotationNote,
+    inputFocusedRef: annotationInputFocusedRef,
+    clearDraft: clearAnnotationDraft,
+    remapOnDocChange: remapAnnotationsOnDocChange,
+    addAnnotation,
+  } = useDraftAnnotations({
+    viewRef: editorRef,
+    annotations,
+    enabled: Boolean(enableAnnotations),
+    onChange: onAnnotationsChange,
+    selectionRange,
+  })
 
   /**
    * 选区变化的唯一入口：换了选区就丢掉半路输入的批注草稿（草稿属于上一个选区），
@@ -221,9 +160,9 @@ export default function CodeMirrorEditor({
     const previous = selectionRangeRef.current
     if (previous?.from === next?.from && previous?.to === next?.to) return
     selectionRangeRef.current = next
-    setAnnotationNote('')
+    clearAnnotationDraft()
     setSelectionRange(next)
-  }, [])
+  }, [clearAnnotationDraft])
 
   const handleUpdate = useCallback((v: ViewUpdate) => {
     if (v.docChanged) {
@@ -233,12 +172,7 @@ export default function CodeMirrorEditor({
 
       const cnt = countDraftUnits(newText)
       onCharCountChange?.(cnt)
-      if (enableAnnotations && annotations.length > 0 && onAnnotationsChange) {
-        const next = annotations.map(item => remapAnnotation(item, v))
-        if (next.some((item, index) => item.from !== annotations[index]?.from || item.to !== annotations[index]?.to)) {
-          onAnnotationsChange(next)
-        }
-      }
+      remapAnnotationsOnDocChange(v)
     }
 
     if (v.selectionSet || v.docChanged || v.geometryChanged) {
@@ -253,7 +187,7 @@ export default function CodeMirrorEditor({
         setBubbleOpen(true)
       }
     }
-  }, [onChange, onCharCountChange, annotations, enableAnnotations, onAnnotationsChange, applySelectionRange])
+  }, [onChange, onCharCountChange, remapAnnotationsOnDocChange, applySelectionRange, annotationInputFocusedRef])
 
   // 监听滚动与缩放，实时更新 Bubble Menu 坐标
   useEffect(() => {
@@ -491,27 +425,9 @@ export default function CodeMirrorEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 批注/差异刻意不进依赖：进了就会因批注/差异变化重建 extensions（等于重置编辑器）；变化走 reconfigure。
   }, [annotationCompartment, diffCompartment, mode, uiLocale])
 
+  // 批注落库交给 useDraftAnnotations；这里只做界面收尾（关浮动条、清选区）。
   const handleAddAnnotation = () => {
-    if (!enableAnnotations || !onAnnotationsChange || !selectionRange || !editorRef.current?.view) return
-    const note = annotationNote.trim()
-    if (!note) return
-    if (annotations.length >= MAX_DRAFT_ANNOTATIONS) return
-    const view = editorRef.current.view
-    const quote = view.state.sliceDoc(selectionRange.from, selectionRange.to)
-    if (!quote.trim()) return
-    onAnnotationsChange([
-      ...annotations,
-      {
-        id: crypto.randomUUID(),
-        from: selectionRange.from,
-        to: selectionRange.to,
-        quote,
-        note: note.slice(0, MAX_DRAFT_ANNOTATION_NOTE),
-        createdAt: Date.now(),
-      },
-    ])
-    setAnnotationNote('')
-    view.dispatch({ selection: { anchor: selectionRange.to } })
+    if (!addAnnotation()) return
     setBubbleOpen(false)
     applySelectionRange(null)
   }
