@@ -18,7 +18,6 @@ import KnowledgeOverview from '../KnowledgeOverview'
 
 const projectSession = {
   projectId: 'planning-project',
-  leaseId: 'planning-lease',
   projectPath: 'C:/novels/planning-project',
 }
 const model = {
@@ -95,7 +94,6 @@ beforeEach(async () => {
       id: projectSession.projectId,
       name: 'Planning project',
       path: projectSession.projectPath,
-      sessionLease: projectSession.leaseId,
       novelConfig: { writingLanguage: 'en-US' },
     } as never,
   })

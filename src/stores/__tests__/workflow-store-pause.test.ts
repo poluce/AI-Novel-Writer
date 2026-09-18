@@ -33,7 +33,6 @@ beforeEach(() => {
       id: 'test-project',
       name: 'Test',
       path: projectPath,
-      sessionLease: 'lease-test-project',
       novelConfig: {},
     } as never,
   })
@@ -598,7 +597,6 @@ describe('workflow pause at a safe step boundary', () => {
         id: 'other-project',
         name: 'Other',
         path: 'C:\\other-project',
-        sessionLease: 'lease-other-project',
         novelConfig: {},
       } as never,
     })
@@ -625,7 +623,6 @@ describe('workflow pause at a safe step boundary', () => {
         id: 'test-project',
         name: 'Test reopened',
         path: 'c:/TEST-PROJECT/',
-        sessionLease: 'lease-test-project-reopened',
         novelConfig: {},
       } as never,
     })
@@ -704,7 +701,7 @@ describe('workflow pause at a safe step boundary', () => {
         name: '生成目录',
         description: 'in-flight',
         executor: async (_step, context) => {
-          seenLeases.push(context.projectSession?.leaseId ?? 'missing')
+          seenLeases.push(context.projectSession?.projectId ?? 'missing')
           await new Promise<void>((resolve) => { finishExecutor = resolve })
         },
       }],
@@ -717,7 +714,6 @@ describe('workflow pause at a safe step boundary', () => {
         id: 'test-project',
         name: 'Test reopened',
         path: 'c:/TEST-PROJECT/',
-        sessionLease: 'lease-test-project-reopened',
         novelConfig: {},
       } as never,
     })

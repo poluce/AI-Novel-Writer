@@ -19,12 +19,10 @@ vi.mock('../ipc-client', () => ({
 const projectPath = 'C:/novels/guard-directory'
 const projectSession: ProjectSessionContext = {
   projectId: 'guard-directory',
-  leaseId: 'lease-guard-directory',
   projectPath,
 }
 const project = {
   id: projectSession.projectId,
-  sessionLease: projectSession.leaseId,
   path: projectPath,
   name: 'Guard Directory',
   novelConfig: {},

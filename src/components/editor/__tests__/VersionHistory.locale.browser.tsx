@@ -10,7 +10,6 @@ import VersionHistory from '../VersionHistory'
 const PROJECT_PATH = 'C:\\novels\\version-history-locale'
 const PROJECT_SESSION = Object.freeze({
   projectId: 'version-history-locale',
-  leaseId: 'version-history-locale-lease',
   projectPath: PROJECT_PATH,
 })
 const createdAt = '2026-09-05T10:15:00.000Z'
@@ -36,7 +35,6 @@ beforeEach(() => {
       id: PROJECT_SESSION.projectId,
       name: 'Version history locale',
       path: PROJECT_PATH,
-      sessionLease: PROJECT_SESSION.leaseId,
       novelConfig: {},
     } as never,
   })

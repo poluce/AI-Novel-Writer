@@ -10,11 +10,10 @@ import { toast } from '../../ui/Toast'
 import {
   captureProjectSession,
   isProjectSessionCurrent,
-  isProjectSessionPath,
-} from '../../project-session-gate'
+  isProjectSessionPath} from '../../project-session-gate'
 import { clearChapterTitleCache } from './manuscript-title-cache'
 
-type SessionProject = Pick<ProjectData, 'id' | 'path' | 'sessionLease'>
+type SessionProject = Pick<ProjectData, 'id' | 'path'>
 type DeletionSurface = 'draft' | 'manuscript'
 type Localize = (chinese: string, english: string) => string
 
@@ -61,8 +60,7 @@ function deletionSurfaceConfig(
       prepareRefresh: () => undefined,
       refreshDrafts: (projectPath, chapterNumber, projectSession) => (
         useDraftStore.getState().loadChapterDrafts(chapterNumber, projectPath, projectSession)
-      ),
-    },
+      )},
     manuscript: {
       confirmation: text(
         `确认删除正文「${displayName}」？\n此操作会删除定稿事实，并清理实体稿、知识库和后处理投影；蓝图会保留。清理失败时可在正文章节下重试。`,
@@ -80,9 +78,7 @@ function deletionSurfaceConfig(
       prepareRefresh: clearChapterTitleCache,
       refreshDrafts: (projectPath, _chapterNumber, projectSession) => (
         useDraftStore.getState().loadAllDrafts(projectPath, projectSession)
-      ),
-    },
-  }
+      )}}
   return configs[surface]
 }
 
@@ -120,8 +116,7 @@ async function finishCommittedDeletion(
   globalEventBus.emit('REFRESH_RESOURCE', {
     resources: ['drafts', 'fileTree'],
     projectPath: input.projectPath,
-    projectSession,
-  })
+    projectSession})
 
   if (result.success) {
     toast.success(config.success)
@@ -144,8 +139,7 @@ async function confirmLegacyKnowledgeAbsent(
   ), {
     title: text('确认旧定稿知识投影状态', 'Confirm legacy knowledge projection'),
     confirmText: text('我已人工核对/清理，继续删除', 'I have checked; continue deletion'),
-    danger: true,
-  })
+    danger: true})
   if (!confirmed || !isProjectSessionCurrent(projectSession)) return null
 
   const result = await ipc.invokeWithProjectSession(
@@ -175,8 +169,7 @@ export async function deleteFinalizedChapter(
   const confirmed = await confirm(config.confirmation, {
     title: config.confirmationTitle,
     confirmText: text('删除', 'Delete'),
-    danger: true,
-  })
+    danger: true})
   if (!confirmed || !isProjectSessionCurrent(projectSession)) return null
 
   const result = await ipc.invokeWithProjectSession(

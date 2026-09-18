@@ -28,19 +28,16 @@ import {
   isArchProjectCurrent,
   reassertBlockedArchEdit,
   shouldRefreshArchOnWorkflowComplete,
-  writeArchEditState,
-} from './arch-file-refresh-policy'
+  writeArchEditState} from './arch-file-refresh-policy'
 import {
   canExplicitlyRepairCharacterRoster,
-  getCharacterRosterRepairPresentation,
-} from './character-roster-repair-state'
+  getCharacterRosterRepairPresentation} from './character-roster-repair-state'
 import { useCharacterRosterRepair } from './use-character-roster-repair'
 import { openBuiltinEditor } from '../panels/sidebar/sidebar-file-openers'
 import {
   captureProjectSession,
   isProjectSessionCurrent,
-  isProjectSessionPath,
-} from '../project-session-gate'
+  isProjectSessionPath} from '../project-session-gate'
 
 type ArchStepKey = 'premise' | 'characters' | 'worldbuilding' | 'synopsis'
 
@@ -52,8 +49,7 @@ const ARCH_META: Record<ArchStepKey, { iconName: string; label: string; labelEn:
   premise: { iconName: 'target', label: '故事前提', labelEn: 'Premise', desc: 'Logline、核心冲突、金手指定位', descEn: 'Logline, central conflict, and story hook' },
   characters: { iconName: 'users', label: '角色图谱', labelEn: 'Character graph', desc: '角色弧光、关系网、矛盾交织', descEn: 'Character arcs, relationships, and conflicts' },
   worldbuilding: { iconName: 'globe', label: '世界观', labelEn: 'Worldbuilding', desc: '核心规则、阶层断层、深层危机', descEn: 'Core rules, social divides, and deeper crises' },
-  synopsis: { iconName: 'map', label: '情节大纲', labelEn: 'Synopsis', desc: '三幕式情节骨架', descEn: 'Three-act story structure' },
-}
+  synopsis: { iconName: 'map', label: '情节大纲', labelEn: 'Synopsis', desc: '三幕式情节骨架', descEn: 'Three-act story structure' }}
 
 /** 从文件路径推断出 ArchStepKey */
 function detectStepKey(filePath: string): ArchStepKey | null {
@@ -84,10 +80,10 @@ export default function ArchFileViewer(props: Props) {
   const currentProject = useProjectStore(s => s.currentProject)
   const projectSession = captureProjectSession(currentProject)
   const sessionKey = projectSession && isProjectSessionPath(projectSession, props.projectKey)
-    ? `${projectSession.projectId}:${projectSession.leaseId}`
+    ? `${projectSession.projectId}:${projectSession.projectPath}`
     : `inactive:${props.projectKey}`
 
-  // 同一路径重新打开会产生新 lease；重挂载可隔离旧会话的编辑器临时状态。
+  // 换书后重挂载，隔离旧项目的编辑器临时状态。
   return <ArchFileViewerSession key={sessionKey} {...props} />
 }
 
@@ -96,8 +92,7 @@ function ArchFileViewerSession({
   filePath,
   projectKey,
   content: initialContent,
-  savedContent: initialSavedContent,
-}: Props) {
+  savedContent: initialSavedContent}: Props) {
   const stepKey = detectStepKey(filePath)
   const isCharacterProjection = stepKey === 'characters'
   const architectureStepKey = stepKey && (ARCHITECTURE_STEP_KEYS as readonly string[]).includes(stepKey)
@@ -131,8 +126,7 @@ function ArchFileViewerSession({
     repairError: rosterRepairError,
     isRepairing: extracting,
     refresh: loadCharacterRosterStatus,
-    migrate: handleRepairCharacterRoster,
-  } = useCharacterRosterRepair({ projectKey, enabled: isCharacterProjection })
+    migrate: handleRepairCharacterRoster} = useCharacterRosterRepair({ projectKey, enabled: isCharacterProjection })
 
   // 中文字数（由 CodeMirrorEditor 回调更新）
   const [charCount, setCharCount] = useState(0)
@@ -148,8 +142,7 @@ function ArchFileViewerSession({
     if (!projectMatches) return
     const decision = decideArchExternalRefresh({
       savedContent: savedContentRef.current,
-      currentContent: currentContentRef.current,
-    }, initialContent)
+      currentContent: currentContentRef.current}, initialContent)
     if (decision.kind === 'blocked') {
       reassertBlockedArchEdit(
         useEditorStore.getState(),
@@ -179,8 +172,7 @@ function ArchFileViewerSession({
     currentContentRef.current = md
     const storeAction = archEditStoreAction({
       savedContent: savedContentRef.current,
-      currentContent: md,
-    })
+      currentContent: md})
     const dirty = storeAction === 'update-dirty'
     setIsDirty(dirty)
     // 同步 editor-store 的 tab.dirty，供标题栏警示灯、Tab 圆点、关闭确认使用
@@ -254,8 +246,7 @@ function ArchFileViewerSession({
       tabId,
       type: 'arch-file',
       projectKey,
-      save: () => handleSave(currentContentRef.current, true),
-    })
+      save: () => handleSave(currentContentRef.current, true)})
   }, [handleSave, isCharacterProjection, projectKey, tabId])
 
   /** 从 DB 重新加载（AI 生成后刷新用） */
@@ -266,8 +257,7 @@ function ArchFileViewerSession({
     }
     if (hasUnsavedArchEdit({
       savedContent: savedContentRef.current,
-      currentContent: currentContentRef.current,
-    })) {
+      currentContent: currentContentRef.current})) {
       reassertBlockedArchEdit(
         useEditorStore.getState(),
         tabId,
@@ -312,8 +302,7 @@ function ArchFileViewerSession({
       }
       const decision = decideArchExternalRefresh({
         savedContent: savedContentRef.current,
-        currentContent: currentContentRef.current,
-      }, newContent)
+        currentContent: currentContentRef.current}, newContent)
       if (decision.kind === 'blocked') {
         reassertBlockedArchEdit(
           useEditorStore.getState(),
@@ -394,8 +383,7 @@ function ArchFileViewerSession({
       workflow: 'generate_architecture',
       selectedSteps,
       stepGuidance,
-      synopsisRange,
-    }, projectSession)
+      synopsisRange}, projectSession)
   }
 
   const handleOpenDialog = async () => {
@@ -415,8 +403,7 @@ function ArchFileViewerSession({
         premise: !!core?.premise && core.premise.length > 50 && !core.premise.includes('待生成'),
         characters: rosterSnapshot?.status === 'ready',
         worldbuilding: !!core?.worldbuilding && core.worldbuilding.length > 50 && !core.worldbuilding.includes('待生成'),
-        synopsis: !!core?.synopsis && core.synopsis.length > 50 && !core.synopsis.includes('待生成'),
-      }
+        synopsis: !!core?.synopsis && core.synopsis.length > 50 && !core.synopsis.includes('待生成')}
 
       // 对于当前文件，如果编辑器内已修改但未保存，也暂时以前面的基准为准即可
       const EditorContentLen = currentContentRef.current.length;
@@ -459,8 +446,7 @@ function ArchFileViewerSession({
         className="flex items-center justify-between gap-2 px-3 h-9 flex-shrink-0"
         style={{
           borderBottom: '1px solid var(--color-border)',
-          backgroundColor: 'var(--color-editor-bg)',
-        }}
+          backgroundColor: 'var(--color-editor-bg)'}}
       >
         {/* 左侧：Emoji + 标题 + 描述 */}
         <div className="flex items-center gap-1.5 min-w-0">
@@ -581,8 +567,7 @@ function ArchFileViewerSession({
               ? 'var(--color-text-secondary)'
               : 'var(--color-warning-text)',
             backgroundColor: 'var(--color-editor-bg)',
-            borderBottom: '1px solid var(--color-border)',
-          }}
+            borderBottom: '1px solid var(--color-border)'}}
         >
           {rosterPresentation.kind === 'ready' || rosterPresentation.kind === 'empty'
             ? <FileText size={13} className="flex-shrink-0 mt-0.5" />
@@ -598,8 +583,7 @@ function ArchFileViewerSession({
           style={{
             color: 'var(--color-text-secondary)',
             backgroundColor: 'var(--color-editor-bg)',
-            borderBottom: '1px solid var(--color-border)',
-          }}
+            borderBottom: '1px solid var(--color-border)'}}
         >
           <span>{text(
             '角色图谱由角色名单自动生成，只读展示。请到「角色管理」修改角色身份、资料和关系。',
@@ -625,8 +609,7 @@ function ArchFileViewerSession({
           style={{
             color: 'var(--color-warning-text)',
             backgroundColor: 'var(--color-editor-bg)',
-            borderBottom: '1px solid var(--color-border)',
-          }}
+            borderBottom: '1px solid var(--color-border)'}}
         >
           <AlertTriangle size={13} className="flex-shrink-0" />
           <span>{visibleBlockedMessage}</span>

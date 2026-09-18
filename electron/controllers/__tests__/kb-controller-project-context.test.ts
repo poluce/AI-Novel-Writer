@@ -78,7 +78,6 @@ function handler(channel: string): IpcHandler {
     }
     return registered(event, ...args, {
       projectId: 'project-A',
-      leaseId: 'lease-A',
       projectPath: mocks.currentProjectPath,
     })
   }
@@ -130,7 +129,6 @@ describe('knowledge-base controller project context guard', () => {
     await expect(rawHandler('kb:import-reference-text')(
       {}, 1, 'run-1', authority, {
         projectId: 'project-A',
-        leaseId: 'lease-A',
         projectPath: mocks.currentProjectPath,
       },
     )).resolves.toEqual({ success: true, docId: 'reference-doc' })
@@ -165,7 +163,7 @@ describe('knowledge-base controller project context guard', () => {
     }) => unknown) => operation({ importReferenceText }))
     const invoke = () => rawHandler('kb:import-reference-text')(
       {}, 1, 'run-1', { owner: 'renderer-a', epoch: 3 }, {
-        projectId: 'project-A', leaseId: 'lease-A', projectPath: mocks.currentProjectPath,
+        projectId: 'project-A', projectPath: mocks.currentProjectPath,
       },
     )
 

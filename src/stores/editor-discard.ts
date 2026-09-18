@@ -2,8 +2,7 @@ import {
   CHAPTER_CARD_TAB_ID,
   discardChapterCardProjectDraft,
   parseChapterCardDraftLedger,
-  persistChapterCardDraftLedger,
-} from '../components/editor/chapter-card-draft-ledger'
+  persistChapterCardDraftLedger} from '../components/editor/chapter-card-draft-ledger'
 import { useCharacterStore } from './character-store'
 import { useEditorDraftLedgerStore } from './editor-draft-ledger-store'
 import { useEditorStore } from './editor-store'
@@ -13,14 +12,12 @@ import {
   CONFIG_DRAFT_TAB,
   composeEditorDraftTabWriter,
   createEmptyProjectEditorDraftLedger,
-  parseProjectEditorDraftLedger,
-} from './project-editor-draft-ledger'
+  parseProjectEditorDraftLedger} from './project-editor-draft-ledger'
 import type { ProjectSessionContext } from '../shared/ipc-channels'
 import {
   projectSessionContextFromProject,
   sameProjectPathKey,
-  sameProjectSessionContext,
-} from '../shared/project-session-context'
+  sameProjectSessionContext} from '../shared/project-session-context'
 
 function isExpectedProjectSessionCurrent(
   projectKey: string,
@@ -42,8 +39,7 @@ function discardDirtyTabs(dirtyTabIds: ReadonlySet<string>): void {
           ? {
               ...tab,
               content: tab.savedContent ?? tab.content,
-              dirty: false,
-            }
+              dirty: false}
           : tab
       ))
     const activeTabId = state.activeTabId && dirtyTabIds.has(state.activeTabId)
@@ -71,10 +67,6 @@ export function discardAndCloseEditorTab(
   if (projectKey) {
     if (
       !isExpectedProjectSessionCurrent(projectKey, expectedProjectSession)
-      || (
-        tab.projectSessionLease !== undefined
-        && tab.projectSessionLease !== expectedProjectSession.leaseId
-      )
     ) return
     if (tab.type === 'character') {
       useCharacterStore.getState().discardDraft(projectKey, expectedProjectSession)
@@ -183,8 +175,7 @@ export function discardAllEditorChanges(): void {
   )
   persistChapterCardDraftLedger(writer, {
     ...chapterLedger,
-    projects: [],
-  })
+    projects: []})
 
   discardDirtyTabs(dirtyTabIds)
 }

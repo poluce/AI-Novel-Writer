@@ -23,7 +23,6 @@ import BatchChapterCreationDialog from '../BatchChapterCreationDialog'
 const PROJECT_PATH = 'C:\\novels\\batch-completion-mode'
 const PROJECT_SESSION = {
   projectId: 'batch-completion-mode',
-  leaseId: 'batch-completion-mode-lease',
   projectPath: PROJECT_PATH,
 }
 const DRAFT_TEXT = '晨雾漫过旧教学楼，沈砺沿着湿润台阶进入档案室。他检查窗锁与登记簿，发现昨夜留下的墨迹已经干透，却有一页被人整齐撕走。管理员递来备用钥匙，提醒他午后停电。沈砺记下时间，决定先去钟楼核对监控。'
@@ -83,7 +82,6 @@ let postProcessSteps: Array<{
 function project(): ProjectData {
   return {
     id: PROJECT_SESSION.projectId,
-    sessionLease: PROJECT_SESSION.leaseId,
     name: '批量完成模式浏览器测试',
     path: PROJECT_PATH,
     novelConfig: {
@@ -167,7 +165,7 @@ function blueprint(chapterNumber = 1) {
 }
 
 const MODEL_LEASE: ModelExecutionLeaseReceipt = {
-  leaseId: 'batch-browser-model-lease',
+  leaseId: 'model-lease-grok-browser',
   modelId: 'grok-browser',
   provider: 'custom',
   protocol: 'openai',

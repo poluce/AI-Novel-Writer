@@ -34,7 +34,6 @@ function project(id: string, creativeStrategy: CreativeStrategy): ProjectData {
     id,
     name: id,
     path: `C:/projects/${id}`,
-    sessionLease: `lease-${id}`,
     novelConfig: {
       creativeStrategy,
       genre: 'fantasy',
@@ -179,7 +178,6 @@ describe('GenerationRuntime renderer lease adapter', () => {
   it('keeps the captured project session while the model lease is opening', async () => {
     const projectSession: ProjectSessionContext = {
       projectId: 'project-a',
-      leaseId: 'lease-project-a',
       projectPath: 'C:/projects/project-a',
     }
     const expectedProjectSession = { ...projectSession }

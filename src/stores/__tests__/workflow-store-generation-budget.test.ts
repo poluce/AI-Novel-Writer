@@ -16,7 +16,6 @@ import { useWorkflowStore } from '../workflow-store'
 const projectPath = 'C:\\test-project'
 const projectSession = {
   projectId: 'test-project',
-  leaseId: 'lease-test-project',
   projectPath,
 }
 
@@ -121,7 +120,6 @@ beforeEach(() => {
       id: 'test-project',
       name: 'Test',
       path: projectPath,
-      sessionLease: projectSession.leaseId,
       novelConfig: {},
     } as never,
   })

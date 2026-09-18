@@ -25,7 +25,6 @@ beforeEach(() => {
   })
   setActiveProjectSessionContext({
     projectId: 'project-A',
-    leaseId: 'lease-A',
     projectPath: 'C:/projects/A',
   })
 })
@@ -46,7 +45,6 @@ describe('project-scoped IPC session transport', () => {
       'C:/projects/A',
       {
         projectId: 'project-A',
-        leaseId: 'lease-A',
         projectPath: 'C:/projects/A',
       },
     )

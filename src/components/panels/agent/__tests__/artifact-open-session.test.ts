@@ -18,10 +18,9 @@ const projectPath = 'C:\\novels\\same-project'
 
 const originalLocale = useLocaleStore.getState().locale
 
-function projectWithLease(leaseId: string) {
+function projectWithLease(_projectId = 'same-project-id') {
   return {
     id: 'same-project-id',
-    sessionLease: leaseId,
     name: 'Same project',
     path: projectPath,
     novelConfig: {},
@@ -35,7 +34,6 @@ beforeEach(() => {
   useProjectStore.setState({ currentProject: projectWithLease('lease-B') })
   setActiveProjectSessionContext({
     projectId: 'same-project-id',
-    leaseId: 'lease-B',
     projectPath,
   })
 })
@@ -109,7 +107,6 @@ describe('agent artifact open session ownership', () => {
       projectPath,
       projectSession: {
         projectId: 'same-project-id',
-        leaseId: 'lease-A',
         projectPath,
       },
     } as never)

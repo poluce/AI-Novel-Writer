@@ -42,7 +42,6 @@ function createContext(): WorkflowContext {
     projectPath: 'C:\\tmp\\vela-import-test',
     projectSession: {
       projectId: 'project-1',
-      leaseId: 'lease-project-1',
       projectPath: 'C:\\tmp\\vela-import-test',
     },
     writingLanguage: 'zh-CN',
@@ -165,7 +164,6 @@ beforeEach(() => {
       id: 'project-1',
       name: '导入项目',
       path: 'C:\\tmp\\vela-import-test',
-      sessionLease: 'lease-project-1',
       novelConfig: {
         genre: '玄幻',
         subGenre: '',

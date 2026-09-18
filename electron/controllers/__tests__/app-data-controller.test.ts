@@ -105,7 +105,7 @@ describe('skill catalog IPC boundary', () => {
   it('authenticates the project session before reading project skills', async () => {
     const projectPath = temporaryProject()
     mocks.currentProjectPath.value = projectPath
-    const context = { projectId: 'book', leaseId: 'lease-1', projectPath }
+    const context = { projectId: 'book', projectPath }
     const catalog = await handler('skills:load-catalog')(
       { sender: { id: 7 } },
       projectPath,
@@ -136,7 +136,7 @@ describe('skill catalog IPC boundary', () => {
   it('refuses a project path that is not the current project', async () => {
     const projectPath = temporaryProject()
     mocks.currentProjectPath.value = temporaryProject()
-    const context = { projectId: 'other', leaseId: 'lease-1', projectPath }
+    const context = { projectId: 'other', projectPath }
     await expect(handler('skills:load-catalog')(
       { sender: { id: 7 } },
       projectPath,

@@ -42,7 +42,7 @@ describe('BaseWorkflowCommand writing skill injection', () => {
       step: {},
       context: {
         runId: 'analysis-run', projectPath: 'C:/novels/project',
-        projectSession: { projectId: 'project', projectPath: 'C:/novels/project', leaseId: 'lease' },
+        projectSession: { projectId: 'project', projectPath: 'C:/novels/project' },
         writingLanguage: 'en-US', uiLocale: 'en-US', data: {}, cancelled: false,
         writingSkills: Object.freeze({
           review: Object.freeze({
@@ -108,7 +108,7 @@ describe('BaseWorkflowCommand writing skill injection', () => {
       step: {},
       context: {
         runId: 'skill-run', projectPath: 'C:/novels/project',
-        projectSession: { projectId: 'project', projectPath: 'C:/novels/project', leaseId: 'lease' },
+        projectSession: { projectId: 'project', projectPath: 'C:/novels/project' },
         writingLanguage: 'en-US', uiLocale: 'en-US', data: {}, cancelled: false,
         writingSkills: Object.freeze({ drafting: frozenSkill }),
       },

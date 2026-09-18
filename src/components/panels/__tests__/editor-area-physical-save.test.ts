@@ -8,7 +8,6 @@ const projectPath = 'C:\\novels\\same-project'
 const filePath = `${projectPath}\\manuscript\\chapter_1.md`
 const sessionA = {
   projectId: 'same-project-id',
-  leaseId: 'lease-A',
   projectPath,
 }
 
@@ -67,7 +66,7 @@ describe('physical chapter save session settlement', () => {
     })
     await vi.waitFor(() => expect(invoke).toHaveBeenCalledOnce())
 
-    setActiveProjectSessionContext({ ...sessionA, leaseId: 'lease-B' })
+    setActiveProjectSessionContext({ ...sessionA })
     delayedWrite.resolve({ success: true })
 
     await expect(saving).resolves.toBe(false)

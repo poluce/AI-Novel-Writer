@@ -27,7 +27,6 @@ function project(key: 'A' | 'B'): ProjectData {
     id: key,
     name: key,
     path: `C:\\novels\\${key}`,
-    sessionLease: `lease-${key}`,
     novelConfig: {
       genre: '玄幻',
       subGenre: '',
@@ -192,7 +191,6 @@ describe('project refresh context', () => {
       currentProject: {
         ...project('A'),
         path: 'c:/NOVELS/A/',
-        sessionLease: 'lease-A-reopened',
       },
       fileTree: [{ name: 'reopened A', path: 'reopened A', isDir: true }],
     })
@@ -216,7 +214,6 @@ describe('project refresh context', () => {
       currentProject: {
         ...project('A'),
         path: 'c:/NOVELS/A/',
-        sessionLease: 'lease-A-reopened',
       },
     })
     saveA.resolve({ success: true })
@@ -389,7 +386,6 @@ describe('project refresh context', () => {
     const projectA = project('A')
     const projectSession = {
       projectId: projectA.id,
-      leaseId: projectA.sessionLease!,
       projectPath: projectA.path,
     }
     await expect(checkArchStatusWithWordCount(projectSession)).resolves.toMatchObject({

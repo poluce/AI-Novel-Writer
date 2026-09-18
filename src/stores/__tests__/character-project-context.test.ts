@@ -26,7 +26,6 @@ const PROJECT_B = 'C:\\novels\\project-b'
 function project(path: string): ProjectData {
   return {
     id: path === PROJECT_A ? 'a' : 'b',
-    sessionLease: `lease-${path === PROJECT_A ? 'a' : 'b'}`,
     name: path === PROJECT_A ? 'A' : 'B',
     path,
     novelConfig: {

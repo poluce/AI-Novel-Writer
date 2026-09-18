@@ -6,19 +6,16 @@ import { migrateLegacyCharacterRoster } from '../../services/workflows/architect
 import {
   captureProjectSession,
   isProjectSessionCurrent,
-  isProjectSessionPath,
-} from '../project-session-gate'
+  isProjectSessionPath} from '../project-session-gate'
 import {
   CharacterRosterRepairController,
   type CharacterRosterRepairPort,
-  type CharacterRosterRepairState,
-} from './character-roster-repair-controller'
+  type CharacterRosterRepairState} from './character-roster-repair-controller'
 
 const EMPTY_STATE: CharacterRosterRepairState = {
   snapshot: null,
   repairError: null,
-  isRepairing: false,
-}
+  isRepairing: false}
 
 interface SessionBoundRosterRepairState extends CharacterRosterRepairState {
   sessionKey: string
@@ -32,10 +29,9 @@ export interface UseCharacterRosterRepairOptions {
 function projectSessionKey(
   projectId: string | undefined,
   projectPath: string | undefined,
-  projectLease: string | undefined,
 ): string {
-  return projectId && projectPath && projectLease
-    ? `${projectId}\u0000${projectLease}\u0000${projectPath}`
+  return projectId && projectPath
+    ? `${projectId}\u0000${projectPath}`
     : ''
 }
 
@@ -46,18 +42,15 @@ function projectSessionKey(
  */
 export function useCharacterRosterRepair({
   projectKey,
-  enabled = true,
-}: UseCharacterRosterRepairOptions) {
+  enabled = true}: UseCharacterRosterRepairOptions) {
   // Subscribe only to identity fields so a config-field update does not
   // recreate a roster request or invalidate a valid editor draft.
   const projectId = useProjectStore(state => state.currentProject?.id)
   const projectPath = useProjectStore(state => state.currentProject?.path)
-  const projectLease = useProjectStore(state => state.currentProject?.sessionLease)
-  const sessionKey = projectSessionKey(projectId, projectPath, projectLease)
+  const sessionKey = projectSessionKey(projectId, projectPath)
   const [state, setState] = useState<SessionBoundRosterRepairState>({
     ...EMPTY_STATE,
-    sessionKey: '',
-  })
+    sessionKey: ''})
 
   const setControllerState = useCallback((next: Partial<CharacterRosterRepairState>) => {
     setState(previous => ({ ...previous, ...next, sessionKey }))
@@ -67,7 +60,7 @@ export function useCharacterRosterRepair({
     getSession: () => captureProjectSession(useProjectStore.getState().currentProject),
     isSessionUsable: session => (
       enabled
-      && projectSessionKey(session.projectId, session.projectPath, session.leaseId) === sessionKey
+      && projectSessionKey(session.projectId, session.projectPath) === sessionKey
       && isProjectSessionPath(session, projectKey)
       && isProjectSessionCurrent(session)
     ),
@@ -77,8 +70,7 @@ export function useCharacterRosterRepair({
       session.projectPath,
     ),
     migrate: projectPath => migrateLegacyCharacterRoster(projectPath),
-    setState: setControllerState,
-  }), [enabled, projectKey, sessionKey, setControllerState])
+    setState: setControllerState}), [enabled, projectKey, sessionKey, setControllerState])
 
   const controller = useMemo(
     () => new CharacterRosterRepairController(() => port),
@@ -104,6 +96,5 @@ export function useCharacterRosterRepair({
     repairError: visibleState.repairError,
     isRepairing: visibleState.isRepairing,
     refresh,
-    migrate,
-  }
+    migrate}
 }

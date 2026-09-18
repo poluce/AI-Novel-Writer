@@ -47,7 +47,6 @@ beforeEach(async () => {
     id: 'plot-tree-rail-project',
     name: '剧情树导航测试',
     path: PROJECT_PATH,
-    sessionLease: 'plot-tree-rail-lease',
     novelConfig: {
       genre: '',
       subGenre: '',
@@ -76,7 +75,6 @@ beforeEach(async () => {
   })
   setActiveProjectSessionContext({
     projectId: project.id,
-    leaseId: project.sessionLease!,
     projectPath: project.path,
   })
   Object.defineProperty(window, 'velaAPI', {
@@ -138,13 +136,11 @@ describe('plot-tree left rail navigation', () => {
       id: 'plot-tree-rail-project-b',
       name: '剧情树导航测试 B',
       path: PROJECT_B_PATH,
-      sessionLease: 'plot-tree-rail-lease-b',
     }
     await act(async () => {
       useProjectStore.setState({ currentProject: projectB })
       setActiveProjectSessionContext({
         projectId: projectB.id,
-        leaseId: projectB.sessionLease,
         projectPath: projectB.path,
       })
     })

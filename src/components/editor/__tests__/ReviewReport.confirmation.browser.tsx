@@ -15,7 +15,6 @@ import ReviewReport from '../ReviewReport'
 const PROJECT_PATH = 'C:\\novels\\confirmed-review'
 const PROJECT_SESSION = Object.freeze({
   projectId: 'confirmed-review-project',
-  leaseId: 'confirmed-review-lease',
   projectPath: PROJECT_PATH,
 })
 const RAW_AI_REPORT = JSON.stringify({
@@ -65,7 +64,6 @@ let setDefaultModel: ReturnType<typeof vi.fn>
 function project(writingLanguage: 'zh-CN' | 'en-US' = 'zh-CN'): ProjectData {
   return {
     id: PROJECT_SESSION.projectId,
-    sessionLease: PROJECT_SESSION.leaseId,
     name: '人工确认审稿测试项目',
     path: PROJECT_PATH,
     novelConfig: {

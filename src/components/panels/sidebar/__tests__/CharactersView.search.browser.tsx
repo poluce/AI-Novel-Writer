@@ -22,7 +22,6 @@ let container: HTMLDivElement
 function project(): ProjectData {
   return {
     id: 'character-search',
-    sessionLease: 'character-search-lease',
     name: 'Character Search',
     path: PROJECT_PATH,
     novelConfig: {

@@ -25,7 +25,6 @@ beforeEach(() => {
   useProjectStore.setState({
     currentProject: {
       id: 'A',
-      sessionLease: 'lease-A',
       name: 'A',
       path: 'C:/projects/A',
       novelConfig: {} as never,
@@ -38,7 +37,6 @@ beforeEach(() => {
   })
   setActiveProjectSessionContext({
     projectId: 'A',
-    leaseId: 'lease-A',
     projectPath: 'C:/projects/A',
   })
 })
@@ -57,13 +55,12 @@ describe('ArtifactCard project identity', () => {
       projectPath: 'C:/projects/A',
       projectSession: {
         projectId: 'A',
-        leaseId: 'lease-A',
         projectPath: 'C:/projects/A',
       },
     })).resolves.toBe(true)
 
     expect(ipc.invokeWithProjectSession).toHaveBeenCalledWith(
-      expect.objectContaining({ projectId: 'A', leaseId: 'lease-A' }),
+      expect.objectContaining({ projectId: 'A' }),
       'fs:read-file',
       'C:/projects/A/chapters/chapter.md',
       'C:/projects/A',
@@ -89,7 +86,6 @@ describe('ArtifactCard project identity', () => {
       projectPath: 'C:/projects/A',
       projectSession: {
         projectId: 'A',
-        leaseId: 'lease-A',
         projectPath: 'C:/projects/A',
       },
     })
@@ -97,14 +93,12 @@ describe('ArtifactCard project identity', () => {
       currentProject: {
         ...useProjectStore.getState().currentProject!,
         id: 'B',
-        sessionLease: 'lease-B',
         name: 'B',
         path: 'C:/projects/B',
       },
     })
     setActiveProjectSessionContext({
       projectId: 'B',
-      leaseId: 'lease-B',
       projectPath: 'C:/projects/B',
     })
     read.resolve({ success: true, content: 'stale A content' })
@@ -122,14 +116,12 @@ describe('ArtifactCard project identity', () => {
       currentProject: {
         ...useProjectStore.getState().currentProject!,
         id: 'B',
-        sessionLease: 'lease-B',
         name: 'B',
         path: 'C:/projects/B',
       },
     })
     setActiveProjectSessionContext({
       projectId: 'B',
-      leaseId: 'lease-B',
       projectPath: 'C:/projects/B',
     })
 
@@ -140,7 +132,6 @@ describe('ArtifactCard project identity', () => {
       projectPath: 'C:/projects/A',
       projectSession: {
         projectId: 'A',
-        leaseId: 'lease-A',
         projectPath: 'C:/projects/A',
       },
     })).resolves.toBe(false)
@@ -167,7 +158,6 @@ describe('ArtifactCard project identity', () => {
       projectPath: 'C:/projects/A',
       projectSession: {
         projectId: 'A',
-        leaseId: 'lease-A',
         projectPath: 'C:/projects/A',
       },
     })).resolves.toBe(false)

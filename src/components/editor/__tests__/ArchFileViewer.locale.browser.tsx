@@ -14,7 +14,6 @@ import ArchFileViewer from '../ArchFileViewer'
 const PROJECT_PATH = 'C:\\novels\\arch-locale'
 const project: ProjectData = {
   id: 'arch-locale-project',
-  sessionLease: 'arch-locale-lease',
   name: 'Architecture locale',
   path: PROJECT_PATH,
   novelConfig: {
@@ -41,7 +40,6 @@ beforeEach(() => {
   useProjectStore.setState({ currentProject: project, fileTree: [], loading: false })
   setActiveProjectSessionContext({
     projectId: project.id,
-    leaseId: project.sessionLease!,
     projectPath: PROJECT_PATH,
   })
   invoke = vi.fn().mockResolvedValue({ success: true })

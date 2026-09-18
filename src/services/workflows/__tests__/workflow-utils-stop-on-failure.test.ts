@@ -5,7 +5,6 @@ import { runPostProcessPipeline } from '../workflow-utils'
 
 const projectSession = {
   projectId: 'project-1',
-  leaseId: 'lease-1',
   projectPath: 'C:/novel',
 } as const
 

@@ -14,8 +14,7 @@ import {
   clearProjectCustomPrompts,
   loadCustomPrompts,
   loadProjectCustomPrompts,
-  type PromptTemplate,
-} from '../../services/prompt-templates'
+  type PromptTemplate} from '../../services/prompt-templates'
 import { resolveWritingLanguage, type WritingLanguage } from '../../shared/writing-language'
 import { useProjectStore } from '../../stores/project-store'
 import type { ProjectSessionContext } from '../../shared/ipc-channels'
@@ -29,8 +28,7 @@ import { useLocaleStore } from '../../stores/locale-store'
 const SOURCE_CONFIG = {
   builtin: { label: '内置', labelEn: 'Built-in', color: 'var(--color-text-muted)', bg: 'var(--color-hover)' },
   global: { label: '全局', labelEn: 'Global', color: 'var(--color-info)', bg: 'color-mix(in srgb, var(--color-info) 10%, transparent)' },
-  project: { label: '项目', labelEn: 'Project', color: 'var(--color-success-text)', bg: 'color-mix(in srgb, var(--color-success) 10%, transparent)' },
-} as const
+  project: { label: '项目', labelEn: 'Project', color: 'var(--color-success-text)', bg: 'color-mix(in srgb, var(--color-success) 10%, transparent)' }} as const
 
 const PROMPT_META_EN: Record<string, { name: string; description: string }> = {
   assistant_writing_identity: { name: 'AI writing assistant identity', description: 'Define the creative role and working guidance for the writing assistant' },
@@ -54,8 +52,7 @@ const PROMPT_META_EN: Record<string, { name: string; description: string }> = {
   infer_novel_config: { name: 'Infer novel configuration', description: 'Infer a configuration from imported prose' },
   extract_initial_characters: { name: 'Extract initial characters', description: 'Extract initial character records from imported material' },
   infer_single_chapter_blueprint: { name: 'Infer chapter blueprint', description: 'Infer a chapter blueprint from existing prose' },
-  infer_novel_config_with_vectors: { name: 'Infer configuration from samples', description: 'Infer a configuration from retrieved source excerpts' },
-}
+  infer_novel_config_with_vectors: { name: 'Infer configuration from samples', description: 'Infer a configuration from retrieved source excerpts' }}
 
 // ==================== 主组件 ====================
 
@@ -65,9 +62,8 @@ export default function PromptSettings() {
   const project = useProjectStore((s) => s.currentProject)
   const projectId = project?.id ?? null
   const projectPath = project?.path ?? null
-  const projectLease = project?.sessionLease ?? null
-  const projectSession = projectId && projectPath && projectLease
-    ? captureProjectSession({ id: projectId, path: projectPath, sessionLease: projectLease })
+  const projectSession = projectId && projectPath
+    ? captureProjectSession({ id: projectId, path: projectPath })
     : null
   const projectWritingLanguage = resolveWritingLanguage(project?.novelConfig.writingLanguage)
   const [languageSelection, setLanguageSelection] = useState<{
@@ -83,7 +79,6 @@ export default function PromptSettings() {
   const [globalLoadError, setGlobalLoadError] = useState<string | null>(null)
   const [projectLoadError, setProjectLoadError] = useState<{
     projectId: string
-    leaseId: string
     message: string
   } | null>(null)
 
@@ -102,8 +97,8 @@ export default function PromptSettings() {
 
   // 项目变更时重新加载项目级覆盖
   useEffect(() => {
-    const session = projectId && projectPath && projectLease
-      ? captureProjectSession({ id: projectId, path: projectPath, sessionLease: projectLease })
+    const session = projectId && projectPath
+      ? captureProjectSession({ id: projectId, path: projectPath })
       : null
     let disposed = false
 
@@ -121,13 +116,11 @@ export default function PromptSettings() {
       if (!disposed && isProjectSessionCurrent(session)) {
         setProjectLoadError({
           projectId: session.projectId,
-          leaseId: session.leaseId,
-          message: text('项目提示词加载失败，创作流程已停止使用未确认的配置', 'Project prompts could not be loaded; generation will not use an unverified configuration'),
-        })
+          message: text('项目提示词加载失败，创作流程已停止使用未确认的配置', 'Project prompts could not be loaded; generation will not use an unverified configuration')})
       }
     })
     return () => { disposed = true }
-  }, [editingLanguage, projectId, projectLease, projectPath, text])
+  }, [editingLanguage, projectId, projectPath, text])
 
   // 获取可编辑的模板列表
   const editableTemplates = BUILTIN_PROMPTS
@@ -149,8 +142,7 @@ export default function PromptSettings() {
         </div>
       )}
       {projectLoadError
-        && projectLoadError.projectId === projectSession?.projectId
-        && projectLoadError.leaseId === projectSession.leaseId && (
+        && projectLoadError.projectId === projectSession?.projectId && (
         <div className="px-3 py-2 rounded-lg text-xs bg-red-500/10 text-[var(--color-error-text)] border border-red-500/20">
           <AlertTriangle size={13} className="inline mr-1" />
           {projectLoadError.message}
@@ -180,8 +172,7 @@ export default function PromptSettings() {
           value={editingLanguage}
           onChange={(event) => setLanguageSelection({
             projectId: projectId ?? null,
-            writingLanguage: event.target.value as WritingLanguage,
-          })}
+            writingLanguage: event.target.value as WritingLanguage})}
           className="rounded-md px-2.5 py-1.5 text-xs bg-[var(--color-panel)] text-[var(--color-text)] border border-[var(--color-border)]"
           aria-label={text('编辑的写作语言', 'Writing language to edit')}
         >
@@ -197,7 +188,7 @@ export default function PromptSettings() {
 
         return (
           <TemplateItem
-            key={`${projectSession?.projectId ?? 'no-project'}:${projectSession?.leaseId ?? 'no-lease'}:${editingLanguage}:${builtinTemplate.key}`}
+            key={`${projectSession?.projectId ?? 'no-project'}:${editingLanguage}:${builtinTemplate.key}`}
             builtinTemplate={builtinTemplate}
             currentTemplate={currentTemplate}
             source={source}
@@ -223,8 +214,7 @@ function TemplateItem({
   onToggle,
   projectSession,
   writingLanguage,
-  onSaved,
-}: {
+  onSaved}: {
   builtinTemplate: PromptTemplate
   currentTemplate: PromptTemplate
   source: 'builtin' | 'global' | 'project'
@@ -283,8 +273,7 @@ function TemplateItem({
       ...builtinTemplate,
       writingLanguage,
       systemRole: editRole,
-      taskGuidance: editGuidance,
-    }
+      taskGuidance: editGuidance}
     delete (template as Partial<PromptTemplate>).systemSuffix
     const ok = await saveCustomPrompt(template)
     setSaving(false)
@@ -303,8 +292,7 @@ function TemplateItem({
       ...builtinTemplate,
       writingLanguage,
       systemRole: editRole,
-      taskGuidance: editGuidance,
-    }
+      taskGuidance: editGuidance}
     delete (template as Partial<PromptTemplate>).systemSuffix
     const ok = await saveProjectCustomPrompt(operationSession, template)
     if (!isProjectSessionCurrent(operationSession)) return
@@ -356,8 +344,7 @@ function TemplateItem({
       className="rounded-xl overflow-hidden transition-colors"
       style={{
         border: `1px solid ${isExpanded ? 'var(--color-accent)' : 'var(--color-border)'}`,
-        backgroundColor: 'var(--color-panel)',
-      }}
+        backgroundColor: 'var(--color-panel)'}}
     >
       {/* 折叠头部 */}
       <button
@@ -407,8 +394,7 @@ function TemplateItem({
                     style={{
                       backgroundColor: 'var(--color-hover)',
                       color: 'var(--color-text-secondary)',
-                      border: '1px solid var(--color-border)',
-                    }}
+                      border: '1px solid var(--color-border)'}}
                   >
                     <code className="font-mono">{`{{${varName}}}`}</code>
                     <span className="opacity-60 max-w-[120px] truncate">{text(desc, englishDescription)}</span>
@@ -431,8 +417,7 @@ function TemplateItem({
                 color: 'var(--color-text)',
                 border: '1px solid var(--color-border)',
                 minHeight: '84px',
-                lineHeight: 1.6,
-              }}
+                lineHeight: 1.6}}
               spellCheck={false}
             />
           </label>
@@ -456,8 +441,7 @@ function TemplateItem({
                 minHeight: '140px',
                 maxHeight: '500px',
                 lineHeight: 1.6,
-                transition: 'border-color 0.15s ease',
-              }}
+                transition: 'border-color 0.15s ease'}}
               onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--color-accent)' }}
               onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)' }}
               spellCheck={false}

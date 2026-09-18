@@ -24,7 +24,6 @@ let container: HTMLDivElement | undefined
 function project(): ProjectData {
   return {
     id: 'chapter-write-entry',
-    sessionLease: 'chapter-write-entry-lease',
     name: '章节入口测试项目',
     path: PROJECT_PATH,
     novelConfig: {

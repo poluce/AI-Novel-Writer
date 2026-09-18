@@ -50,7 +50,6 @@ function project(key: 'A' | 'B' | 'C'): ProjectData {
     id: key,
     name: key,
     path: `C:\\novels\\${key}`,
-    sessionLease: `lease-${key}`,
     novelConfig: {
       genre: '玄幻',
       subGenre: '',
@@ -80,7 +79,6 @@ function projectSession(key: 'A' | 'B' | 'C') {
   const value = project(key)
   return {
     projectId: value.id,
-    leaseId: value.sessionLease!,
     projectPath: value.path,
   }
 }

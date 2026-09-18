@@ -6,14 +6,12 @@ import type {
   ProjectData,
   ProjectSessionContext,
   NovelConfig,
-  FileNode,
-} from '../shared/ipc-channels'
+  FileNode} from '../shared/ipc-channels'
 import { alertError } from '../components/ui/AlertDialog'
 import { appErrorMessage } from '../i18n/app-errors'
 import {
   cancelProjectWorkflowsAndWait,
-  confirmAndCancelProjectWorkflows,
-} from '../services/project-workflow-gate'
+  confirmAndCancelProjectWorkflows} from '../services/project-workflow-gate'
 import { useEditorDraftLedgerStore } from './editor-draft-ledger-store'
 import { useLocaleStore } from './locale-store'
 import { requireIpcSuccess } from '../services/ipc-result'
@@ -22,8 +20,7 @@ import {
   projectSessionContextFromProject,
   sameProjectPathKey,
   sameProjectSessionContext,
-  setActiveProjectSessionContext,
-} from '../shared/project-session-context'
+  setActiveProjectSessionContext} from '../shared/project-session-context'
 import {
   CONFIG_DRAFT_TAB,
   composeEditorDraftTabWriter,
@@ -34,8 +31,7 @@ import {
   persistProjectEditorDraftLedger,
   rebaseProjectEditorDraft,
   recordProjectEditorEdit,
-  settleProjectEditorSave,
-} from './project-editor-draft-ledger'
+  settleProjectEditorSave} from './project-editor-draft-ledger'
 
 let refreshFileTreeRequestSequence = 0
 let openProjectRequestSequence = 0
@@ -116,12 +112,10 @@ function toPlainProjectData(p: ProjectData): ProjectData {
     id: p.id,
     name: p.name,
     path: p.path,
-    sessionLease: p.sessionLease,
     novelConfig: p.novelConfig ? { ...p.novelConfig } : p.novelConfig,
     characterStates: p.characterStates,
     createdAt: p.createdAt,
-    updatedAt: p.updatedAt,
-  }
+    updatedAt: p.updatedAt}
 }
 
 /** 给 Promise 包裹超时保护，防止 IPC 调用永远不返回 */
@@ -248,8 +242,7 @@ async function reconcileStaleProjectResponse(options: {
       title: projectCopy(
         '无法确认项目数据库状态，已停用项目',
         'Could not verify project database state; the project was disabled',
-      ),
-    })
+      )})
     return true
   }
   const rendererProjectPath = options.getRendererProjectPath()
@@ -264,8 +257,7 @@ async function reconcileStaleProjectResponse(options: {
     title: projectCopy(
       '项目数据库状态不一致，已停用项目',
       'Project database state does not match; the project was disabled',
-    ),
-  })
+    )})
   return true
 }
 
@@ -364,8 +356,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         await reconcileStaleProjectResponse({
           getRendererProjectPath: () => get().currentProject?.path ?? null,
           detachRenderer: () => set({ currentProject: null, fileTree: [] }),
-          operation: 'create',
-        })
+          operation: 'create'})
         return false
       }
       if (result.databaseRestored === false || result.dbReady === false) {
@@ -389,8 +380,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
             '创建失败，项目数据库不可用',
             'Project creation failed; the project database is unavailable',
           ),
-          shouldNotify: isLatestRequest,
-        })
+          shouldNotify: isLatestRequest})
         return false
       }
       if (!result.success) {
@@ -451,8 +441,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         await reconcileStaleProjectResponse({
           getRendererProjectPath: () => get().currentProject?.path ?? null,
           detachRenderer: () => set({ currentProject: null, fileTree: [] }),
-          operation: 'open',
-        })
+          operation: 'open'})
         return false
       }
       const activeProjectMismatch = Boolean(
@@ -485,8 +474,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
             '打开失败，项目数据库不可用',
             'Project opening failed; the project database is unavailable',
           ),
-          shouldNotify: isLatestRequest,
-        })
+          shouldNotify: isLatestRequest})
         return false
       }
       if (result.success && result.project) {
@@ -514,14 +502,12 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
           await reconcileStaleProjectResponse({
             getRendererProjectPath: () => get().currentProject?.path ?? null,
             detachRenderer: () => set({ currentProject: null, fileTree: [] }),
-            operation: 'open',
-          })
+            operation: 'open'})
           return false
         }
         set((state) => ({
           currentProject: { ...result.project!, novelConfig: restored.value },
-          projectSessionEpoch: state.projectSessionEpoch + 1,
-        }))
+          projectSessionEpoch: state.projectSessionEpoch + 1}))
         const partialLoadWarnings: string[] = []
         // 核心项目身份已经提交。文件树属于可降级的第二层视图，
         // 失败不能再把这个已打开的项目报告成整体打开失败。
@@ -560,8 +546,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
           .map(warning => projectError(warning))
         if (warnings.length > 0) {
           alertError(warnings.join('\n'), {
-            title: projectText('项目已打开，部分数据加载失败', 'Project opened with some data unavailable'),
-          })
+            title: projectText('项目已打开，部分数据加载失败', 'Project opened with some data unavailable')})
         }
         return true
       }
@@ -577,8 +562,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         const detached = await reconcileStaleProjectResponse({
           getRendererProjectPath: () => get().currentProject?.path ?? null,
           detachRenderer: () => set({ currentProject: null, fileTree: [] }),
-          operation: 'open',
-        })
+          operation: 'open'})
         if (detached) return false
       }
       if (!isLatestRequest()) return false
@@ -663,9 +647,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     set({
       currentProject: {
         ...project,
-        novelConfig: nextConfig,
-      },
-    })
+        novelConfig: nextConfig}})
     persistConfigDraftLedger(recordProjectEditorEdit(
       readConfigDraftLedger(),
       project.path,
@@ -706,14 +688,11 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         protagonistProfile: core.protagonistProfile ?? current.novelConfig.protagonistProfile,
         globalGuidance: core.globalGuidance ?? current.novelConfig.globalGuidance,
         writingStyle: core.writingStyle ?? current.novelConfig.writingStyle,
-        referenceWorks: core.referenceWorks ?? current.novelConfig.referenceWorks,
-      }
+        referenceWorks: core.referenceWorks ?? current.novelConfig.referenceWorks}
       set({
         currentProject: {
           ...current,
-          novelConfig: nextConfig,
-        },
-      })
+          novelConfig: nextConfig}})
     } catch (err) {
       console.warn('[ProjectStore] reloadNovelConfig 失败:', err)
     }
@@ -737,8 +716,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       set((state) => ({
         currentProject: state.currentProject
           ? { ...state.currentProject, novelConfig: projectDraft.baseValue }
-          : null,
-      }))
+          : null}))
     }
     persistConfigDraftLedger(discardProjectEditorDraft(ledger, projectPath))
   },
@@ -807,8 +785,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       set(state => ({
         recentProjects: state.recentProjects.filter(project => (
           !sameProjectPathKey(project.path, projectPath)
-        )),
-      }))
+        ))}))
       return true
     } catch (error) {
       alertError(
@@ -845,7 +822,6 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         'project:delete',
         projectPath,
         activeProject.id,
-        projectSession.leaseId,
       )
       if (!sameProjectSessionContext(
         projectSession,
@@ -875,8 +851,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
             '项目数据库未能恢复，已关闭当前项目以防止继续写入。',
             'The project database could not be restored. The current project was closed to prevent further writes.',
           )}`, {
-            title: projectText('删除失败，项目已停用', 'Deletion failed; the project was disabled'),
-          })
+            title: projectText('删除失败，项目已停用', 'Deletion failed; the project was disabled')})
           return false
         }
         alertError(
@@ -1045,8 +1020,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     // try {
     //   await ipc.invoke('db:save-summary-snapshot', -1, states)
     // } catch { /* SQLite 可能未初始化 */ }
-  },
-}))
+  }}))
 
 // 任何 currentProject 提交都会同步刷新 IPC 的默认会话；工作流另行持有自己的冻结副本。
 useProjectStore.subscribe((state) => {

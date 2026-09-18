@@ -20,7 +20,7 @@ const callbacks: StepCallbacks = {
 const context: WorkflowContext = {
   runId: 'test-run',
   projectPath: 'C:\\tmp\\vela-style-test',
-  projectSession: { projectId: 'project-1', leaseId: 'lease-project-1', projectPath: 'C:\\tmp\\vela-style-test' },
+  projectSession: { projectId: 'project-1', projectPath: 'C:\\tmp\\vela-style-test' },
   writingLanguage: 'zh-CN',
   uiLocale: 'zh-CN',
   data: {},
@@ -54,7 +54,6 @@ beforeEach(() => {
       id: 'project-1',
       name: '导入项目',
       path: 'C:\\tmp\\vela-style-test',
-      sessionLease: 'lease-project-1',
       novelConfig: {
         genre: '玄幻',
         subGenre: '',

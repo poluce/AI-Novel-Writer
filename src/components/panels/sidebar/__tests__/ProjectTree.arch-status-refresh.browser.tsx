@@ -14,12 +14,10 @@ import ProjectTree from '../ProjectTree'
 const PROJECT_PATH = 'C:\\novels\\architecture-refresh'
 const PROJECT_SESSION = {
   projectId: 'architecture-refresh',
-  leaseId: 'architecture-refresh-lease',
   projectPath: PROJECT_PATH,
 }
 const project: ProjectData = {
   id: PROJECT_SESSION.projectId,
-  sessionLease: PROJECT_SESSION.leaseId,
   name: 'Architecture refresh',
   path: PROJECT_PATH,
   novelConfig: {

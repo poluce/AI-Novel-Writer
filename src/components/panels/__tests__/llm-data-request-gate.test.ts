@@ -7,14 +7,12 @@ describe('LLMDataRequestGate', () => {
     const gate = new LLMDataRequestGate()
     const oldSession = {
       projectId: 'novel-A',
-      leaseId: 'lease-old',
       projectPath: 'C:\\Novels\\A',
     }
     const ticket = gate.begin(oldSession)
 
     expect(gate.isCurrent(ticket, {
       projectId: 'novel-A',
-      leaseId: 'lease-new',
       projectPath: 'c:/novels/a/',
     })).toBe(false)
   })
@@ -23,7 +21,6 @@ describe('LLMDataRequestGate', () => {
     const gate = new LLMDataRequestGate()
     const session = {
       projectId: 'novel-A',
-      leaseId: 'lease-current',
       projectPath: 'C:\\Novels\\A',
     }
     const earlier = gate.begin(session)

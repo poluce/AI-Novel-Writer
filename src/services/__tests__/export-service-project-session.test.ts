@@ -17,12 +17,10 @@ const addLog = vi.fn()
 const projectPath = 'C:/novels/project-a'
 const projectSession: ProjectSessionContext = {
   projectId: 'project-a',
-  leaseId: 'lease-a',
   projectPath,
 }
 const projectSnapshot = {
   id: projectSession.projectId,
-  sessionLease: projectSession.leaseId,
   path: projectPath,
   name: 'Project A',
   novelConfig: {
@@ -319,7 +317,7 @@ describe('exportNovel project session ownership', () => {
       projectSession,
     )
     await vi.waitFor(() => expect(resolveSnapshot).toBeTypeOf('function'))
-    setActiveProjectSessionContext({ ...projectSession, leaseId: 'lease-b' })
+    setActiveProjectSessionContext({ ...projectSession })
     resolveSnapshot!([])
 
     await expect(exporting).resolves.toEqual({
@@ -529,7 +527,7 @@ describe('exportNovel project session ownership', () => {
     vi.mocked(ipc.invoke)
       .mockResolvedValueOnce({ success: true } as never)
       .mockImplementationOnce(async () => {
-        setActiveProjectSessionContext({ ...projectSession, leaseId: 'lease-b' })
+        setActiveProjectSessionContext({ ...projectSession })
         return { success: true } as never
       })
 
@@ -555,7 +553,7 @@ describe('exportNovel project session ownership', () => {
       .mockResolvedValueOnce({ success: true } as never)
       .mockResolvedValueOnce({ success: true } as never)
       .mockImplementationOnce(async () => {
-        setActiveProjectSessionContext({ ...projectSession, leaseId: 'lease-b' })
+        setActiveProjectSessionContext({ ...projectSession })
         return { success: false, error: 'disk full' } as never
       })
 

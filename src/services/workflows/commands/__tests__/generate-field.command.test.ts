@@ -24,7 +24,7 @@ const callbacks: StepCallbacks = {
 const context: WorkflowContext = {
   runId: 'field-run',
   projectPath: projectAPath,
-  projectSession: { projectId: projectAPath, leaseId: 'lease-A', projectPath: projectAPath },
+  projectSession: { projectId: projectAPath, projectPath: projectAPath },
   writingLanguage: 'zh-CN',
   uiLocale: 'zh-CN',
   data: {},
@@ -36,7 +36,6 @@ function project(path: string, writingStyle = '') {
     id: path,
     name: path,
     path,
-    sessionLease: path === projectAPath ? 'lease-A' : 'lease-B',
     novelConfig: {
       genre: '玄幻',
       writingStyle,

@@ -14,7 +14,6 @@ vi.mock('../ipc-client', () => ({
 
 const projectSession: ProjectSessionContext = {
   projectId: 'roster-contract-project',
-  leaseId: 'roster-contract-lease',
   projectPath: 'C:/projects/roster-contract',
 }
 

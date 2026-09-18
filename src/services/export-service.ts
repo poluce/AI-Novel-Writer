@@ -14,13 +14,11 @@ import type { Locale } from '../i18n/types'
 import type { FileWriteCommitState, ProjectSessionContext } from '../shared/ipc-channels'
 import type {
   FinalizedDraftExportAuthorityReceipt,
-  FinalizedDraftExportSnapshot,
-} from '../shared/contracts/finalization'
+  FinalizedDraftExportSnapshot} from '../shared/contracts/finalization'
 import {
   getActiveProjectSessionContext,
   sameProjectPathKey,
-  sameProjectSessionContext,
-} from '../shared/project-session-context'
+  sameProjectSessionContext} from '../shared/project-session-context'
 import type { WritingLanguage } from '../shared/writing-language'
 import { randomUUID } from '../utils/id'
 
@@ -38,7 +36,6 @@ interface ExportOptions {
 /** 导出任务冻结的项目展示数据；项目路径本身绝不作为访问凭据。 */
 export interface ExportProjectSnapshot {
   id: string
-  sessionLease: string
   path: string
   name: string
   novelConfig: Readonly<{
@@ -57,7 +54,6 @@ function isMatchingProjectSnapshot(
   projectSession: ProjectSessionContext,
 ): boolean {
   return project.id === projectSession.projectId
-    && project.sessionLease === projectSession.leaseId
     && sameProjectPathKey(project.path, projectSession.projectPath)
 }
 
@@ -66,8 +62,7 @@ function staleExportResult(locale: Locale): { success: false; error: string } {
     success: false,
     error: locale === 'en-US'
       ? 'The project session changed. This export was cancelled.'
-      : '项目会话已变化，本次导出已取消',
-  }
+      : '项目会话已变化，本次导出已取消'}
 }
 
 type ExportWriteFailureCommitState = Exclude<FileWriteCommitState, 'committed'>
@@ -85,8 +80,7 @@ function requireExportWriteSuccess(
       {
         commitState: result.commitState === 'unknown'
           ? 'unknown'
-          : 'not_committed',
-      } satisfies { commitState: ExportWriteFailureCommitState },
+          : 'not_committed'} satisfies { commitState: ExportWriteFailureCommitState },
     )
   }
 }
@@ -127,8 +121,7 @@ function staleSplitExportResult(
       confirmedWritten,
       possiblyWritten,
       definitelyFailed,
-    )}`,
-  }
+    )}`}
 }
 
 function unknownSingleWriteDetail(locale: Locale, relativePath: string): string {
@@ -143,8 +136,7 @@ function staleCommittedSingleExportResult(locale: Locale, relativePath: string):
     ...stale,
     error: `${stale.error}${locale === 'en-US'
       ? `; the exported file was already written: ${relativePath}`
-      : `；导出文件已确认写入: ${relativePath}`}`,
-  }
+      : `；导出文件已确认写入: ${relativePath}`}`}
 }
 
 function changedFinalizationResult(
@@ -158,8 +150,7 @@ function changedFinalizationResult(
     success: false,
     error: confirmedWritten.length > 0
       ? `${error}${splitWriteDetail(locale, confirmedWritten, [])}`
-      : error,
-  }
+      : error}
 }
 
 function requireFinalizedExportSnapshot(value: unknown): FinalizedDraftExportSnapshot[] {
@@ -189,8 +180,7 @@ function requireFinalizedExportSnapshot(value: unknown): FinalizedDraftExportSna
       title,
       content,
       finalizationId,
-      contentHash,
-    })
+      contentHash})
   })
   return rows.sort((left, right) => left.chapterNumber - right.chapterNumber)
 }
@@ -203,8 +193,7 @@ function exportAuthorityReceipt(
     chapterNumber,
     version,
     finalizationId,
-    contentHash,
-  }) => ({ draftId, chapterNumber, version, finalizationId, contentHash }))
+    contentHash}) => ({ draftId, chapterNumber, version, finalizationId, contentHash }))
 }
 
 function renderMarkdownChapter(
@@ -267,14 +256,12 @@ export async function exportNovel(
         draft.title.trim(),
         draft.content,
         project.novelConfig.writingLanguage,
-      ),
-    }))
+      )}))
 
     if (chapterContents.length === 0) {
       return {
         success: false,
-        error: text('无可导出的章节（无定稿章节）', 'There are no finalized chapters to export.'),
-      }
+        error: text('无可导出的章节（无定稿章节）', 'There are no finalized chapters to export.')}
     }
 
     if (!isProjectSessionCurrent(projectSession)) return staleExportResult(uiLocale)
@@ -478,7 +465,6 @@ function formatLabel(format: ExportFormat, locale: Locale): string {
   const labels: Record<ExportFormat, readonly [string, string]> = {
     'merged-md': ['合并 Markdown', 'Merged Markdown'],
     'split-md': ['分章 Markdown', 'Split Markdown'],
-    'txt': ['纯文本 TXT', 'Plain text (TXT)'],
-  }
+    'txt': ['纯文本 TXT', 'Plain text (TXT)']}
   return labels[format][locale === 'en-US' ? 1 : 0]
 }

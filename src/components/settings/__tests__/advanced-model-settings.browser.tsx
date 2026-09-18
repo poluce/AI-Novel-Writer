@@ -64,7 +64,6 @@ async function renderSettings(locale: Locale = 'zh-CN') {
       id: 'advanced-project',
       name: 'Advanced project',
       path: 'C:\\novels\\advanced-project',
-      sessionLease: 'advanced-project-lease',
       novelConfig: { creativeStrategy: 'deep-planning' },
     } as never,
   })

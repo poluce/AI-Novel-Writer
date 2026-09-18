@@ -25,7 +25,6 @@ vi.mock('../commands/legacy-character-roster-repair.command', () => ({
 const PROJECT_PATH = 'C:\\novels\\workflow-resource-claims'
 const PROJECT_SESSION = Object.freeze({
   projectId: 'workflow-resource-claims',
-  leaseId: 'lease-workflow-resource-claims',
   projectPath: PROJECT_PATH,
 })
 
@@ -35,7 +34,6 @@ function setCurrentProject(): void {
       id: PROJECT_SESSION.projectId,
       name: 'Workflow resource claims',
       path: PROJECT_PATH,
-      sessionLease: PROJECT_SESSION.leaseId,
       novelConfig: {
         totalChapters: 3,
         globalGuidance: '',

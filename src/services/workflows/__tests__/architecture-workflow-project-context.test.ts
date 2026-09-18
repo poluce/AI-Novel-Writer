@@ -38,7 +38,6 @@ function arrangeConfigGenerationJourney(responses: Array<{ content: string; fini
   const saveProject = vi.fn(async () => true)
   const project = {
     id: 'project-A',
-    sessionLease: 'lease-A',
     name: 'A',
     path: 'C:/projects/A',
     novelConfig: {},
@@ -66,7 +65,6 @@ function arrangeConfigGenerationJourney(responses: Array<{ content: string; fini
       return {
         success: true,
         lease: {
-          leaseId: 'frozen-config-lease',
           modelId: 'deepseek-v4-flash',
           provider: 'custom',
           protocol: 'openai',
@@ -107,7 +105,7 @@ function arrangeConfigGenerationJourney(responses: Array<{ content: string; fini
   })
   const workflow = createConfigGenerationWorkflow({
     projectPath: project.path,
-    projectSession: { projectId: project.id, leaseId: project.sessionLease, projectPath: project.path },
+    projectSession: { projectId: project.id, projectPath: project.path },
     idea: '一个失去记忆的少年守护边境城邦',
     totalChapters: 100,
     wordsPerChapter: 3000,
@@ -122,7 +120,6 @@ describe('architecture workflow project context', () => {
     useProjectStore.setState({
       currentProject: {
         id: 'project-A',
-        sessionLease: 'lease-A',
         name: 'A',
         path: 'C:/projects/A',
         novelConfig: {},
@@ -134,7 +131,7 @@ describe('architecture workflow project context', () => {
 
     const workflow = createArchitectureWorkflow({
       projectPath: 'C:/projects/A',
-      projectSession: { projectId: 'project-A', leaseId: 'lease-A', projectPath: 'C:/projects/A' },
+      projectSession: { projectId: 'project-A', projectPath: 'C:/projects/A' },
       selectedSteps: ['premise'],
     })
 
@@ -154,7 +151,6 @@ describe('architecture workflow project context', () => {
     useProjectStore.setState({
       currentProject: {
         id: 'project-A',
-        sessionLease: 'lease-A',
         name: 'A',
         path: 'C:/projects/A',
         novelConfig: {},
@@ -169,7 +165,7 @@ describe('architecture workflow project context', () => {
 
     const workflow = createArchitectureWorkflow({
       projectPath: 'C:/projects/A',
-      projectSession: { projectId: 'project-A', leaseId: 'lease-A', projectPath: 'C:/projects/A' },
+      projectSession: { projectId: 'project-A', projectPath: 'C:/projects/A' },
       selectedSteps: ['premise'],
     }, frozenLocale)
 
@@ -184,7 +180,6 @@ describe('architecture workflow project context', () => {
     useProjectStore.setState({
       currentProject: {
         id: 'project-A',
-        sessionLease: 'lease-A',
         name: 'A',
         path: 'C:/projects/A',
         novelConfig: {},
@@ -195,7 +190,7 @@ describe('architecture workflow project context', () => {
     })
     const workflow = createArchitectureWorkflow({
       projectPath: 'C:/projects/A',
-      projectSession: { projectId: 'project-A', leaseId: 'lease-A', projectPath: 'C:/projects/A' },
+      projectSession: { projectId: 'project-A', projectPath: 'C:/projects/A' },
       selectedSteps: ['premise', 'characters'],
     })
     expect(workflow.resourceKeys).toEqual(['architecture', 'character-roster'])
@@ -203,7 +198,6 @@ describe('architecture workflow project context', () => {
     useProjectStore.setState({
       currentProject: {
         id: 'project-B',
-        sessionLease: 'lease-B',
         name: 'B',
         path: 'C:/projects/B',
         novelConfig: {},
@@ -224,7 +218,7 @@ describe('architecture workflow project context', () => {
       {
         runId: 'test-run',
         projectPath: 'C:/projects/A',
-        projectSession: { projectId: 'project-A', leaseId: 'lease-A', projectPath: 'C:/projects/A' },
+        projectSession: { projectId: 'project-A', projectPath: 'C:/projects/A' },
         writingLanguage: 'zh-CN',
         uiLocale: 'zh-CN',
         data: {},
@@ -238,7 +232,6 @@ describe('architecture workflow project context', () => {
     useProjectStore.setState({
       currentProject: {
         id: 'project-A',
-        sessionLease: 'lease-A',
         name: 'A',
         path: 'C:/projects/A',
         novelConfig: {},
@@ -249,20 +242,18 @@ describe('architecture workflow project context', () => {
     })
     const workflow = createArchitectureWorkflow({
       projectPath: 'C:/projects/A',
-      projectSession: { projectId: 'project-A', leaseId: 'lease-A', projectPath: 'C:/projects/A' },
+      projectSession: { projectId: 'project-A', projectPath: 'C:/projects/A' },
       selectedSteps: ['premise'],
     })
 
     expect(workflow.projectSession).toMatchObject({
       projectId: 'project-A',
-      leaseId: 'lease-A',
       projectPath: 'C:/projects/A',
     })
 
     useProjectStore.setState({
       currentProject: {
         id: 'project-A',
-        sessionLease: 'lease-A-reopened',
         name: 'A reopened',
         path: 'c:/PROJECTS/A/',
         novelConfig: {},
@@ -286,7 +277,7 @@ describe('config generation full journey completion contract', () => {
     {
       runId: 'config-run',
       projectPath: 'C:/projects/A',
-      projectSession: { projectId: 'project-A', leaseId: 'lease-A', projectPath: 'C:/projects/A' },
+      projectSession: { projectId: 'project-A', projectPath: 'C:/projects/A' },
       writingLanguage: 'zh-CN',
       uiLocale: 'zh-CN',
       data: {},

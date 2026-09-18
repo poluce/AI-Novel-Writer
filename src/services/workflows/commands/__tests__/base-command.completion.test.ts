@@ -77,7 +77,7 @@ class CompletionProbeCommand extends BaseWorkflowCommand<string> {
 const context: WorkflowContext = {
   runId: 'completion-probe',
   projectPath: 'C:\\novels\\probe',
-  projectSession: { projectId: 'probe', leaseId: 'lease-probe', projectPath: 'C:\\novels\\probe' },
+  projectSession: { projectId: 'probe', projectPath: 'C:\\novels\\probe' },
   writingLanguage: 'zh-CN',
   uiLocale: 'zh-CN',
   data: {},
@@ -92,7 +92,7 @@ const callbacks: StepCallbacks = {
 
 function leaseReceipt(overrides: Partial<ModelExecutionLeaseReceipt> = {}): ModelExecutionLeaseReceipt {
   return {
-    leaseId: 'workflow-lease-a',
+    leaseId: 'model-execution-lease-a',
     modelId: 'model-a',
     provider: 'custom',
     protocol: 'openai',

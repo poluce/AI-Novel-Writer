@@ -10,7 +10,6 @@ import {
 const projectPath = 'C:\\novels\\candidate-sync'
 const projectSession = {
   projectId: 'candidate-sync',
-  leaseId: 'lease-candidate-sync',
   projectPath,
 }
 

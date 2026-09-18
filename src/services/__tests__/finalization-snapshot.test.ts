@@ -9,7 +9,6 @@ import {
 const PROJECT_PATH = 'C:\\novels\\A'
 const SESSION = {
   projectId: 'project-a',
-  leaseId: 'lease-a',
   projectPath: PROJECT_PATH,
 }
 
@@ -20,7 +19,6 @@ function draftTab(overrides: Partial<EditorTab> = {}): EditorTab {
     type: 'chapter',
     filePath: 'vela://draft/17',
     projectKey: PROJECT_PATH,
-    projectSessionLease: SESSION.leaseId,
     draftId: 17,
     chapterNumber: 1,
     content: '编辑器里尚未保存的正文',

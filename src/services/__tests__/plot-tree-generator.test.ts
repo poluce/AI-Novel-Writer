@@ -20,7 +20,6 @@ import {
 
 const PROJECT_SESSION = Object.freeze({
   projectId: 'plot-project',
-  leaseId: 'plot-lease',
   projectPath: 'C:/novels/plot-project',
 }) satisfies ProjectSessionContext
 

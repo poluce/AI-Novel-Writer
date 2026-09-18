@@ -18,7 +18,6 @@ beforeEach(() => {
   useProjectStore.setState({
     currentProject: {
       id: 'renderer-actions',
-      sessionLease: 'renderer-actions-lease',
       name: 'Renderer actions',
       path: PROJECT_PATH,
       novelConfig: { writingLanguage: 'zh-CN' },
@@ -92,7 +91,7 @@ describe('agent renderer actions', () => {
 })
 
 describe('tool completion → artifact cards', () => {
-  const session = { projectId: 'renderer-actions', leaseId: 'renderer-actions-lease', projectPath: PROJECT_PATH }
+  const session = { projectId: 'renderer-actions', projectPath: PROJECT_PATH }
   const context = { projectPath: PROJECT_PATH, projectSession: session }
 
   it('appends an editor tab card and updates the tool call card in place', () => {

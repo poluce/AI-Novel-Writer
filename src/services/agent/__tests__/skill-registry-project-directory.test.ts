@@ -8,7 +8,6 @@ const mocks = vi.hoisted(() => ({
 const currentProject = {
   id: 'project-1',
   path: 'C:/novels/project-1',
-  sessionLease: 'lease-1',
 }
 
 vi.mock('../../ipc-client', () => ({
@@ -42,7 +41,7 @@ describe('project skill catalog loading', () => {
 
     // 目录扫描（含项目内的 .vela/skills）只在主进程做，渲染层不再自己翻目录。
     expect(mocks.invokeWithProjectSession).toHaveBeenCalledWith(
-      expect.objectContaining({ projectId: 'project-1', leaseId: 'lease-1' }),
+      expect.objectContaining({ projectId: 'project-1' }),
       'skills:load-catalog',
       currentProject.path,
     )

@@ -36,7 +36,6 @@ let continuityProjectionReadError: Error | null
 function project(): ProjectData {
   return {
     id: 'writing-model-selector',
-    sessionLease: 'writing-model-selector-lease',
     name: '创作模型选择测试项目',
     path: PROJECT_PATH,
     novelConfig: {
@@ -181,7 +180,6 @@ beforeEach(() => {
   useProjectStore.setState({ currentProject: project() })
   setActiveProjectSessionContext({
     projectId: 'writing-model-selector',
-    leaseId: 'writing-model-selector-lease',
     projectPath: PROJECT_PATH,
   })
   useLLMStore.setState({

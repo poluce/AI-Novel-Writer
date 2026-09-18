@@ -4,19 +4,16 @@ import { useProjectStore } from '../../stores/project-store'
 import {
   exportNovel,
   type ExportFormat,
-  type ExportProjectSnapshot,
-} from '../../services/export-service'
+  type ExportProjectSnapshot} from '../../services/export-service'
 import { ipc } from '../../services/ipc-client'
 import {
-  Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
-} from '../ui/Dialog'
+  Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription} from '../ui/Dialog'
 import { Button } from '../ui/Button'
 import { cn } from '../../lib/utils'
 import { useLocaleStore } from '../../stores/locale-store'
 import {
   captureProjectSession,
-  isProjectSessionCurrent,
-} from '../project-session-gate'
+  isProjectSessionCurrent} from '../project-session-gate'
 import type { ProjectSessionContext } from '../../shared/ipc-channels'
 import { resolveWritingLanguage } from '../../shared/writing-language'
 
@@ -47,15 +44,12 @@ export default function ExportDialog({ isOpen, onClose }: Props) {
     if (!currentProject || !projectSession) return
     const projectSnapshot: ExportProjectSnapshot = Object.freeze({
       id: projectSession.projectId,
-      sessionLease: projectSession.leaseId,
       path: projectSession.projectPath,
       name: currentProject.name,
       novelConfig: Object.freeze({
         genre: currentProject.novelConfig.genre,
         targetAudience: currentProject.novelConfig.targetAudience,
-        writingLanguage: resolveWritingLanguage(currentProject.novelConfig.writingLanguage),
-      }),
-    })
+        writingLanguage: resolveWritingLanguage(currentProject.novelConfig.writingLanguage)})})
     const destination = await ipc.invoke('dialog:select-export-directory')
     if (!destination || !isProjectSessionCurrent(projectSession)) return
 
@@ -67,8 +61,7 @@ export default function ExportDialog({ isOpen, onClose }: Props) {
       exporting: false,
       result: res.success && res.path
         ? { ...res, path: `${destination.displayName}/${res.path}` }
-        : res,
-    })
+        : res})
   }
 
   const FORMAT_OPTIONS: Array<{ value: ExportFormat; label: string; desc: string; icon: React.ReactNode }> = [

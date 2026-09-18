@@ -25,7 +25,6 @@ function failedChapterDraft(): WorkflowRun {
     projectPath: 'C:\\novels\\failed-chapter-draft',
     projectSession: {
       projectId: 'failed-chapter-draft',
-      leaseId: 'failed-chapter-draft-lease',
       projectPath: 'C:\\novels\\failed-chapter-draft',
     },
     writingLanguage: 'zh-CN',
@@ -74,7 +73,6 @@ function failedPromptBudget(
     projectPath: 'C:\\novels\\prompt-budget',
     projectSession: {
       projectId: 'prompt-budget',
-      leaseId: 'prompt-budget-lease',
       projectPath: 'C:\\novels\\prompt-budget',
     },
     writingLanguage: locale,
@@ -111,7 +109,6 @@ function activeEnglishBlueprintRun(): WorkflowRun {
     projectPath: 'C:\\novels\\prompt-budget',
     projectSession: {
       projectId: 'prompt-budget',
-      leaseId: 'prompt-budget-lease',
       projectPath: 'C:\\novels\\prompt-budget',
     },
     writingLanguage: 'en-US',
@@ -146,7 +143,6 @@ beforeEach(() => {
       id: 'prompt-budget',
       name: 'Prompt budget',
       path: 'C:\\novels\\prompt-budget',
-      sessionLease: 'prompt-budget-lease',
       novelConfig: {},
     } as never,
   })
@@ -328,7 +324,6 @@ describe('AIOutputPanel prompt budget failure', () => {
         id: 'other-project',
         name: 'Other project',
         path: 'C:\\novels\\other-project',
-        sessionLease: 'other-project-lease',
         novelConfig: {},
       } as never,
     })

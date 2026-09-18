@@ -10,7 +10,7 @@ import { useWorkflowStore } from '../../../stores/workflow-store'
 import { setActiveProjectSessionContext } from '../../../shared/project-session-context'
 import type { ProjectData } from '../../../shared/ipc-channels'
 
-const project = { id: 'paste', path: 'C:\\novels\\paste', sessionLease: 'lease-1' } as ProjectData
+const project = { id: 'paste', path: 'C:\\novels\\paste' } as ProjectData
 const model = { id: 'model', name: 'Test model', modelName: 'test', baseUrl: 'https://example.invalid' } as ReturnType<typeof useLLMStore.getState>['models'][number]
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const originals = { project: useProjectStore.getState(), locale: useLocaleStore.getState(), llm: useLLMStore.getState(), workflow: useWorkflowStore.getState() }
@@ -18,7 +18,7 @@ let root: Root
 let container: HTMLDivElement
 let start: ReturnType<typeof vi.fn<ReturnType<typeof useWorkflowStore.getState>['startWorkflow']>>
 let invoke: ReturnType<typeof vi.fn>
-let testLease = 0
+
 
 function button(label: string) {
   const result = [...document.querySelectorAll('button')].find(node => node.textContent === label || node.getAttribute('aria-label') === label)
@@ -36,13 +36,12 @@ async function paste(value: string) {
 
 beforeEach(async () => {
   vi.clearAllMocks()
-  project.sessionLease = `lease-${++testLease}`
   invoke = vi.fn().mockResolvedValue(null)
   Object.defineProperty(window, 'velaAPI', { configurable: true, value: { invoke, on: vi.fn(() => () => {}), once: vi.fn(), send: vi.fn() } })
   start = vi.fn<ReturnType<typeof useWorkflowStore.getState>['startWorkflow']>().mockResolvedValue('failed-run')
   useLocaleStore.setState({ locale: 'zh-CN', initialized: true })
   useProjectStore.setState({ currentProject: project })
-  setActiveProjectSessionContext({ projectId: project.id, projectPath: project.path, leaseId: project.sessionLease! })
+  setActiveProjectSessionContext({ projectId: project.id, projectPath: project.path })
   useLLMStore.setState({ models: [model], defaultModelId: model.id })
   useWorkflowStore.setState({ startWorkflow: start, history: [], getResourceConflict: () => null })
   container = document.createElement('div')
@@ -79,7 +78,7 @@ describe('角色卡导入入口', () => {
     await click('发送并提取')
     expect(start).toHaveBeenCalledWith(expect.objectContaining({
       generationModelId: model.id,
-      projectSession: { projectId: project.id, projectPath: project.path, leaseId: project.sessionLease },
+      projectSession: { projectId: project.id, projectPath: project.path },
       steps: [expect.objectContaining({ name: '生成待确认角色卡' }), expect.objectContaining({ name: '确认并导入角色卡' })],
     }), true)
     expect(document.querySelector('textarea')?.value).toBe('姓名：林舟')
@@ -112,15 +111,15 @@ describe('角色卡导入入口', () => {
 
   it('文件读取期间同路径项目重新打开，不将旧文件带入新会话', async () => {
     let resolve!: (result: { success: true; content: string }) => void
-    const reopenedLease = `${project.sessionLease}-reopened`
     invoke.mockImplementation((channel: string) => channel === 'dialog:select-knowledge-files'
       ? Promise.resolve([{ grantId: 'grant', displayName: '旧项目私有角色.txt' }])
       : new Promise(done => { resolve = done }))
     await paste('姓名：旧项目角色')
     await click('选择文件')
     await act(async () => {
-      setActiveProjectSessionContext({ projectId: project.id, projectPath: project.path, leaseId: reopenedLease })
-      useProjectStore.setState({ currentProject: { ...project, sessionLease: reopenedLease } })
+      const next = { ...project, id: 'paste-reopened' }
+      setActiveProjectSessionContext({ projectId: next.id, projectPath: next.path })
+      useProjectStore.setState({ currentProject: next })
       resolve({ success: true, content: '旧项目内容' })
     })
     await click('粘贴 / 导入角色卡')

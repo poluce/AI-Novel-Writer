@@ -18,7 +18,6 @@ vi.mock('../../ipc-client', () => ({
 const PROJECT_PATH = 'C:\\novels\\excerpt'
 const SESSION = {
   projectId: 'excerpt',
-  leaseId: 'lease-excerpt',
   projectPath: PROJECT_PATH,
 }
 
@@ -29,7 +28,6 @@ describe('applyDraftExcerptReplace', () => {
     useProjectStore.setState({
       currentProject: {
         id: SESSION.projectId,
-        sessionLease: SESSION.leaseId,
         name: 'Excerpt',
         path: PROJECT_PATH,
         novelConfig: {},

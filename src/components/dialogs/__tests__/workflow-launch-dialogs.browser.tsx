@@ -19,7 +19,7 @@ let authorityGap: number | null
 let blueprintChapterNumbers: number[]
 
 const project = {
-  id: 'dialogs', sessionLease: 'lease-dialogs', name: 'Dialogs', path: 'C:\\novels\\dialogs',
+  id: 'dialogs', name: 'Dialogs', path: 'C:\\novels\\dialogs',
   novelConfig: {
     genre: '奇幻', subGenre: '', targetAudience: '', totalChapters: 10, wordsPerChapter: 3000,
     plotStructure: 'three_act', narrativePOV: 'third_limited', coreOutline: '完整的故事构想',
@@ -91,7 +91,6 @@ describe('workflow launch dialogs', () => {
         projectPath: project.path,
         projectSession: {
           projectId: project.id,
-          leaseId: project.sessionLease,
           projectPath: project.path,
         },
         type: 'batch_generate',

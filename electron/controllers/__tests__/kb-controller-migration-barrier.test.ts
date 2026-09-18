@@ -41,7 +41,6 @@ function handler(channel: string): IpcHandler {
   if (!registered) throw new Error(`Missing IPC handler: ${channel}`)
   return async (event, ...args) => registered(event, ...args, {
     projectId: 'project-A',
-    leaseId: 'lease-A',
     projectPath: 'C:/projects/A',
   })
 }

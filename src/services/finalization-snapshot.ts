@@ -1,8 +1,7 @@
 import type { ProjectSessionContext } from '../shared/ipc-channels'
 import {
   sameProjectPathKey,
-  sameProjectSessionContext,
-} from '../shared/project-session-context'
+  sameProjectSessionContext} from '../shared/project-session-context'
 import type { EditorTab } from '../stores/editor-store'
 
 export type FinalizationPublicationStatus = 'pending' | 'published'
@@ -57,8 +56,7 @@ export function captureFinalizationSnapshot(input: {
     chapterNumber: tab.chapterNumber,
     chapterTitle,
     content: tab.content ?? '',
-    contentRevision: tab.contentRevision ?? 0,
-  })
+    contentRevision: tab.contentRevision ?? 0})
 }
 
 /**
@@ -73,7 +71,6 @@ export function reconcileFinalizationCompletion(
   const sameTarget = (
     tab.id === snapshot.tabId
     && tab.draftId === snapshot.draftId
-    && tab.projectSessionLease === snapshot.projectSession.leaseId
     && sameProjectPathKey(tab.projectKey, snapshot.projectPath)
     && sameProjectSessionContext(snapshot.projectSession, completion.projectSession)
     && sameProjectPathKey(completion.projectPath, snapshot.projectPath)
@@ -94,9 +91,7 @@ export function reconcileFinalizationCompletion(
       finalizationPublication: completion.publicationStatus,
       finalizationConflict: {
         finalizationId: completion.finalizationId,
-        publicationStatus: completion.publicationStatus,
-      },
-    }
+        publicationStatus: completion.publicationStatus}}
   }
 
   return {
@@ -106,6 +101,5 @@ export function reconcileFinalizationCompletion(
     draftStatus: 'finalized',
     finalizationId: completion.finalizationId,
     finalizationPublication: completion.publicationStatus,
-    finalizationConflict: undefined,
-  }
+    finalizationConflict: undefined}
 }

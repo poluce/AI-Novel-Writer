@@ -9,18 +9,15 @@ import type {
   ImportPurpose,
   ImportRunPreparationResult,
   ImportRunPrepareFromInspectionRequest,
-  ImportRunSnapshot,
-} from '../../shared/import-run'
+  ImportRunSnapshot} from '../../shared/import-run'
 import { AUTHOR_IMPORT_PREVIEW_STALE } from '../../shared/import-run'
 import type { AuthorManuscriptImportPreview } from '../../shared/author-manuscript-import'
 import {
   createImportWorkflow,
   estimateImportCost,
-  loadAuthorImportChapterNumbers,
-} from '../../services/workflows/import-workflow'
+  loadAuthorImportChapterNumbers} from '../../services/workflows/import-workflow'
 import {
-  Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
-} from '../ui/Dialog'
+  Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription} from '../ui/Dialog'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Label } from '../ui/Label'
@@ -56,17 +53,17 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
   const [authorPreview, setAuthorPreview] = useState<AuthorManuscriptImportPreview | null>(null)
   const [authorPreviewLoading, setAuthorPreviewLoading] = useState(false)
   const [selectionPreparation, setSelectionPreparation] = useState<ImportRunPreparationResult | null>(null)
-  const [selectionProjectLeaseId, setSelectionProjectLeaseId] = useState('')
+  const [selectionProjectId, setSelectionProjectId] = useState('')
 
   // 导入流程
   const [importing, setImporting] = useState(false)
   const [importNotice, setImportNotice] = useState('')
   const [resumableState, setResumableState] = useState<{
-    projectLeaseId: string
+    boundProjectId: string
     runs: ImportRunSnapshot[]
   } | null>(null)
   const [selectedResumableRunId, setSelectedResumableRunId] = useState('')
-  const resumableRuns = resumableState && currentProject?.sessionLease === resumableState.projectLeaseId
+  const resumableRuns = resumableState && currentProject?.id === resumableState.boundProjectId
     ? resumableState.runs.filter(run => run.purpose === purpose)
     : []
   const resumableRun = resumableRuns.find(run => run.id === selectedResumableRunId)
@@ -81,8 +78,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
     : false
   const runProgress = (run: ImportRunSnapshot) => ({
     completed: run.progressCompleted ?? run.completedChapters,
-    total: run.progressTotal ?? run.totalChapters,
-  })
+    total: run.progressTotal ?? run.totalChapters})
 
   useEffect(() => {
     if (!open || !currentProject) return
@@ -92,7 +88,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
     void ipc.invokeWithProjectSession(session, 'db:import-run-list-resumable', currentProject.path)
       .then(runs => {
         if (active && isProjectSessionCurrent(session)) {
-          setResumableState(runs.length > 0 ? { projectLeaseId: session.leaseId, runs } : null)
+          setResumableState(runs.length > 0 ? { boundProjectId: session.projectId, runs } : null)
           setSelectedResumableRunId(selected => (
             runs.some(run => run.id === selected) ? selected : (runs[0]?.id ?? '')
           ))
@@ -154,7 +150,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
     setAuthorPreview(null)
     setAuthorPreviewLoading(false)
     setSelectionPreparation(null)
-    setSelectionProjectLeaseId('')
+    setSelectionProjectId('')
     setSplitDone(false)
     setSplitError('')
     setImportNotice('')
@@ -181,8 +177,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
           path: savePath.trim(),
           genre: '',
           targetAudience: '',
-          writingLanguage: locale,
-        })
+          writingLanguage: locale})
         if (!success) return
         project = useProjectStore.getState().currentProject
         projectSession = captureProjectSession(project)
@@ -199,8 +194,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
         runId,
         purpose,
         locale: runLocale,
-        expectedProjectPath: project.path,
-      }, projectSession)
+        expectedProjectPath: project.path}, projectSession)
       if (!isProjectSessionCurrent(projectSession)) return
       if (!result) return
       setSplitDone(false)
@@ -210,7 +204,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
       setAuthorPreview(null)
       setAuthorPreviewLoading(false)
       setSelectionPreparation(null)
-      setSelectionProjectLeaseId('')
+      setSelectionProjectId('')
       if (purpose === 'author-manuscript' && result.success && result.inspection) {
         setAuthorPreviewLoading(true)
         setInspection(result.inspection)
@@ -218,7 +212,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
       } else if (purpose === 'reference' && result.success && result.preparation) {
         const prepared = result.preparation
         setSelectionPreparation(prepared)
-        setSelectionProjectLeaseId(projectSession.leaseId)
+        setSelectionProjectId(projectSession.projectId)
         const preparedRun = prepared.run
         const chapterCount = preparedRun?.totalChapters
           ?? prepared.newChapterNumbers.length
@@ -232,8 +226,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
           chapterCount,
           totalWords: preparedRun?.manifestWordCount ?? 0,
           totalBytes: preparedRun?.totalContentSize ?? 0,
-          preview: [],
-        })
+          preview: []})
         setSplitDone(true)
       } else {
         setSplitError(result.error || text('拆章失败', 'Could not split chapters'))
@@ -267,8 +260,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
       projectPath: project.path,
       projectSession,
       executionOwner: randomUUID(),
-      authorChapterNumbers,
-    })
+      authorChapterNumbers})
     void startWorkflow(workflow, false).catch(error => {
       console.error('[ImportNovel] 导入工作流失败:', error)
     })
@@ -282,7 +274,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
   ) => {
     if (consumedRunId) {
       setResumableState(previous => {
-        if (previous?.projectLeaseId !== projectSession.leaseId) return previous
+        if (previous?.boundProjectId !== projectSession.projectId) return previous
         const runs = previous.runs.filter(run => run.id !== consumedRunId)
         return runs.length > 0 ? { ...previous, runs } : null
       })
@@ -304,11 +296,10 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
     }
     if (preparation.classification === 'resumable' && preparation.run) {
       setResumableState(previous => {
-        const previousRuns = previous?.projectLeaseId === projectSession.leaseId ? previous.runs : []
+        const previousRuns = previous?.boundProjectId === projectSession.projectId ? previous.runs : []
         return {
-          projectLeaseId: projectSession.leaseId,
-          runs: [preparation.run!, ...previousRuns.filter(run => run.id !== preparation.run!.id)],
-        }
+          boundProjectId: projectSession.projectId,
+          runs: [preparation.run!, ...previousRuns.filter(run => run.id !== preparation.run!.id)]}
       })
       setSelectedResumableRunId(preparation.run.id)
       setImportNotice(text(
@@ -328,7 +319,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
       || (purpose === 'author-manuscript' && (!authorPreview || authorPreview.classification === 'conflict'))
       || (purpose === 'reference' && (
         !selectionPreparation
-        || currentProject?.sessionLease !== selectionProjectLeaseId
+        || currentProject?.id !== selectionProjectId
       ))
       || !currentProject
     ) return
@@ -349,7 +340,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
         setSplitDone(false)
         const preparation = selectionPreparation!
         setSelectionPreparation(null)
-        setSelectionProjectLeaseId('')
+        setSelectionProjectId('')
         await applyPreparation(preparation, projectSession)
         return
       }
@@ -360,8 +351,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
         purpose,
         locale,
         authorityFingerprint: authorPreview!.authorityFingerprint,
-        manifestFingerprint: authorPreview!.manifestFingerprint,
-      }
+        manifestFingerprint: authorPreview!.manifestFingerprint}
       const prepared = await ipc.invokeWithProjectSession(
         projectSession,
         'db:import-run-prepare-inspection',
@@ -396,11 +386,10 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
       }
       if (preparation.classification === 'resumable' && preparation.run) {
         setResumableState(previous => {
-          const previousRuns = previous?.projectLeaseId === projectSession.leaseId ? previous.runs : []
+          const previousRuns = previous?.boundProjectId === projectSession.projectId ? previous.runs : []
           return {
-            projectLeaseId: projectSession.leaseId,
-            runs: [preparation.run!, ...previousRuns.filter(run => run.id !== preparation.run!.id)],
-          }
+            boundProjectId: projectSession.projectId,
+            runs: [preparation.run!, ...previousRuns.filter(run => run.id !== preparation.run!.id)]}
         })
         setSelectedResumableRunId(preparation.run.id)
         setImportNotice(text(
@@ -424,7 +413,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
     }
   }, [
     applyPreparation, authorPreview, currentProject, inspection, launchRun, locale, purpose,
-    selectionPreparation, selectionProjectLeaseId, text,
+    selectionPreparation, selectionProjectId, text,
   ])
 
   const handleResume = async () => {
@@ -488,13 +477,12 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
       if (result.run.stage === 'parsing') {
         const restartedRun = result.run
         setResumableState(previous => {
-          const previousRuns = previous?.projectLeaseId === session.leaseId ? previous.runs : []
+          const previousRuns = previous?.boundProjectId === session.projectId ? previous.runs : []
           return {
-            projectLeaseId: session.leaseId,
+            boundProjectId: session.projectId,
             runs: [restartedRun, ...previousRuns.filter(run => (
               run.id !== resumableRun.id && run.id !== restartedRun.id
-            ))],
-          }
+            ))]}
         })
         setSelectedResumableRunId(restartedRun.id)
         await handleSelectFiles(restartedRun)
@@ -585,7 +573,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
                   setAuthorPreview(null)
                   setAuthorPreviewLoading(false)
                   setSelectionPreparation(null)
-                  setSelectionProjectLeaseId('')
+                  setSelectionProjectId('')
                   setSplitDone(false)
                 }}
               >
@@ -603,7 +591,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
                   setAuthorPreview(null)
                   setAuthorPreviewLoading(false)
                   setSelectionPreparation(null)
-                  setSelectionProjectLeaseId('')
+                  setSelectionProjectId('')
                   setSplitDone(false)
                 }}
               >
@@ -709,8 +697,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
                 style={{
                   backgroundColor: 'var(--color-input)',
                   border: '1px solid var(--color-border)',
-                  color: inspection ? 'var(--color-text)' : 'var(--color-text-muted)',
-                }}
+                  color: inspection ? 'var(--color-text)' : 'var(--color-text-muted)'}}
               >
                 <BookOpen size={14} style={{ flexShrink: 0 }} />
                 {inspection
@@ -879,8 +866,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
             <div className="rounded-lg px-3 py-2.5 space-y-1.5"
               style={{
                 backgroundColor: 'rgba(107, 164, 220, 0.06)',
-                border: '1px solid rgba(107, 164, 220, 0.15)',
-              }}>
+                border: '1px solid rgba(107, 164, 220, 0.15)'}}>
               <div className="flex items-center gap-1.5">
                 <Zap size={13} style={{ color: 'var(--color-accent)' }} />
                 <span className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>
@@ -918,7 +904,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
               || (purpose === 'author-manuscript' && (!authorPreview || authorPreview.classification === 'conflict'))
               || (purpose === 'reference' && (
                 !selectionPreparation
-                || currentProject?.sessionLease !== selectionProjectLeaseId
+                || currentProject?.id !== selectionProjectId
               ))
               || !currentProject
             }

@@ -12,7 +12,6 @@ import { PostProcessStatusPanel } from './PostProcessStatusPanel'
 const PROJECT_PATH = 'C:\\novels\\post-process-status'
 const PROJECT_SESSION = Object.freeze({
   projectId: 'post-process-status-project',
-  leaseId: 'post-process-status-lease',
   projectPath: PROJECT_PATH,
 })
 
@@ -28,7 +27,6 @@ let invoke: ReturnType<typeof vi.fn>
 function project(): ProjectData {
   return {
     id: PROJECT_SESSION.projectId,
-    sessionLease: PROJECT_SESSION.leaseId,
     name: '后处理状态测试项目',
     path: PROJECT_PATH,
     novelConfig: {

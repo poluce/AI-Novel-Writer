@@ -23,7 +23,6 @@ let storedCandidate: RecoveryCandidate
 const projectPath = 'C:\\novels\\recovery-project'
 const session = {
   projectId: 'recovery-project',
-  leaseId: 'recovery-lease',
   projectPath,
 }
 
@@ -61,7 +60,6 @@ beforeEach(() => {
       id: session.projectId,
       name: 'Recovery project',
       path: projectPath,
-      sessionLease: session.leaseId,
       novelConfig: {},
     } as never,
   })
@@ -148,7 +146,6 @@ describe('AI output recovery candidates', () => {
         savedContent: '林岚推开驾驶室的门。',
         dirty: false,
         projectKey: projectPath,
-        projectSessionLease: session.leaseId,
       }),
     ])
     expect(container?.textContent).not.toContain('林岚推开驾驶室的门。')

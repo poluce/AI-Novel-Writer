@@ -128,14 +128,10 @@ describe('ProjectAccessService project session seam', () => {
     })
   })
 
-  it('issues a new lease when the same Windows root is reopened and rejects the old lease', () => {
+  it('keeps the same project identity when the same Windows root is reopened', () => {
     const root = makeProjectRoot()
     const access = new ProjectAccessService({
       homePath: path.join(os.tmpdir(), 'not-the-project-home'),
-      newLeaseId: (() => {
-        let next = 0
-        return () => `lease-${++next}`
-      })(),
     })
 
     const first = access.beginSession(trustedProject(access, root))
@@ -145,19 +141,13 @@ describe('ProjectAccessService project session seam', () => {
 
     expect(reopened.projectId).toBe(first.projectId)
     expect(reopened.rootPath).toBe(first.rootPath)
-    expect(reopened.leaseId).not.toBe(first.leaseId)
-    expect(() => access.assertCurrentSession(first)).toThrow('项目会话已失效')
-    expect(access.assertCurrentSession(reopened)).toEqual(reopened)
+    expect(access.assertCurrentSession(first)).toEqual(reopened)
   })
 
-  it('captures an immutable current-lease snapshot without exposing the live lease object', () => {
+  it('captures an immutable current-session snapshot without exposing the live object', () => {
     const root = makeProjectRoot()
     const access = new ProjectAccessService({
       homePath: path.join(os.tmpdir(), 'not-the-project-home'),
-      newLeaseId: (() => {
-        let next = 0
-        return () => `lease-${++next}`
-      })(),
     })
 
     const first = access.beginSession(trustedProject(access, root))
@@ -167,39 +157,30 @@ describe('ProjectAccessService project session seam', () => {
     expect(snapshot).toEqual(first)
     expect(snapshot).not.toBe(first)
     expect(Object.isFrozen(snapshot)).toBe(true)
-    expect(snapshot?.leaseId).toBe('lease-1')
-    expect(reopened.leaseId).toBe('lease-2')
-    expect(() => access.assertCurrentSession(snapshot!)).toThrow('项目会话已失效')
+    expect(access.assertCurrentSession(snapshot!)).toEqual(reopened)
   })
 
-  it('accepts only the active lease bound to the active canonical project root', () => {
+  it('accepts only the active project bound to the active canonical root', () => {
     const root = makeProjectRoot()
     const otherRoot = makeProjectRoot()
     const access = new ProjectAccessService({
       homePath: path.join(os.tmpdir(), 'not-the-project-home'),
-      newLeaseId: (() => {
-        let next = 0
-        return () => `lease-${++next}`
-      })(),
     })
-    const oldLease = access.beginSession(trustedProject(access, root))
-    const activeLease = access.beginSession(trustedProject(access, root))
+    const first = access.beginSession(trustedProject(access, root))
+    const active = access.beginSession(trustedProject(access, otherRoot))
 
     expect(() => access.assertCurrentProjectContext({
-      projectId: oldLease.projectId,
-      leaseId: oldLease.leaseId,
+      projectId: first.projectId,
       projectPath: root,
-    }, root)).toThrow('项目会话已失效')
+    }, otherRoot)).toThrow('项目会话根目录不匹配')
     expect(access.assertCurrentProjectContext({
-      projectId: activeLease.projectId,
-      leaseId: activeLease.leaseId,
-      projectPath: process.platform === 'win32' ? root.toLocaleUpperCase('en-US') : root,
-    }, root)).toEqual(activeLease)
+      projectId: active.projectId,
+      projectPath: process.platform === 'win32' ? otherRoot.toLocaleUpperCase('en-US') : otherRoot,
+    }, otherRoot)).toEqual(active)
     expect(() => access.assertCurrentProjectContext({
-      projectId: activeLease.projectId,
-      leaseId: activeLease.leaseId,
-      projectPath: otherRoot,
-    }, root)).toThrow('项目会话根目录不匹配')
+      projectId: active.projectId,
+      projectPath: root,
+    }, otherRoot)).toThrow('项目会话根目录不匹配')
   })
 
   it('creates a stable manifest before a new directory can be probed as a project', () => {
@@ -226,10 +207,6 @@ describe('ProjectAccessService project session seam', () => {
     temporaryRoots.push(parent)
     const access = new ProjectAccessService({
       homePath: path.join(os.tmpdir(), 'not-the-project-home'),
-      newLeaseId: (() => {
-        let next = 0
-        return () => `lease-${++next}`
-      })(),
     })
 
     const created = access.createProject(parent, '可重开小说')
@@ -240,9 +217,8 @@ describe('ProjectAccessService project session seam', () => {
     expect(reopened).toMatchObject({
       projectId: created.projectId,
       rootPath: created.rootPath,
-      leaseId: 'lease-2',
     })
-    expect(() => access.assertCurrentSession(firstSession)).toThrow('项目会话已失效')
+    expect(access.assertCurrentSession(firstSession)).toEqual(reopened)
   })
 
   it('identifies an ordinary parent directory as a selection error without trusting it', () => {
@@ -338,7 +314,6 @@ describe('ProjectAccessService project session seam', () => {
     temporaryRoots.push(outside)
     const access = new ProjectAccessService({
       homePath: home,
-      newLeaseId: () => 'active-lease',
     })
     const lease = access.beginSession(trustedProject(access, root))
 
@@ -351,7 +326,7 @@ describe('ProjectAccessService project session seam', () => {
       .toThrow('磁盘根目录')
     expect(() => access.authorizeDeletion(lease, home))
       .toThrow('用户主目录')
-    expect(() => access.authorizeDeletion({ ...lease, leaseId: 'old-lease' }, root))
+    expect(() => access.authorizeDeletion({ projectId: 'not-this-project' }, root))
       .toThrow('项目会话已失效')
   })
 

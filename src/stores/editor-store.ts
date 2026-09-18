@@ -38,8 +38,6 @@ export interface EditorTab {
   contentRevision?: number
   /** 伪协议资源所属项目；用于隔离同一路径在不同项目中的编辑草稿。 */
   projectKey?: string
-  /** 打开/定稿时冻结的项目会话租约；同一路径重开不能复用旧 tab 的完成事件。 */
-  projectSessionLease?: string
   /** 已提交定稿的稳定身份，供发布重试和冲突提示关联。 */
   finalizationId?: string
   /** 实体稿发布投影状态；pending 表示数据库已定稿但文件待发布。 */
@@ -112,8 +110,7 @@ interface EditorState {
 const BACKGROUND_LEDGER_BY_EDITOR_TYPE: Partial<Record<EditorTab['type'], string>> = {
   character: 'character-editor-drafts',
   config: 'config',
-  'chapter-card': 'chapter-card-editor',
-}
+  'chapter-card': 'chapter-card-editor'}
 const PROJECT_SCOPED_BUILTIN_TYPES = new Set<EditorTab['type']>([
   'character',
   'config',
@@ -200,8 +197,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   openFile: (tab) => {
     const projectScopedTab = {
       ...tab,
-      id: createProjectScopedEditorTabId(tab.id, tab.type, tab.projectKey),
-    }
+      id: createProjectScopedEditorTabId(tab.id, tab.type, tab.projectKey)}
     const tabWithDraftState = hasBackgroundProjectDraft(
       useEditorDraftLedgerStore.getState().draftLedgers,
       projectScopedTab,
@@ -224,8 +220,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       if (tabWithDraftState.type === 'diff' || tabWithDraftState.type === 'review-report') {
         set((s) => ({
           tabs: s.tabs.map((t) => t.id === existing.id ? { ...t, ...tabWithDraftState, id: tabWithDraftState.id } : t),
-          activeTabId: tabWithDraftState.id,
-        }))
+          activeTabId: tabWithDraftState.id}))
       } else {
         // 其他类型 Tab：已打开，更新名称并直接激活
         set((s) => ({
@@ -246,12 +241,9 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
                   ? {}
                   : {
                       narrativeThreadView: tabWithDraftState.narrativeThreadView,
-                      narrativeThreadViewRequest: (t.narrativeThreadViewRequest ?? 0) + 1,
-                    }),
-              }
+                      narrativeThreadViewRequest: (t.narrativeThreadViewRequest ?? 0) + 1})}
             : t),
-          activeTabId: existing.id,
-        }))
+          activeTabId: existing.id}))
       }
     } else {
       // 新开 Tab
@@ -263,8 +255,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
             ? { ...tabWithDraftState, narrativeThreadViewRequest: 1 }
             : tabWithDraftState,
         ],
-        activeTabId: tabWithDraftState.id,
-      }))
+        activeTabId: tabWithDraftState.id}))
     }
   },
 
@@ -274,8 +265,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         tab.type === type && tab.projectKey === projectKey
           ? { ...tab, dirty }
           : tab
-      )),
-    }))
+      ))}))
   },
 
   closeTab: (tabId) => {
@@ -289,8 +279,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       tabs: newTabs,
       activeTabId: activeTabId === tabId
         ? (newTabs.length > 0 ? newTabs[newTabs.length - 1].id : null)
-        : activeTabId,
-    })
+        : activeTabId})
   },
 
   setActiveTab: (tabId) => {
@@ -304,10 +293,8 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
             ...t,
             content,
             contentRevision: (t.contentRevision ?? 0) + 1,
-            dirty: true,
-          }
-        : t),
-    }))
+            dirty: true}
+        : t)}))
   },
 
   // 静默刷新内容（不改变 dirty 标记，用于 AI 生成后刷新、打开文件同步等场景）
@@ -319,10 +306,8 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
             content,
             contentRevision: content === t.content
               ? (t.contentRevision ?? 0)
-              : (t.contentRevision ?? 0) + 1,
-          }
-        : t),
-    }))
+              : (t.contentRevision ?? 0) + 1}
+        : t)}))
   },
 
   // 标记 Tab 已保存 —— 清除 dirty 标记，使标题栏警示灯和 Tab 圆点消失
@@ -332,10 +317,8 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         ? {
             ...t,
             dirty: false,
-            ...(savedContent === undefined ? {} : { savedContent }),
-          }
-        : t),
-    }))
+            ...(savedContent === undefined ? {} : { savedContent })}
+        : t)}))
   },
 
   settleTabSave: (tabId, snapshot) => {
@@ -349,10 +332,8 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         return {
           ...tab,
           savedContent: snapshot.content,
-          dirty: !snapshotStillCurrent,
-        }
-      }),
-    }))
+          dirty: !snapshotStillCurrent}
+      })}))
   },
 
   settleMergedRevision: (tabId, snapshot, mergedContent) => {
@@ -367,18 +348,15 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
           return {
             ...tab,
             savedContent: mergedContent,
-            dirty: true,
-          }
+            dirty: true}
         }
         return {
           ...tab,
           content: mergedContent,
           savedContent: mergedContent,
           contentRevision: (tab.contentRevision ?? 0) + (tab.content === mergedContent ? 0 : 1),
-          dirty: false,
-        }
-      }),
-    }))
+          dirty: false}
+      })}))
   },
 
   clearTabs: () => {
@@ -398,8 +376,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         : (tabs.at(-1)?.id ?? null)
       return { tabs, activeTabId }
     })
-  },
-}))
+  }}))
 
 export async function saveDirtyEditorChangesForExit(currentProjectKey: string | undefined): Promise<void> {
   const initial = useEditorStore.getState()

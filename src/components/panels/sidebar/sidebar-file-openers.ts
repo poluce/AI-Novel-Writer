@@ -1,8 +1,7 @@
 import type {
   DatabaseChannels,
   ProjectData,
-  ProjectSessionContext,
-} from '../../../shared/ipc-channels'
+  ProjectSessionContext} from '../../../shared/ipc-channels'
 import type { DraftStatus } from '../../../shared/draft-status'
 import { ipc } from '../../../services/ipc-client'
 import { useEditorStore } from '../../../stores/editor-store'
@@ -11,14 +10,12 @@ import { useLocaleStore } from '../../../stores/locale-store'
 import { toast } from '../../ui/Toast'
 import {
   captureProjectSession,
-  isProjectSessionCurrent,
-} from '../../project-session-gate'
+  isProjectSessionCurrent} from '../../project-session-gate'
 import {
   createProjectArchTabId,
-  shouldSyncProjectArchTab,
-} from '../../editor/arch-file-refresh-policy'
+  shouldSyncProjectArchTab} from '../../editor/arch-file-refresh-policy'
 
-type SessionProject = Pick<ProjectData, 'id' | 'path' | 'sessionLease'>
+type SessionProject = Pick<ProjectData, 'id' | 'path'>
 
 /**
  * Freeze the complete project identity before awaiting a destructive confirmation.
@@ -93,8 +90,7 @@ export async function openArchFile(filePath: string, name: string): Promise<void
       filePath,
       content,
       savedContent: content,
-      projectKey,
-    })
+      projectKey})
   }
 }
 
@@ -115,8 +111,7 @@ export function openBuiltinEditor(
       ? { narrativeThreadView: narrativeThreadView ?? 'plans' }
       : {}),
     ...(type === 'chapter-card' && chapterNumber !== undefined ? { chapterNumber } : {}),
-    ...(projectKey ? { projectKey } : {}),
-  })
+    ...(projectKey ? { projectKey } : {})})
 }
 
 /** 打开章节文件 */
@@ -169,9 +164,7 @@ export async function openChapterFile(filePath: string, name: string): Promise<v
       ? {
           draftId: draftMeta.id,
           chapterNumber: draftMeta.chapterNumber,
-          draftStatus: draftMeta.status as DraftStatus,
-        }
+          draftStatus: draftMeta.status as DraftStatus}
       : {}),
-    projectKey,
-  })
+    projectKey})
 }

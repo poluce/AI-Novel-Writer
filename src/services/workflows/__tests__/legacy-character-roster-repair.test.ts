@@ -9,7 +9,6 @@ import { migrateLegacyCharacterRoster } from '../architecture-workflow'
 const projectPath = 'C:\\novels\\legacy-roster'
 const projectSession = {
   projectId: 'legacy-project',
-  leaseId: 'legacy-lease',
   projectPath,
 }
 
@@ -74,7 +73,6 @@ const readyRoster: CharacterRosterSnapshot = {
 function activeProject() {
   return {
     id: projectSession.projectId,
-    sessionLease: projectSession.leaseId,
     name: '旧项目',
     path: projectPath,
     novelConfig: { genre: '科幻' },
@@ -86,7 +84,6 @@ function activeProject() {
 
 function installVela(invoke: (channel: string, ...args: unknown[]) => unknown) {
   const lease = {
-    leaseId: 'legacy-model-lease',
     modelId: 'legacy-repair-model',
     provider: 'custom',
     protocol: 'openai',
@@ -323,7 +320,6 @@ describe('legacy character roster repair public workflow seam', () => {
       currentProject: {
         ...activeProject(),
         path: 'C:\\novels\\other-project',
-        sessionLease: 'other-lease',
       } as never,
     })
     finishGeneration?.()

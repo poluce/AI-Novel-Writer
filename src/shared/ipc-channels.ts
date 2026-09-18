@@ -7,8 +7,7 @@ import type {
   CreativeStrategy,
   GenerationReasoningStage,
   ReasoningEffort,
-  ReasoningOverride,
-} from './reasoning-types'
+  ReasoningOverride} from './reasoning-types'
 import type { SubmitToolName } from './submit-contract'
 import type { EmbeddingOptions } from './embedding-options'
 import type { ModelCapabilities } from './provider-presets'
@@ -23,33 +22,28 @@ import type { AgentTurnRefusalCode } from './agent-turn-refusal'
 import type {
   BlueprintCharacterSyncOperation,
   BlueprintRangeCommitReceipt,
-  BlueprintRangeCommitRequest,
-} from './contracts/blueprint-commit'
+  BlueprintRangeCommitRequest} from './contracts/blueprint-commit'
 import type { CharacterData } from './contracts/character'
 import type { DraftFull, DraftMeta, ExpectedDraftSource } from './contracts/draft'
 import type { BlueprintData } from './blueprint'
 import type {
   FinalizedDraftExportAuthorityReceipt,
-  FinalizedDraftExportSnapshot,
-} from './contracts/finalization'
+  FinalizedDraftExportSnapshot} from './contracts/finalization'
 import type { PostProcessRunData, PostProcessStepData } from './contracts/post-process'
 import type {
   ProjectCoreData,
-  ProjectCoreSynopsisCommitRequest,
-} from './contracts/project-core'
+  ProjectCoreSynopsisCommitRequest} from './contracts/project-core'
 import type { ReviewFull, ReviewMeta } from './contracts/review'
 import type { RevisionFull, RevisionMeta } from './contracts/revision'
 import type { DraftAnnotation } from './draft-annotation'
 import type {
   RecoveryCandidate,
-  RecoveryCandidateRecordInput,
-} from './recovery-candidate'
+  RecoveryCandidateRecordInput} from './recovery-candidate'
 import type {
   FinalizedContinuityProjection,
   FinalizedSourceReadResult,
   SaveFinalizedCharacterStateCandidatesRequest,
-  SaveFinalizedContinuityRequest,
-} from './finalized-continuity'
+  SaveFinalizedContinuityRequest} from './finalized-continuity'
 import type { DraftSourceDependency } from './draft-source-dependency'
 import type { ConsistencyExemption } from './consistency-preflight'
 import type {
@@ -58,27 +52,23 @@ import type {
   NarrativeThreadChapterContext,
   NarrativeThreadPlanInput,
   NarrativeThreadPlanRecord,
-  NarrativeThreadView,
-} from './narrative-thread'
+  NarrativeThreadView} from './narrative-thread'
 import type { PlotTreeSnapshot, PlotTreeSourceBundle } from './plot-tree'
 import type {
   UpdateActionResponse,
   UpdateCheckResponse,
   UpdatePreferences,
   UpdateReminderDelay,
-  UpdateState,
-} from './update-types'
+  UpdateState} from './update-types'
 import type {
   SkinCommand,
   SkinExecuteResponse,
   SkinReadCustomAssetResponse,
-  SkinState,
-} from './skin-types'
+  SkinState} from './skin-types'
 import type {
   ChapterDeletionOperation,
   ChapterDeletionResult,
-  DeleteFinalizedChapterRequest,
-} from './chapter-deletion'
+  DeleteFinalizedChapterRequest} from './chapter-deletion'
 import type {
   ImportRunChapterSnapshot,
   ImportRunEffectCommitResult,
@@ -94,8 +84,7 @@ import type {
   ImportRunPrepareEffectReceiptRequest,
   ImportRunSnapshot,
   ImportRunStartResult,
-  ImportRunStage,
-} from './import-run'
+  ImportRunStage} from './import-run'
 
 // ===== 全局配置 =====
 export interface ConfigChannels {
@@ -257,12 +246,10 @@ export interface AppFailure {
 export type AppResult<T> = T | AppFailure
 
 /**
- * 一次打开项目时由主进程签发并冻结的跨进程会话身份。
- * projectPath 仅用于主进程的规范根目录校验，不能单独授予访问权限。
+ * 当前打开项目的跨进程身份。认项目清单里的 projectId，路径只做根目录校验。
  */
 export interface ProjectSessionContext {
   projectId: string
-  leaseId: string
   projectPath: string
 }
 
@@ -334,7 +321,7 @@ export interface ProjectChannels {
     return: { success: boolean; error?: string }
   }
   'project:delete': {
-    args: [projectPath: string, projectId: string, sessionLease: string]
+    args: [projectPath: string, projectId: string]
     return: {
       success: boolean
       directoryDeleted: boolean
@@ -520,8 +507,6 @@ export interface ProjectData {
   id: string
   name: string
   path: string
-  /** 主进程签发；仅与 id 组合为会话凭据，path 不是授权。 */
-  sessionLease?: string
   novelConfig: NovelConfig
   characterStates: string
   createdAt: string
@@ -754,21 +739,17 @@ export type {
   ReviewFull,
   ReviewMeta,
   RevisionFull,
-  RevisionMeta,
-}
+  RevisionMeta}
 import type {
   CharacterRosterCommitReceipt,
   CharacterRosterCommitRequest,
-  CharacterRosterSnapshot,
-} from './character-roster'
+  CharacterRosterSnapshot} from './character-roster'
 import type {
   AuthorManuscriptImportPreview,
-  AuthoritativeChapterSequence,
-} from './author-manuscript-import'
+  AuthoritativeChapterSequence} from './author-manuscript-import'
 import type {
   ImportGlobalFactsReceipt,
-  ImportGlobalFactsRequest,
-} from './import-global-facts'
+  ImportGlobalFactsRequest} from './import-global-facts'
 
 // ===== 数据库操作 =====
 export interface DatabaseChannels {

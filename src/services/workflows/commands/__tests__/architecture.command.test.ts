@@ -187,7 +187,7 @@ const readyRoster: CharacterRosterSnapshot = {
 const context: WorkflowContext = {
   runId: 'architecture-config-run',
   projectPath: projectAPath,
-  projectSession: { projectId: 'main', leaseId: 'lease-main', projectPath: projectAPath },
+  projectSession: { projectId: 'main', projectPath: projectAPath },
   writingLanguage: 'zh-CN',
   uiLocale: 'zh-CN',
   data: {},
@@ -199,7 +199,6 @@ function project(path: string) {
     id: 'main',
     name: path,
     path,
-    sessionLease: `lease-${path === projectAPath ? 'main' : 'other'}`,
     novelConfig: {},
   }
 }

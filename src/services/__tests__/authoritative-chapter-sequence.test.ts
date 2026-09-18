@@ -9,7 +9,6 @@ import {
 const PROJECT_PATH = 'C:\\novels\\authoritative-sequence'
 const PROJECT_SESSION: ProjectSessionContext = {
   projectId: 'authoritative-sequence',
-  leaseId: 'lease-authoritative-sequence',
   projectPath: PROJECT_PATH,
 }
 

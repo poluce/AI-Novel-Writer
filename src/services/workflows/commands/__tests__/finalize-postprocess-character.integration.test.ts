@@ -260,7 +260,7 @@ beforeEach(() => {
   workflowContext = {
     runId: 'finalize-character-run',
     projectPath,
-    projectSession: { projectId: 'test', leaseId: 'lease-test', projectPath },
+    projectSession: { projectId: 'test', projectPath },
     writingLanguage: 'en-US',
     uiLocale: 'en-US',
     data: {},
@@ -269,7 +269,6 @@ beforeEach(() => {
   useProjectStore.setState({
     currentProject: {
       id: 'test',
-      sessionLease: 'lease-test',
       name: 'Test',
       path: projectPath,
       novelConfig: { writingLanguage: 'en-US', wordsPerChapter: 3000 },

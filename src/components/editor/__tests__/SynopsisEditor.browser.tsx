@@ -15,7 +15,6 @@ import SynopsisEditor from '../SynopsisEditor'
 const PROJECT_PATH = 'C:\\novels\\synopsis-editor'
 const PROJECT_SESSION = {
   projectId: 'synopsis-editor',
-  leaseId: 'lease-synopsis-editor',
   projectPath: PROJECT_PATH,
 }
 
@@ -49,7 +48,6 @@ const OUTLINE = [
 
 const project = {
   id: PROJECT_SESSION.projectId,
-  sessionLease: PROJECT_SESSION.leaseId,
   name: 'Synopsis editor',
   path: PROJECT_PATH,
   novelConfig: { totalChapters: 100, writingLanguage: 'zh-CN' },

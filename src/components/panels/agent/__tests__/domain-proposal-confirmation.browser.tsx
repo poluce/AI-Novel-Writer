@@ -13,19 +13,16 @@ const resolveToolConfirmation = vi.fn()
 const cancelGeneration = vi.fn()
 const invoke = vi.fn()
 
-const session = { projectId: 'A', leaseId: 'lease-A', projectPath: 'C:\\novels\\A' }
+const session = { projectId: 'A', projectPath: 'C:\\novels\\A' }
 const project = {
-  id: 'A', sessionLease: 'lease-A', path: session.projectPath, name: 'A', characterStates: '', createdAt: '', updatedAt: '',
+  id: 'A', path: session.projectPath, name: 'A', characterStates: '', createdAt: '', updatedAt: '',
   novelConfig: {
     genre: '奇幻', subGenre: '', targetAudience: '青年', totalChapters: 10, wordsPerChapter: 3000,
     plotStructure: 'three_act', narrativePOV: 'third_limited', coreOutline: '旧大纲', worldSetting: '',
-    goldenFinger: '', protagonistProfile: '', globalGuidance: '',
-  },
-}
+    goldenFinger: '', protagonistProfile: '', globalGuidance: ''}}
 const blueprint = {
   chapterNumber: 2, title: '旧标题', role: '发展', purpose: '推进调查', keyEvents: '找到线索',
-  characters: ['林舟'], suspenseHook: '谁在说谎', userGuidance: '', notes: '', notesUpdatedAt: '',
-}
+  characters: ['林舟'], suspenseHook: '谁在说谎', userGuidance: '', notes: '', notesUpdatedAt: ''}
 
 let container: HTMLDivElement
 let root: Root
@@ -50,9 +47,7 @@ beforeEach(() => {
     value: {
       invoke: invoke,
       on: vi.fn(), once: vi.fn(), send: vi.fn(),
-      setZoomLevel: vi.fn(), setZoomFactor: vi.fn(), getZoomLevel: vi.fn(),
-    },
-  })
+      setZoomLevel: vi.fn(), setZoomFactor: vi.fn(), getZoomLevel: vi.fn()}})
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
@@ -70,12 +65,10 @@ describe('Agent domain proposal confirmation', () => {
     await act(async () => root.render(<>
       <ConfirmCard toolCall={{
         id: 'write-1', toolName: 'write', arguments: { path: 'chapter.md' },
-        status: 'waiting_confirm', source: 'builtin', projectSession: session,
-      }} />
+        status: 'waiting_confirm', source: 'builtin', projectSession: session}} />
       <ArtifactCard artifact={{
         type: 'file_created', name: 'chapter.md', path: 'C:/novels/A/chapter.md',
-        projectPath: session.projectPath, projectSession: session,
-      }} />
+        projectPath: session.projectPath, projectSession: session}} />
     </>))
 
     await expect.element(page.getByText('Will write file: chapter.md')).toBeVisible()
@@ -88,13 +81,11 @@ describe('Agent domain proposal confirmation', () => {
     await act(async () => root.render(<>
       <ConfirmCard toolCall={{
         id: 'bash-1', toolName: 'bash', arguments: { command: 'rm -rf build' },
-        status: 'waiting_confirm', source: 'builtin', projectSession: session,
-      }} />
+        status: 'waiting_confirm', source: 'builtin', projectSession: session}} />
       <ConfirmCard toolCall={{
         id: 'edit-1', toolName: 'edit',
         arguments: { path: 'drafts/ch1.md', edits: [{ oldText: '旧句子', newText: '新句子' }] },
-        status: 'waiting_confirm', source: 'builtin', projectSession: session,
-      }} />
+        status: 'waiting_confirm', source: 'builtin', projectSession: session}} />
     </>))
 
     // 确认卡必须把命令原文与改动目标摆出来，用户才可能做出判断。
@@ -110,8 +101,7 @@ describe('Agent domain proposal confirmation', () => {
     useLocaleStore.setState({ locale: 'en-US', initialized: true })
     await act(async () => root.render(<ConfirmCard toolCall={{
       id: 'config-1', toolName: 'novel_config', arguments: { changes: { genre: 'Science fiction' } },
-      status: 'waiting_confirm', source: 'builtin', projectSession: session,
-    }} />))
+      status: 'waiting_confirm', source: 'builtin', projectSession: session}} />))
     await flushImpactReads()
 
     await expect.element(page.getByText('Genre', { exact: true })).toBeVisible()
@@ -127,13 +117,11 @@ describe('Agent domain proposal confirmation', () => {
     useLocaleStore.setState({ locale: 'zh-CN', initialized: true })
     invoke.mockResolvedValue({
       chapterNumber: 2, title: '旧标题', role: '发展', purpose: '推进调查', keyEvents: '找到线索',
-      characters: ['林舟'], suspenseHook: '谁在说谎', userGuidance: '', notes: '', notesUpdatedAt: '',
-    })
+      characters: ['林舟'], suspenseHook: '谁在说谎', userGuidance: '', notes: '', notesUpdatedAt: ''})
     await act(async () => root.render(<ConfirmCard toolCall={{
       id: 'blueprint-1', toolName: 'propose_chapter_blueprint',
       arguments: { chapter_number: 2, changes: { title: '新标题' } },
-      status: 'waiting_confirm', source: 'builtin', projectSession: session,
-    }} />))
+      status: 'waiting_confirm', source: 'builtin', projectSession: session}} />))
     await flushImpactReads()
 
     await expect.element(page.getByText('章节标题')).toBeVisible()
@@ -144,13 +132,32 @@ describe('Agent domain proposal confirmation', () => {
     expect(invoke).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps approval when the same book was reopened with a new lease', async () => {
+    useLocaleStore.setState({ locale: 'en-US', initialized: true })
+    useProjectStore.setState({ currentProject: { ...project} as never })
+    await act(async () => root.render(<ConfirmCard toolCall={{
+      id: 'reopen-1', toolName: 'novel_config', arguments: { changes: { genre: 'Mystery' } },
+      status: 'waiting_confirm', source: 'builtin', projectSession: session}} />))
+    await flushImpactReads()
+    await expect.element(page.getByText('Current')).toBeVisible()
+    await expect.element(page.getByRole('button', { name: 'Approve' })).toBeEnabled()
+  })
+
+  it('keeps approval when the card has no session of its own', async () => {
+    useLocaleStore.setState({ locale: 'en-US', initialized: true })
+    await act(async () => root.render(<ConfirmCard toolCall={{
+      id: 'nosession-1', toolName: 'novel_config', arguments: { changes: { genre: 'Mystery' } },
+      status: 'waiting_confirm', source: 'builtin'}} />))
+    await flushImpactReads()
+    await expect.element(page.getByRole('button', { name: 'Approve' })).toBeEnabled()
+  })
+
   it('disables approval after a project switch', async () => {
     useLocaleStore.setState({ locale: 'en-US', initialized: true })
-    useProjectStore.setState({ currentProject: { ...project, id: 'B', sessionLease: 'lease-B', path: 'C:\\novels\\B' } as never })
+    useProjectStore.setState({ currentProject: { ...project, id: 'B', path: 'C:\\novels\\B' } as never })
     await act(async () => root.render(<ConfirmCard toolCall={{
       id: 'stale-1', toolName: 'novel_config', arguments: { changes: { genre: 'Mystery' } },
-      status: 'waiting_confirm', source: 'builtin', projectSession: session,
-    }} />))
+      status: 'waiting_confirm', source: 'builtin', projectSession: session}} />))
     await flushImpactReads()
     await expect.element(page.getByText(/proposal is stale/)).toBeVisible()
     await expect.element(page.getByRole('button', { name: 'Approve' })).toBeDisabled()
@@ -160,8 +167,7 @@ describe('Agent domain proposal confirmation', () => {
     useLocaleStore.setState({ locale: 'en-US', initialized: true })
     await act(async () => root.render(<ConfirmCard toolCall={{
       id: 'cancel-1', toolName: 'novel_config', arguments: { changes: { genre: 'Mystery' } },
-      status: 'waiting_confirm', source: 'builtin', projectSession: session,
-    }} />))
+      status: 'waiting_confirm', source: 'builtin', projectSession: session}} />))
     await flushImpactReads()
     await page.getByRole('button', { name: 'Cancel this Agent task' }).click()
     expect(cancelGeneration).toHaveBeenCalledOnce()
@@ -186,13 +192,11 @@ describe('Agent domain proposal confirmation', () => {
         {
           id: 7, title: 'The blue key', type: 'foreshadowing', status: 'progressing',
           targetStartChapter: 2, targetEndChapter: 6, authorIntent: 'Reveal the witness later',
-          dormantChapters: 0, overdue: false, events: [], createdAt: '', updatedAt: '',
-        },
+          dormantChapters: 0, overdue: false, events: [], createdAt: '', updatedAt: ''},
         {
           id: 8, title: 'Closed thread', type: 'foreshadowing', status: 'resolved',
           targetStartChapter: 1, targetEndChapter: 3, authorIntent: 'Already resolved',
-          dormantChapters: 0, overdue: false, events: [], createdAt: '', updatedAt: '',
-        },
+          dormantChapters: 0, overdue: false, events: [], createdAt: '', updatedAt: ''},
       ]
       throw new Error(`unexpected channel ${channel}`)
     })
@@ -205,10 +209,8 @@ describe('Agent domain proposal confirmation', () => {
           { chapter_number: 2, changes: { purpose: 'Plant the blue-key clue' } },
           { chapter_number: 3, changes: { purpose: 'Must remain finalized' } },
           { chapter_number: 4, changes: { purpose: 'Must remain a work in progress' } },
-        ],
-      },
-      status: 'waiting_confirm', source: 'builtin', projectSession: session,
-    }} />))
+        ]},
+      status: 'waiting_confirm', source: 'builtin', projectSession: session}} />))
     await flushImpactReads()
 
     await expect.element(page.getByText('Potential impact')).toBeVisible()
@@ -226,9 +228,7 @@ describe('Agent domain proposal confirmation', () => {
     expect(resolveToolConfirmation).toHaveBeenCalledWith('impact-1', true, {
       blueprintProposals: [{
         name: 'propose_chapter_blueprint',
-        arguments: { chapter_number: 2, changes: { purpose: 'Plant the blue-key clue' } },
-      }],
-    })
+        arguments: { chapter_number: 2, changes: { purpose: 'Plant the blue-key clue' } }}]})
     expect(invoke.mock.calls.map(([channel]) => channel)).toEqual(expect.arrayContaining([
       'db:blueprint-get-all', 'db:draft-list-all', 'db:narrative-thread-list',
     ]))
@@ -247,10 +247,8 @@ describe('Agent domain proposal confirmation', () => {
       id: 'impact-cancel', toolName: 'novel_config',
       arguments: {
         changes: { worldSetting: '城市禁止公开使用魔法' },
-        blueprint_changes: [{ chapter_number: 2, changes: { keyEvents: '主角隐藏魔法痕迹' } }],
-      },
-      status: 'waiting_confirm', source: 'builtin', projectSession: session,
-    }} />))
+        blueprint_changes: [{ chapter_number: 2, changes: { keyEvents: '主角隐藏魔法痕迹' } }]},
+      status: 'waiting_confirm', source: 'builtin', projectSession: session}} />))
     await flushImpactReads()
 
     await expect.element(page.getByText('潜在影响')).toBeVisible()
@@ -269,12 +267,10 @@ describe('Agent domain proposal confirmation', () => {
       arguments: {
         chapter_number: 1,
         old_text: '原正文内容将被替换',
-        new_text: '这是修改后的全新句子',
-      },
+        new_text: '这是修改后的全新句子'},
       status: 'waiting_confirm',
       source: 'builtin',
-      projectSession: session,
-    }} />))
+      projectSession: session}} />))
 
     await expect.element(page.getByText('第 1 章草稿修改对比')).toBeVisible()
     await expect.element(page.getByText('将被替换的原文：')).toBeVisible()

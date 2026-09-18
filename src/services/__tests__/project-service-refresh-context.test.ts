@@ -37,7 +37,6 @@ beforeEach(() => {
       id: 'B',
       name: 'B',
       path: projectBPath,
-      sessionLease: 'lease-B',
       novelConfig: {},
     } as never,
   })
@@ -67,7 +66,7 @@ describe('ProjectService REFRESH_RESOURCE project identity', () => {
     globalEventBus.emit('REFRESH_RESOURCE', {
       resources: ['all'],
       projectPath: projectBPath,
-      projectSession: { projectId: 'B', leaseId: 'lease-old', projectPath: projectBPath },
+      projectSession: { projectId: 'B', projectPath: projectBPath },
     })
     await Promise.resolve()
 
@@ -78,18 +77,18 @@ describe('ProjectService REFRESH_RESOURCE project identity', () => {
     globalEventBus.emit('REFRESH_RESOURCE', {
       resources: ['all'],
       projectPath: projectBPath,
-      projectSession: { projectId: 'B', leaseId: 'lease-B', projectPath: projectBPath },
+      projectSession: { projectId: 'B', projectPath: projectBPath },
     })
     await vi.waitFor(() => {
       expect(treeRefresh).toHaveBeenCalledWith(projectBPath, undefined, {
-        projectId: 'B', leaseId: 'lease-B', projectPath: projectBPath,
+        projectId: 'B', projectPath: projectBPath,
       })
     })
     expect(characterLoad).toHaveBeenCalledWith(projectBPath, {
-      projectId: 'B', leaseId: 'lease-B', projectPath: projectBPath,
+      projectId: 'B', projectPath: projectBPath,
     })
     expect(draftLoad).toHaveBeenCalledWith(projectBPath, {
-      projectId: 'B', leaseId: 'lease-B', projectPath: projectBPath,
+      projectId: 'B', projectPath: projectBPath,
     })
   })
 
@@ -104,7 +103,7 @@ describe('ProjectService REFRESH_RESOURCE project identity', () => {
     }))
     const changed = vi.fn()
     const unsubscribe = globalEventBus.on('PROJECT_CHANGED', changed)
-    const oldSession = { projectId: 'B', leaseId: 'lease-B', projectPath: projectBPath }
+    const oldSession = { projectId: 'B', projectPath: projectBPath }
 
     const opening = onProjectOpened(oldSession)
     await vi.waitFor(() => {
@@ -117,7 +116,6 @@ describe('ProjectService REFRESH_RESOURCE project identity', () => {
         id: 'B',
         name: 'B reopened',
         path: projectBPath,
-        sessionLease: 'lease-B-reopened',
         novelConfig: {},
       } as never,
     })
@@ -195,7 +193,6 @@ describe('ProjectService REFRESH_RESOURCE project identity', () => {
         chapterNumber: 2,
         draftStatus: 'draft',
         contentRevision: 5,
-        projectSessionLease: 'lease-B',
       }],
       activeTabId: 'draft-7',
     })
@@ -206,7 +203,7 @@ describe('ProjectService REFRESH_RESOURCE project identity', () => {
       chapterNumber: 2,
       chapterTitle: '第二章',
       projectPath: projectBPath,
-      projectSession: { projectId: 'B', leaseId: 'lease-B', projectPath: projectBPath },
+      projectSession: { projectId: 'B', projectPath: projectBPath },
       draftId: 7,
       finalizationId: 'finalization-7',
       contentHash: 'hash-7',
@@ -251,7 +248,6 @@ describe('ProjectService REFRESH_RESOURCE project identity', () => {
         chapterNumber: 2,
         draftStatus: 'draft',
         contentRevision: 6,
-        projectSessionLease: 'lease-B',
       }],
       activeTabId: 'draft-7',
     })
@@ -262,7 +258,7 @@ describe('ProjectService REFRESH_RESOURCE project identity', () => {
       chapterNumber: 2,
       chapterTitle: '第二章',
       projectPath: projectBPath,
-      projectSession: { projectId: 'B', leaseId: 'lease-B', projectPath: projectBPath },
+      projectSession: { projectId: 'B', projectPath: projectBPath },
       draftId: 7,
       finalizationId: 'finalization-7',
       contentHash: 'hash-7',
@@ -292,7 +288,7 @@ describe('ProjectService skill catalog lifecycle', () => {
   it('rescans skills after a project opens and after it closes', async () => {
     // 注册表只在会话第一次用到时加载一次；项目技能只在项目打开后才存在，
     // 所以开/关项目都必须重扫，否则界面助手会一直用着旧目录。
-    const session = { projectId: 'B', leaseId: 'lease-B', projectPath: projectBPath }
+    const session = { projectId: 'B', projectPath: projectBPath }
     await onProjectOpened(session)
     expect(mocks.reloadSkills).toHaveBeenCalled()
 

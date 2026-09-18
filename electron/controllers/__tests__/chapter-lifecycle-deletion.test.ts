@@ -26,7 +26,7 @@ import { registerChapterLifecycleController } from '../chapter-lifecycle-control
 describe('chapter lifecycle deletion IPC', () => {
   let parentDirectory: string
   let projectRoot: string
-  let projectSession: { projectId: string; leaseId: string; projectPath: string }
+  let projectSession: { projectId: string; projectPath: string }
   let draftId: number
   let targetFileName: string
 
@@ -39,7 +39,6 @@ describe('chapter lifecycle deletion IPC', () => {
     projectRoot = lease.rootPath
     projectSession = {
       projectId: lease.projectId,
-      leaseId: lease.leaseId,
       projectPath: lease.rootPath,
     }
     initProjectDatabase(projectRoot)
@@ -190,7 +189,6 @@ describe('chapter lifecycle deletion IPC', () => {
     const replacementLease = projectAccess.beginSession(reopened)
     projectSession = {
       projectId: replacementLease.projectId,
-      leaseId: replacementLease.leaseId,
       projectPath: replacementLease.rootPath,
     }
     initProjectDatabase(projectRoot)
@@ -291,7 +289,6 @@ describe('chapter lifecycle deletion IPC', () => {
     const replacementLease = projectAccess.beginSession(reopened)
     projectSession = {
       projectId: replacementLease.projectId,
-      leaseId: replacementLease.leaseId,
       projectPath: replacementLease.rootPath,
     }
 

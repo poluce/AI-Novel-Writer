@@ -18,9 +18,8 @@ import { useProjectStore } from '../../../../stores/project-store'
 
 const projectPath = 'C:\\novels\\same-project'
 
-const projectWithLease = (leaseId: string) => ({
+const projectWithLease = (_projectId = 'same-project-id') => ({
   id: 'same-project-id',
-  sessionLease: leaseId,
   name: 'Same project',
   path: projectPath,
   novelConfig: {},
@@ -42,7 +41,6 @@ beforeEach(() => {
   useProjectStore.setState({ currentProject: projectWithLease('lease-A') })
   setActiveProjectSessionContext({
     projectId: 'same-project-id',
-    leaseId: 'lease-A',
     projectPath,
   })
 })
@@ -100,7 +98,6 @@ describe('sidebar file openers keep the original project session', () => {
     useProjectStore.setState({ currentProject: projectWithLease('lease-B') })
     setActiveProjectSessionContext({
       projectId: 'same-project-id',
-      leaseId: 'lease-B',
       projectPath,
     })
     delayedRead.resolve({ success: true, content: 'stale content' })
@@ -120,7 +117,6 @@ describe('sidebar file openers keep the original project session', () => {
     useProjectStore.setState({ currentProject: projectWithLease('lease-B') })
     setActiveProjectSessionContext({
       projectId: 'same-project-id',
-      leaseId: 'lease-B',
       projectPath,
     })
     delayedConfirmation.resolve(true)

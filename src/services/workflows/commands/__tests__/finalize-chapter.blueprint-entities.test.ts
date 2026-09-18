@@ -14,7 +14,6 @@ vi.mock('../../../finalization-client', () => finalizationClient)
 const PROJECT_PATH = 'C:\\novels\\blueprint-entities'
 const PROJECT_SESSION = Object.freeze({
   projectId: 'blueprint-entities',
-  leaseId: 'lease-blueprint-entities',
   projectPath: PROJECT_PATH,
 })
 
@@ -40,7 +39,6 @@ function callbacks(): StepCallbacks {
 
 function modelLease() {
   return {
-    leaseId: 'model-lease-blueprint-entities',
     modelId: 'test-model',
     provider: 'custom',
     protocol: 'openai',
@@ -81,7 +79,6 @@ describe('FinalizeChapterCommand blueprint character fallback', () => {
         id: 'blueprint-entities',
         name: 'Blueprint entities',
         path: PROJECT_PATH,
-        sessionLease: PROJECT_SESSION.leaseId,
         novelConfig: {
           globalGuidance: '',
           wordsPerChapter: 1200,

@@ -16,7 +16,7 @@ class ExtractPlanningMaterialCharactersCommand extends RuntimeCommand {
 }
 
 const projectPath = 'C:\\novels\\A'
-const projectSession = { projectId: 'project-1', leaseId: 'lease-1', projectPath }
+const projectSession = { projectId: 'project-1', projectPath }
 const context: WorkflowContext = {
   runId: 'planning-import-run',
   projectPath,
@@ -44,7 +44,6 @@ describe('planning material character extraction', () => {
         id: projectSession.projectId,
         name: 'A',
         path: projectPath,
-        sessionLease: projectSession.leaseId,
         novelConfig: { writingLanguage: 'zh-CN' },
       } as never,
     })
@@ -241,7 +240,6 @@ describe('planning material character extraction', () => {
           id: projectSession.projectId,
           name: 'A',
           path: projectPath,
-          sessionLease: projectSession.leaseId,
           novelConfig: { writingLanguage },
         } as never,
       })
@@ -372,7 +370,6 @@ describe('planning material character extraction', () => {
         id: projectSession.projectId,
         name: 'A',
         path: projectPath,
-        sessionLease: projectSession.leaseId,
         novelConfig: { writingLanguage: 'en-US' },
       } as never,
     })

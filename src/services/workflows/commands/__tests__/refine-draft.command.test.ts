@@ -25,7 +25,6 @@ import type { WorkflowGenerationRuntimeDependencies } from '../base-command'
 const PROJECT_PATH = 'C:\\novels\\refine'
 const PROJECT_SESSION = Object.freeze({
   projectId: 'refine',
-  leaseId: 'project-lease-refine',
   projectPath: PROJECT_PATH,
 })
 
@@ -73,7 +72,7 @@ const PASSING_REVIEW_JSON = JSON.stringify({
 
 function leaseReceipt(modelId = 'model-a'): ModelExecutionLeaseReceipt {
   return {
-    leaseId: 'model-lease-refine',
+    leaseId: `model-lease-${modelId}`,
     modelId,
     provider: 'custom',
     protocol: 'openai',
@@ -242,7 +241,6 @@ beforeEach(() => {
       id: 'refine',
       name: 'Refine',
       path: PROJECT_PATH,
-      sessionLease: PROJECT_SESSION.leaseId,
       novelConfig: { globalGuidance: '', wordsPerChapter: 3000 },
     } as never,
   })
@@ -597,7 +595,6 @@ describe('RefineDraftCommand bounded visible completion', () => {
               id: 'other',
               name: 'Other',
               path: 'C:\\novels\\other',
-              sessionLease: 'other-lease',
               novelConfig: { globalGuidance: '', wordsPerChapter: 3000 },
             } as never,
           })

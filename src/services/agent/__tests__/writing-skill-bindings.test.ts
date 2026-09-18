@@ -15,7 +15,6 @@ vi.mock('../../../stores/project-store', () => ({
 const session: ProjectSessionContext = {
   projectId: 'project-1',
   projectPath: 'C:/novels/project-1',
-  leaseId: 'lease-1',
 }
 
 describe('writing skill project bindings', () => {

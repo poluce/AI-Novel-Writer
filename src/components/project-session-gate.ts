@@ -3,15 +3,12 @@ import {
   getActiveProjectSessionContext,
   projectSessionContextFromProject,
   sameProjectPathKey,
-  sameProjectSessionContext,
-} from '../shared/project-session-context'
+  sameProjectSessionContext} from '../shared/project-session-context'
 
-type SessionProject = Pick<ProjectData, 'id' | 'path' | 'sessionLease'>
+type SessionProject = Pick<ProjectData, 'id' | 'path'>
 
 /**
- * Freeze the rendered project's complete session identity before starting async
- * UI work. A path is deliberately insufficient: reopening the same directory
- * obtains a new lease and must invalidate the old UI operation.
+ * Freeze the rendered project's identity before starting async UI work.
  */
 export function captureProjectSession(
   project: SessionProject | null | undefined,
@@ -23,7 +20,7 @@ export function captureProjectSession(
   return sameProjectSessionContext(candidate, active) ? candidate : null
 }
 
-/** True only while the exact project id + lease remains active. */
+/** True only while the same project id and path remain active. */
 export function isProjectSessionCurrent(
   session: ProjectSessionContext | null | undefined,
 ): session is ProjectSessionContext {

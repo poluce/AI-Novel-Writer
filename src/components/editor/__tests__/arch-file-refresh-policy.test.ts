@@ -59,14 +59,12 @@ describe('architecture file external refresh protection', () => {
       projectPath: 'C:\\novels\\A',
       projectSession: {
         projectId: 'A',
-        leaseId: 'lease-A',
         projectPath: 'C:\\novels\\A',
       },
       runId: 'silent-architecture-run',
     }
     const projectSession = {
       projectId: 'A',
-      leaseId: 'lease-A',
       projectPath: 'C:\\novels\\A',
     }
 
@@ -78,7 +76,6 @@ describe('architecture file external refresh protection', () => {
     )).toBe(false)
     expect(shouldRefreshArchOnWorkflowComplete(payload, {
       ...projectSession,
-      leaseId: 'lease-A-reopened',
     })).toBe(false)
   })
 

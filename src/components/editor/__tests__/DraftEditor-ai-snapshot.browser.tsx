@@ -17,7 +17,6 @@ import DraftEditor from '../DraftEditor'
 const PROJECT_PATH = 'C:\\novels\\draft-ai-snapshot'
 const PROJECT_SESSION = Object.freeze({
   projectId: 'draft-ai-snapshot-project',
-  leaseId: 'draft-ai-snapshot-lease',
   projectPath: PROJECT_PATH,
 })
 const TAB_ID = 'draft-ai-snapshot-tab'
@@ -86,7 +85,6 @@ beforeEach(async () => {
       id: PROJECT_SESSION.projectId,
       name: 'Draft AI snapshot',
       path: PROJECT_PATH,
-      sessionLease: PROJECT_SESSION.leaseId,
       novelConfig: {
         writingLanguage: 'zh-CN',
         genre: 'fantasy',
@@ -121,7 +119,6 @@ beforeEach(async () => {
       draftStatus: 'draft',
       chapterNumber: 1,
       projectKey: PROJECT_PATH,
-      projectSessionLease: PROJECT_SESSION.leaseId,
       contentRevision: 0,
     }],
     activeTabId: TAB_ID,

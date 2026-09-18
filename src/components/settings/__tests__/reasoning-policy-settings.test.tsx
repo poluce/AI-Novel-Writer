@@ -53,7 +53,6 @@ describe('reasoning policy settings', () => {
         id: 'project-a',
         name: 'Novel A',
         path: 'C:/projects/A',
-        sessionLease: 'lease-a',
         novelConfig: {
           creativeStrategy: 'deep-planning',
           genre: 'fantasy', subGenre: '', targetAudience: 'all', totalChapters: 100,
@@ -106,7 +105,6 @@ describe('reasoning policy settings', () => {
         id: 'project-deepseek',
         name: 'DeepSeek Novel',
         path: 'C:/projects/deepseek',
-        sessionLease: 'lease-deepseek',
         novelConfig: {
           creativeStrategy: 'auto',
           genre: 'fantasy', subGenre: '', targetAudience: 'all', totalChapters: 100,

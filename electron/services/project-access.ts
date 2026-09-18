@@ -8,8 +8,7 @@ import { logFailure } from '../../src/shared/fail-log'
 import {
   assertProjectCoreStoragePathSupported,
   assertProjectStoragePathSupported,
-  type ProjectStoragePreflightOptions,
-} from './project-storage-preflight'
+  type ProjectStoragePreflightOptions} from './project-storage-preflight'
 
 export const PROJECT_MANIFEST_RELATIVE_PATH = path.join('.vela', 'project.json')
 export const PROJECT_ROOT_REQUIRED = 'PROJECT_ROOT_REQUIRED' as const
@@ -60,22 +59,15 @@ export interface LegacyProjectProbe {
 
 export type ProjectProbe = TrustedProject | LegacyProjectProbe
 
-export interface ProjectSessionLease extends TrustedProject {
-  leaseId: string
-}
+export type ProjectSessionLease = TrustedProject
 
-/**
- * Renderer-visible portion of a lease. #21 can pass this through additional
- * project-level IPC channels without exposing the canonical root as authority.
- */
+/** 当前打开项目的身份；路径由 assertCurrentProjectContext 校验。 */
 export interface ProjectSessionCredential {
   projectId: string
-  leaseId: string
 }
 
 export interface ProjectAccessServiceOptions extends ProjectStoragePreflightOptions {
   homePath?: string
-  newLeaseId?: () => string
 }
 
 function projectPathKey(projectPath: string): string {
@@ -117,7 +109,6 @@ function isProjectManifest(value: unknown): value is ProjectManifest {
 
 export class ProjectAccessService {
   private readonly homePath: string
-  private readonly newLeaseId: () => string
   private readonly storagePreflightOptions: ProjectStoragePreflightOptions
   private activeSession: ProjectSessionLease | null = null
 
@@ -131,11 +122,9 @@ export class ProjectAccessService {
         logFailure('Project', 'realpath home directory failed; using unresolved home', error)
       }
     }
-    this.newLeaseId = options.newLeaseId ?? randomUUID
     this.storagePreflightOptions = {
       platform: options.platform,
-      maxNativePathCharacters: options.maxNativePathCharacters,
-    }
+      maxNativePathCharacters: options.maxNativePathCharacters}
   }
 
   createProject(parentPath: string, projectName: string): TrustedProject {
@@ -181,16 +170,14 @@ export class ProjectAccessService {
       return {
         kind: 'manifest',
         projectId: parsed.projectId,
-        rootPath,
-      }
+        rootPath}
     }
 
     if (this.hasTrustedLegacySqliteFingerprint(rootPath)) {
       return {
         kind: 'legacy',
         rootPath,
-        legacyFingerprint: 'vela-sqlite-v1',
-      }
+        legacyFingerprint: 'vela-sqlite-v1'}
     }
 
     throw new ProjectRootRequiredError()
@@ -215,16 +202,12 @@ export class ProjectAccessService {
   }
 
   beginSession(project: TrustedProject): ProjectSessionLease {
-    const lease: ProjectSessionLease = {
-      ...project,
-      leaseId: this.newLeaseId(),
-    }
-    this.activeSession = lease
-    return lease
+    this.activeSession = project
+    return project
   }
 
   /**
-   * Capture the main-process lease currently trusted for a rollback boundary.
+   * Capture the main-process session currently trusted for a rollback boundary.
    * The caller receives a frozen copy so it cannot mutate the authority kept
    * by this service; it must still call assertCurrentSession before using it.
    */
@@ -245,31 +228,25 @@ export class ProjectAccessService {
 
   assertCurrentSession(lease: ProjectSessionCredential): ProjectSessionLease {
     const active = this.activeSession
-    if (
-      !active
-      || active.projectId !== lease.projectId
-      || active.leaseId !== lease.leaseId
-    ) {
+    if (!active || active.projectId !== lease.projectId) {
       throw new Error('项目会话已失效，已拒绝操作')
     }
     return active
   }
 
   /**
-   * 验证 IPC 携带的完整项目会话上下文：租约、声称的项目根和主进程当前数据库
+   * 验证 IPC 携带的项目会话：项目 ID、声称的项目根和主进程当前数据库
    * 必须全部指向同一个 canonical root。路径从不单独构成授权。
    */
   assertCurrentProjectContext(
     context: ProjectSessionContext | undefined,
     currentProjectPath: string | null,
   ): ProjectSessionLease {
-    if (!context?.projectId || !context.leaseId || !context.projectPath) {
+    if (!context?.projectId || !context.projectPath) {
       throw new Error('缺少项目会话上下文，已拒绝操作')
     }
     const active = this.assertCurrentSession({
-      projectId: context.projectId,
-      leaseId: context.leaseId,
-    })
+      projectId: context.projectId})
     if (!this.sameCanonicalProjectRoot(active.rootPath, context.projectPath)) {
       throw new Error('项目会话根目录不匹配，已拒绝操作')
     }
@@ -355,17 +332,14 @@ export class ProjectAccessService {
       schemaVersion: 1,
       kind: 'ai-novel-project',
       projectId: randomUUID(),
-      createdAt: new Date().toISOString(),
-    }
+      createdAt: new Date().toISOString()}
     fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, {
       encoding: 'utf8',
-      flag: 'wx',
-    })
+      flag: 'wx'})
     return {
       kind: 'manifest',
       projectId: manifest.projectId,
-      rootPath,
-    }
+      rootPath}
   }
 
   private assertProjectChildPath(rootPath: string, candidatePath: string, label: string): void {
@@ -376,5 +350,5 @@ export class ProjectAccessService {
   }
 }
 
-/** 主进程唯一租约登记处；后续业务 IPC 通过 assertCurrentSession 逐步迁移。 */
+/** 主进程当前打开项目登记处。 */
 export const projectAccess = new ProjectAccessService()

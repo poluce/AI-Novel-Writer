@@ -27,7 +27,7 @@ import { countDraftUnits } from '../../../src/shared/draft-units'
 
 let parent = ''
 let projectRoot = ''
-let session: { projectId: string; leaseId: string; projectPath: string }
+let session: { projectId: string; projectPath: string }
 const secret = Buffer.alloc(32, 44)
 
 function deferred<T>() {
@@ -66,7 +66,7 @@ beforeEach(() => {
   const project = projectAccess.createProject(parent, 'novel')
   const lease = projectAccess.beginSession(project)
   projectRoot = lease.rootPath
-  session = { projectId: lease.projectId, leaseId: lease.leaseId, projectPath: lease.rootPath }
+  session = { projectId: lease.projectId, projectPath: lease.rootPath }
   initProjectDatabase(projectRoot, secret)
 })
 

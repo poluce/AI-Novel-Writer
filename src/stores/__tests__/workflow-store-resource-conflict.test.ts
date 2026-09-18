@@ -11,7 +11,6 @@ import {
 const projectPath = 'C:\\novels\\resource-conflict'
 const projectSession = {
   projectId: 'resource-conflict',
-  leaseId: 'lease-resource-conflict',
   projectPath,
 }
 
@@ -37,7 +36,6 @@ beforeEach(() => {
   useProjectStore.setState({
     currentProject: {
       id: projectSession.projectId,
-      sessionLease: projectSession.leaseId,
       name: 'Resource conflict',
       path: projectPath,
       novelConfig: {},

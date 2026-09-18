@@ -37,7 +37,6 @@ beforeEach(() => {
   useProjectStore.setState({
     currentProject: {
       id: 'native-exit',
-      sessionLease: 'native-exit-lease',
       name: 'Native exit',
       path: PROJECT,
       novelConfig: {},

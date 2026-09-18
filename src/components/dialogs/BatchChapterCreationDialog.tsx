@@ -9,8 +9,7 @@ import {
   MAX_BATCH_CHAPTERS,
   MIN_BATCH_CHAPTERS,
   normalizeBatchChapterCount,
-  type BatchChapterCompletionMode,
-} from '../../services/workflows/batch-chapter-workflow'
+  type BatchChapterCompletionMode} from '../../services/workflows/batch-chapter-workflow'
 import { guardChapterWriting } from '../../services/workflow-guards'
 import { ipc } from '../../services/ipc-client'
 import { useLocaleStore } from '../../stores/locale-store'
@@ -21,8 +20,7 @@ import { Label } from '../ui/Label'
 import { NativeSelect } from '../ui/NativeSelect'
 import {
   captureProjectSession,
-  isProjectSessionCurrent,
-} from '../project-session-gate'
+  isProjectSessionCurrent} from '../project-session-gate'
 import type { ModelProfile } from '../../shared/ipc-channels'
 import { readAuthoritativeNextChapter } from '../../services/authoritative-chapter-sequence'
 import { readConsistencyPreflight, type ConsistencyPreflightResult } from '../../services/consistency-preflight'
@@ -31,8 +29,7 @@ import ConsistencyPreflightPanel from './ConsistencyPreflightPanel'
 import {
   CHAPTER_WORDS_TARGET_MAX,
   CHAPTER_WORDS_TARGET_MIN,
-  normalizeChapterWordsTarget,
-} from '../../services/workflows/chapter-creation-parameters'
+  normalizeChapterWordsTarget} from '../../services/workflows/chapter-creation-parameters'
 
 interface Props {
   isOpen: boolean
@@ -64,7 +61,7 @@ export default function BatchChapterCreationDialog(props: Props) {
   const currentProject = useProjectStore(s => s.currentProject)
   const projectSession = captureProjectSession(currentProject)
   const sessionKey = projectSession
-    ? `${projectSession.projectId}:${projectSession.leaseId}`
+    ? `${projectSession.projectId}:${projectSession.projectPath}`
     : 'inactive'
 
   // Fresh closed/open instances prevent a previous run's local model choice
@@ -249,8 +246,7 @@ function BatchChapterCreationDialogSession({ isOpen, startChapterNumber, onClose
         locale: frozenLocale,
         generationModelId: frozenGenerationModelId,
         chapterWordsTarget: frozenChapterWordsTarget,
-        completionMode: frozenCompletionMode,
-      })
+        completionMode: frozenCompletionMode})
       const conflict = useWorkflowStore.getState().getResourceConflict(workflow)
       if (conflict) {
         setError(workflowResourceConflictMessage(frozenLocale, conflict.title))
@@ -474,8 +470,7 @@ function BatchChapterCreationDialogSession({ isOpen, startChapterNumber, onClose
               requireIpcSuccess(await ipc.invokeWithProjectSession(session, 'db:consistency-exemption-revoke', stableFactKey, session.projectPath), text('撤销一致性安排', 'Revoke consistency arrangement'))
               setConsistencyPreflight(current => current ? {
                 ...current,
-                exemptions: current.exemptions.map(item => item.stableFactKey === stableFactKey ? { ...item, revoked: true } : item),
-              } : null)
+                exemptions: current.exemptions.map(item => item.stableFactKey === stableFactKey ? { ...item, revoked: true } : item)} : null)
             }}
           />
         ) : null}

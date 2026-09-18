@@ -11,7 +11,6 @@ const projectPath = 'C:\\novels\\skill-snapshot'
 const projectSession = {
   projectId: 'skill-snapshot',
   projectPath,
-  leaseId: 'skill-snapshot-lease',
 }
 
 beforeEach(() => {
@@ -25,7 +24,6 @@ beforeEach(() => {
       id: projectSession.projectId,
       name: 'Skill snapshot',
       path: projectPath,
-      sessionLease: projectSession.leaseId,
       novelConfig: { writingLanguage: 'en-US' },
     } as never,
   })

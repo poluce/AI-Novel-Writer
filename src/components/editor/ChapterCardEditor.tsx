@@ -12,15 +12,13 @@ import type { ProjectSessionContext } from '../../shared/ipc-channels'
 import {
   projectSessionContextFromProject,
   sameProjectPathKey,
-  sameProjectSessionContext,
-} from '../../shared/project-session-context'
+  sameProjectSessionContext} from '../../shared/project-session-context'
 import {
   loadDirectoryBlueprints,
   saveChapterBlueprint,
   saveAllBlueprints,
   type ChapterBlueprint,
-  type DirectoryWorkflowParams,
-} from '../../services/workflows/directory-workflow'
+  type DirectoryWorkflowParams} from '../../services/workflows/directory-workflow'
 import { launchCreativeWorkflow } from '../../services/workflows/creative-workflow-launcher'
 import { guardDirectoryGeneration } from '../../services/workflow-guards'
 import DirectoryConfigDialog from '../dialogs/DirectoryConfigDialog'
@@ -52,13 +50,11 @@ import {
   updateEditableChapterBlueprintField,
   updateChapterCardProjectDraft,
   type DraftState,
-  type EditableChapterBlueprintField,
-} from './chapter-card-draft-ledger'
+  type EditableChapterBlueprintField} from './chapter-card-draft-ledger'
 import { LatestRequestGate } from './latest-request-gate'
 import {
   AuthoritativeChapterSequenceError,
-  readAuthoritativeNextChapter,
-} from '../../services/authoritative-chapter-sequence'
+  readAuthoritativeNextChapter} from '../../services/authoritative-chapter-sequence'
 
 const ROLES = ['建置', '铺垫', '发展', '冲突', '高潮', '转折', '收尾']
 
@@ -67,8 +63,7 @@ const ROLE_COLORS: Record<string, string> = {
   冲突: 'bg-orange-500/20 text-[var(--color-warning-text)]',
   转折: 'bg-purple-500/20 text-[var(--color-category-review-text)]',
   建置: 'bg-blue-500/20 text-[var(--color-category-progress-text)]',
-  收尾: 'bg-green-500/20 text-[var(--color-success-text)]',
-}
+  收尾: 'bg-green-500/20 text-[var(--color-success-text)]'}
 
 function readDraftLedgerFromFixedTab() {
   return parseChapterCardDraftLedger(
@@ -95,8 +90,7 @@ function isCurrentProjectSession(projectSession: ProjectSessionContext): boolean
 /** 章节蓝图编辑器 — 读写 directory.json */
 export default function ChapterCardEditor({
   projectKey,
-  initialChapterNumber,
-}: {
+  initialChapterNumber}: {
   projectKey: string
   initialChapterNumber?: number
 }) {
@@ -117,7 +111,6 @@ export default function ChapterCardEditor({
   const loadRequestGateRef = useRef(new LatestRequestGate())
   const currentProjectSession = projectSessionContextFromProject(currentProject)
   const renderedProjectId = currentProjectSession?.projectId ?? null
-  const renderedProjectLeaseId = currentProjectSession?.leaseId ?? null
   const renderedProjectPath = currentProjectSession?.projectPath ?? null
   const projectMatches = sameProjectPathKey(currentProjectSession?.projectPath, projectKey)
   const projectDataReady = Boolean(
@@ -151,8 +144,7 @@ export default function ChapterCardEditor({
     冲突: 'Conflict',
     高潮: 'Climax',
     转折: 'Turning point',
-    收尾: 'Resolution',
-  } as Record<string, string>)[role] ?? role)
+    收尾: 'Resolution'} as Record<string, string>)[role] ?? role)
 
   const applyVisibleDraftState = useCallback((nextBlueprints: ChapterBlueprint[], nextDirty: Set<number>) => {
     blueprintsRef.current = nextBlueprints
@@ -191,14 +183,12 @@ export default function ChapterCardEditor({
     ) {
       return {
         blueprints: blueprintsRef.current,
-        dirtyChapterNumbers: dirtyChapterNumbersRef.current,
-      }
+        dirtyChapterNumbers: dirtyChapterNumbersRef.current}
     }
     const draft = getChapterCardProjectDraft(readDraftLedgerFromFixedTab(), projectKey)
     return {
       blueprints: draft?.blueprints ?? [],
-      dirtyChapterNumbers: new Set(draft?.dirtyChapterNumbers ?? []),
-    }
+      dirtyChapterNumbers: new Set(draft?.dirtyChapterNumbers ?? [])}
   }, [])
 
   const markChapterDirty = useCallback((
@@ -222,7 +212,6 @@ export default function ChapterCardEditor({
       !projectMatches
       || !projectSession
       || projectSession.projectId !== renderedProjectId
-      || projectSession.leaseId !== renderedProjectLeaseId
       || !sameProjectPathKey(projectSession.projectPath, renderedProjectPath)
     ) {
       loadRequestGateRef.current.begin()
@@ -271,8 +260,7 @@ export default function ChapterCardEditor({
           } else {
             applyVisibleDraftState(state.blueprints, state.dirtyChapterNumbers)
           }
-        },
-      })
+        }})
       // 项目可能在远端读取期间切换；旧项目结果不会进入 commit。
       if (!restored || !isLatestProjectRequest()) return
       const data = restored.blueprints
@@ -308,7 +296,6 @@ export default function ChapterCardEditor({
     projectKey,
     projectMatches,
     renderedProjectId,
-    renderedProjectLeaseId,
     renderedProjectPath,
     addLog,
     text,
@@ -448,8 +435,7 @@ export default function ChapterCardEditor({
     registerEditorExitSaveHandler({
       type: 'chapter-card',
       projectKey,
-      save: () => exitSaveRef.current(),
-    })
+      save: () => exitSaveRef.current()})
   }, [projectKey])
 
   /** 新建空章节 */
@@ -484,8 +470,7 @@ export default function ChapterCardEditor({
       suspenseHook: '',
       userGuidance: '',
       notes: '',
-      notesUpdatedAt: '',
-    }
+      notesUpdatedAt: ''}
     markChapterDirty([...currentBlueprints, newBlueprint], newBlueprint.chapterNumber)
     setSelectedIdx(currentBlueprints.length)
     if (authoritativeBlueprintExists) {
@@ -512,8 +497,7 @@ export default function ChapterCardEditor({
     ), {
       title: text('删除章节蓝图', 'Delete chapter blueprint'),
       confirmText: text('删除', 'Delete'),
-      danger: true,
-    })
+      danger: true})
     if (!ok || !isCurrentProjectSession(projectSession)) return
     const result = await ipc.invokeWithProjectSession(
       projectSession,
@@ -539,8 +523,7 @@ export default function ChapterCardEditor({
     globalEventBus.emit('REFRESH_RESOURCE', {
       resources: ['blueprints', 'fileTree'],
       projectPath: projectKey,
-      projectSession,
-    })
+      projectSession})
     toast.success(text(`已删除第 ${selected.chapterNumber} 章蓝图`, `Deleted the blueprint for Chapter ${selected.chapterNumber}`))
   }
 
@@ -560,8 +543,7 @@ export default function ChapterCardEditor({
     ), {
       title: text('清空全部蓝图', 'Clear all blueprints'),
       confirmText: text('清空全部', 'Clear all'),
-      danger: true,
-    })
+      danger: true})
     if (!ok || !isCurrentProjectSession(projectSession)) return
 
     const result = await ipc.invokeWithProjectSession(
@@ -581,8 +563,7 @@ export default function ChapterCardEditor({
     globalEventBus.emit('REFRESH_RESOURCE', {
       resources: ['blueprints', 'fileTree'],
       projectPath: projectKey,
-      projectSession,
-    })
+      projectSession})
     toast.success(text('已清空全部蓝图', 'All chapter blueprints cleared'))
   }
 
@@ -607,8 +588,7 @@ export default function ChapterCardEditor({
         'A precondition warning was reported. Continue generating anyway?',
       ), {
         title: text('前置条件警告', 'Precondition warning'),
-        confirmText: text('继续生成', 'Continue'),
-      })
+        confirmText: text('继续生成', 'Continue')})
       if (!yes) throw new Error(text('已取消启动章节蓝图生成', 'Blueprint generation was cancelled.'))
     }
 
@@ -638,8 +618,7 @@ export default function ChapterCardEditor({
       purpose: bp.purpose,
       keyEvents: bp.keyEvents,
       characters: bp.characters.join('、'),
-      userGuidance: bp.userGuidance || '',
-    })
+      userGuidance: bp.userGuidance || ''})
   }
 
   /**
@@ -660,8 +639,7 @@ export default function ChapterCardEditor({
     ), {
       title: text('清除误导入正文', 'Clear incorrectly imported text'),
       confirmText: text('清除误导入正文', 'Clear incorrectly imported text'),
-      danger: true,
-    })
+      danger: true})
     if (!ok || !isCurrentProjectSession(projectSession)) return
 
     setRecoveringLegacyImportedText(true)
@@ -802,8 +780,7 @@ export default function ChapterCardEditor({
           className="flex flex-wrap items-center justify-between gap-3 border-b px-3 py-2 text-xs"
           style={{
             borderColor: 'color-mix(in srgb, var(--color-warning) 42%, var(--color-border))',
-            backgroundColor: 'color-mix(in srgb, var(--color-warning) 8%, transparent)',
-          }}
+            backgroundColor: 'color-mix(in srgb, var(--color-warning) 8%, transparent)'}}
         >
           <div className="flex min-w-0 items-start gap-2" style={{ color: 'var(--color-text-secondary)' }}>
             <AlertTriangle size={15} className="mt-0.5 flex-shrink-0" style={{ color: 'var(--color-warning)' }} />
@@ -834,8 +811,7 @@ export default function ChapterCardEditor({
           style={{
             color: 'var(--color-warning-text)',
             borderColor: 'color-mix(in srgb, var(--color-warning) 42%, var(--color-border))',
-            backgroundColor: 'color-mix(in srgb, var(--color-warning) 8%, transparent)',
-          }}
+            backgroundColor: 'color-mix(in srgb, var(--color-warning) 8%, transparent)'}}
         >
           <AlertTriangle size={15} className="mt-0.5 flex-shrink-0" style={{ color: 'var(--color-warning)' }} />
           <p className="leading-5">{authorityError}</p>
@@ -1030,8 +1006,7 @@ export default function ChapterCardEditor({
                   className="p-3 rounded-lg border"
                   style={{
                     borderColor: 'var(--color-accent)',
-                    backgroundColor: 'rgba(var(--accent-rgb, 99 102 241), 0.06)',
-                  }}
+                    backgroundColor: 'rgba(var(--accent-rgb, 99 102 241), 0.06)'}}
                 >
                   <Label className="flex items-center gap-1.5">
                     <span>{text('作者微操指导', 'Author guidance')}</span>
@@ -1058,8 +1033,7 @@ export default function ChapterCardEditor({
                   className="p-3 rounded-lg border"
                   style={{
                     borderColor: 'var(--color-border)',
-                    backgroundColor: 'rgba(34,197,94,0.04)',
-                  }}
+                    backgroundColor: 'rgba(34,197,94,0.04)'}}
                 >
                   <Label className="flex items-center gap-1.5">
                     <span>{text('章节要点', 'Chapter notes')}</span>

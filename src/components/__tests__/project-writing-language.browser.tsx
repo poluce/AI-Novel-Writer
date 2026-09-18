@@ -40,7 +40,6 @@ function project(id: string, writingLanguage: 'zh-CN' | 'en-US'): ProjectData {
     id,
     name: `Novel ${id}`,
     path: `C:\\novels\\${id}`,
-    sessionLease: `lease-${id}`,
     novelConfig: {
       writingLanguage,
       genre: 'fantasy',
@@ -104,7 +103,6 @@ describe('project writing language', () => {
       useProjectStore.setState({ currentProject })
       setActiveProjectSessionContext({
         projectId: currentProject.id,
-        leaseId: currentProject.sessionLease!,
         projectPath: currentProject.path,
       })
 
@@ -125,7 +123,6 @@ describe('project writing language', () => {
       useProjectStore.setState({ currentProject })
       setActiveProjectSessionContext({
         projectId: currentProject.id,
-        leaseId: currentProject.sessionLease!,
         projectPath: currentProject.path,
       })
 
@@ -156,7 +153,6 @@ describe('project writing language', () => {
     useProjectStore.setState({ currentProject })
     setActiveProjectSessionContext({
       projectId: currentProject.id,
-      leaseId: currentProject.sessionLease!,
       projectPath: currentProject.path,
     })
 
@@ -177,7 +173,6 @@ describe('project writing language', () => {
     useProjectStore.setState({ currentProject: projectA })
     setActiveProjectSessionContext({
       projectId: projectA.id,
-      leaseId: projectA.sessionLease!,
       projectPath: projectA.path,
     })
 
@@ -192,7 +187,6 @@ describe('project writing language', () => {
       useProjectStore.setState({ currentProject: projectB })
       setActiveProjectSessionContext({
         projectId: projectB.id,
-        leaseId: projectB.sessionLease!,
         projectPath: projectB.path,
       })
       root?.render(<NovelConfigEditor projectKey={projectB.path} />)
@@ -210,7 +204,6 @@ describe('project writing language', () => {
     useProjectStore.setState({ currentProject, saveProject: saveProject as never })
     setActiveProjectSessionContext({
       projectId: currentProject.id,
-      leaseId: currentProject.sessionLease!,
       projectPath: currentProject.path,
     })
 
@@ -238,7 +231,6 @@ describe('project writing language', () => {
     useProjectStore.setState({ currentProject })
     setActiveProjectSessionContext({
       projectId: currentProject.id,
-      leaseId: currentProject.sessionLease!,
       projectPath: currentProject.path,
     })
 

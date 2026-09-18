@@ -45,7 +45,7 @@ function freezeSession(projectSession: ProjectSessionContext): ProjectSessionCon
 }
 
 function sessionKey(projectSession: ProjectSessionContext): string {
-  return `${projectSession.projectId}\u0000${projectSession.leaseId}\u0000${projectSession.projectPath}`
+  return `${projectSession.projectId}\u0000${projectSession.projectPath}`
 }
 
 function validTemplate(value: PromptTemplate): boolean {
@@ -226,8 +226,7 @@ export class PromptCatalog {
           item,
           changedKey,
           changedLanguage,
-        )),
-      }
+        ))}
       return true
     } catch {
       return false
@@ -390,8 +389,7 @@ export const ipcPromptPersistence: PromptPersistence = {
             ? { writingLanguage: promptLanguageFromFilename(file.name) }
             : {}),
           path: file.path,
-          error: error instanceof Error ? error.message : String(error),
-        })
+          error: error instanceof Error ? error.message : String(error)})
       }
     }
     return { templates: prompts, diagnostics }
@@ -481,5 +479,4 @@ export const ipcPromptPersistence: PromptPersistence = {
         projectSession.projectPath,
       ), '删除项目提示词')
     }
-  },
-}
+  }}

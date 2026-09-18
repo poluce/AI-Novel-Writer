@@ -4,11 +4,10 @@ import { useEffect, useMemo, useState } from 'react'
 import type { BlueprintData } from '../../../shared/blueprint'
 import type { DraftMeta } from '../../../shared/contracts/draft'
 import type { NarrativeThreadView } from '../../../shared/narrative-thread'
-import { sameProjectSessionContext, projectSessionContextFromProject } from '../../../shared/project-session-context'
+import { projectSessionContextFromProject, proposalBelongsToOpenProject } from '../../../shared/project-session-context'
 import type {
   ConfigImpactBlueprintProposal,
-  ToolCallInfo,
-} from '../../../shared/agent-ui-types'
+  ToolCallInfo} from '../../../shared/agent-ui-types'
 import { buildChapterBlueprintProposal } from '../../../shared/domain-proposals'
 import { ipc } from '../../../services/ipc-client'
 import { useLocaleStore } from '../../../stores/locale-store'
@@ -16,8 +15,7 @@ import { useProjectStore } from '../../../stores/project-store'
 import {
   BLUEPRINT_LABELS,
   CONFIG_LABELS,
-  type DomainProposalPreview,
-} from './DomainProposalDiff'
+  type DomainProposalPreview} from './DomainProposalDiff'
 
 const STORY_FACT_FIELDS = new Set([
   'genre', 'subGenre', 'totalChapters', 'plotStructure', 'narrativePOV', 'coreOutline',
@@ -91,8 +89,7 @@ function buildSelectableProposals(
         chapterTitle: blueprint.title,
         field: diff.field,
         current: diff.current,
-        proposed: diff.proposed,
-      })
+        proposed: diff.proposed})
     }
   }
   return [...proposals.values()]
@@ -113,8 +110,7 @@ export function buildConfigImpactPreview(
     if (draft.status !== 'finalized' || finalizedByChapter.has(draft.chapterNumber)) continue
     finalizedByChapter.set(draft.chapterNumber, {
       chapterNumber: draft.chapterNumber,
-      title: draft.chapterTitle?.trim() || `#${draft.chapterNumber}`,
-    })
+      title: draft.chapterTitle?.trim() || `#${draft.chapterNumber}`})
   }
   const unwritten = blueprints
     .filter(blueprint => !writtenChapters.has(blueprint.chapterNumber))
@@ -124,12 +120,10 @@ export function buildConfigImpactPreview(
     changedFields,
     unwrittenBlueprints: unwritten.map(blueprint => ({
       chapterNumber: blueprint.chapterNumber,
-      title: blueprint.title,
-    })),
+      title: blueprint.title})),
     activeThreads: threads.filter(thread => thread.status !== 'resolved' && thread.status !== 'abandoned'),
     finalizedChapters: [...finalizedByChapter.values()].sort((left, right) => left.chapterNumber - right.chapterNumber),
-    blueprintProposals: buildSelectableProposals(args, unwritten, text),
-  }
+    blueprintProposals: buildSelectableProposals(args, unwritten, text)}
 }
 
 export function useConfigImpactPreview(
@@ -145,8 +139,7 @@ export function useConfigImpactPreview(
     if (toolCall.toolName !== 'novel_config' || changedFields.length === 0) {
       return { kind: 'none', changedFields }
     }
-    if (proposalPreview.kind !== 'valid' || !currentProject || !toolCall.projectSession
-      || !sameProjectSessionContext(toolCall.projectSession, projectSessionContextFromProject(currentProject))) {
+    if (proposalPreview.kind !== 'valid' || !proposalBelongsToOpenProject(toolCall.projectSession, currentProject)) {
       return { kind: 'stale', changedFields }
     }
     return null
@@ -155,33 +148,32 @@ export function useConfigImpactPreview(
     toolCallId: toolCall.id,
     args: toolCall.arguments,
     changedFields,
-    projectSession: toolCall.projectSession,
-  }), [changedFields, toolCall.arguments, toolCall.id, toolCall.projectSession])
+    projectSession: toolCall.projectSession}), [changedFields, toolCall.arguments, toolCall.id, toolCall.projectSession])
   const [loaded, setLoaded] = useState<{ key: string; preview: ConfigImpactPreviewState } | null>(null)
 
   useEffect(() => {
-    if (immediate || !currentProject || !toolCall.projectSession) return
+    if (immediate || !currentProject) return
+    const liveSession = projectSessionContextFromProject(currentProject)
+    if (!liveSession) return
     let disposed = false
     void Promise.all([
-      ipc.invokeWithProjectSession(toolCall.projectSession, 'db:blueprint-get-all', currentProject.path),
-      ipc.invokeWithProjectSession(toolCall.projectSession, 'db:draft-list-all', currentProject.path),
-      ipc.invokeWithProjectSession(toolCall.projectSession, 'db:narrative-thread-list', currentProject.path),
+      ipc.invokeWithProjectSession(liveSession, 'db:blueprint-get-all', currentProject.path),
+      ipc.invokeWithProjectSession(liveSession, 'db:draft-list-all', currentProject.path),
+      ipc.invokeWithProjectSession(liveSession, 'db:narrative-thread-list', currentProject.path),
     ]).then(([blueprints, drafts, threads]) => {
       if (disposed) return
       const now = useProjectStore.getState().currentProject
-      if (!sameProjectSessionContext(toolCall.projectSession, projectSessionContextFromProject(now))) {
+      if (!proposalBelongsToOpenProject(toolCall.projectSession, now)) {
         setLoaded({ key: requestKey, preview: { kind: 'stale', changedFields } })
         return
       }
       setLoaded({
         key: requestKey,
-        preview: buildConfigImpactPreview(toolCall.arguments, changedFields, blueprints, drafts, threads, text),
-      })
+        preview: buildConfigImpactPreview(toolCall.arguments, changedFields, blueprints, drafts, threads, text)})
     }).catch(() => {
       if (!disposed) setLoaded({
         key: requestKey,
-        preview: { kind: 'invalid', changedFields, error: 'impact_read_failed' },
-      })
+        preview: { kind: 'invalid', changedFields, error: 'impact_read_failed' }})
     })
     return () => { disposed = true }
   }, [changedFields, currentProject, immediate, requestKey, text, toolCall.arguments, toolCall.projectSession])
@@ -229,8 +221,7 @@ export default function ConfigImpactPreview({ preview, selectedKeys, onSelection
         items={preview.unwrittenBlueprints.map(item => ({
           key: `blueprint:${item.chapterNumber}`,
           title: text(`第 ${item.chapterNumber} 章 · ${item.title}`, `Chapter ${item.chapterNumber} · ${item.title}`),
-          reason: text('可能需要与更新后的故事事实重新对齐', 'May need alignment with the updated story facts'),
-        }))}
+          reason: text('可能需要与更新后的故事事实重新对齐', 'May need alignment with the updated story facts')}))}
       />
       <ImpactList
         title={text('活跃叙事线索', 'Active narrative threads')}
@@ -238,8 +229,7 @@ export default function ConfigImpactPreview({ preview, selectedKeys, onSelection
         items={preview.activeThreads.map(thread => ({
           key: `thread:${thread.id}`,
           title: thread.title,
-          reason: text('作者意图可能依赖当前配置；线索计划不会被修改', 'Its author intent may depend on the current config; the plan will not be changed'),
-        }))}
+          reason: text('作者意图可能依赖当前配置；线索计划不会被修改', 'Its author intent may depend on the current config; the plan will not be changed')}))}
       />
       <ImpactList
         title={text('已定稿章节（只读）', 'Finalized chapters (read only)')}
@@ -247,8 +237,7 @@ export default function ConfigImpactPreview({ preview, selectedKeys, onSelection
         items={preview.finalizedChapters.map(chapter => ({
           key: `finalized:${chapter.chapterNumber}`,
           title: text(`第 ${chapter.chapterNumber} 章 · ${chapter.title}`, `Chapter ${chapter.chapterNumber} · ${chapter.title}`),
-          reason: text('仅提示潜在矛盾，正文绝不自动改写', 'Potential conflicts are shown only; finalized prose is never rewritten'),
-        }))}
+          reason: text('仅提示潜在矛盾，正文绝不自动改写', 'Potential conflicts are shown only; finalized prose is never rewritten')}))}
       />
 
       {preview.blueprintProposals.length > 0 && (

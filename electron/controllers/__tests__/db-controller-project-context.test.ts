@@ -204,7 +204,6 @@ import { registerDatabaseController } from '../db-controller'
 function currentSession() {
   return {
     projectId: `project-${mocks.currentProjectPath.split('/').at(-1)}`,
-    leaseId: `lease-${mocks.currentProjectPath.split('/').at(-1)}`,
     projectPath: mocks.currentProjectPath,
   }
 }
@@ -272,7 +271,6 @@ beforeEach(() => {
   })
   mocks.captureCurrentSession.mockImplementation(() => ({
     projectId: `project-${mocks.currentProjectPath.split('/').at(-1)}`,
-    leaseId: `lease-${mocks.currentProjectPath.split('/').at(-1)}`,
     rootPath: mocks.currentProjectPath,
   }))
 })

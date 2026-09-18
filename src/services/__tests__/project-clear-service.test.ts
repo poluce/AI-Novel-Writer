@@ -19,14 +19,12 @@ vi.mock('../ipc-client', () => ({
 const projectPath = 'C:/novels/project-a'
 const projectSession: ProjectSessionContext = {
   projectId: 'project-a',
-  leaseId: 'lease-a',
   projectPath,
 }
 
-function project(leaseId = projectSession.leaseId, path = projectPath) {
+function project(path = projectPath) {
   return {
     id: projectSession.projectId,
-    sessionLease: leaseId,
     path,
     name: 'Project A',
     novelConfig: {},
@@ -158,7 +156,7 @@ describe('clearProjectData', () => {
   })
 
   it('fails closed before mutation if the confirmation lease is no longer active', async () => {
-    setActiveProjectSessionContext({ ...projectSession, leaseId: 'lease-b' })
+    setActiveProjectSessionContext({ ...projectSession })
 
     await expect(clearProjectData({ generatedText: true }, projectSession)).rejects.toThrow('项目会话')
     expect(ipc.invokeWithProjectSession).not.toHaveBeenCalled()
@@ -284,7 +282,7 @@ describe('clearProjectData', () => {
 
     const clearing = clearProjectData({ generatedText: true }, projectSession)
     await vi.waitFor(() => expect(resolveClear).toBeTypeOf('function'))
-    const reopenedSession = { ...projectSession, leaseId: 'lease-b' }
+    const reopenedSession = { ...projectSession }
     setActiveProjectSessionContext(reopenedSession)
     vi.mocked(useProjectStore.getState).mockReturnValue({
       currentProject: project('lease-b'),

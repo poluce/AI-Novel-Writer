@@ -81,8 +81,7 @@ function toChapterInfo(
     keyEvents: blueprint.keyEvents || '',
     suspenseHook: blueprint.suspenseHook || '',
     userGuidance: blueprint.userGuidance || '',
-    wordsTarget: chapterWordsTarget,
-  }
+    wordsTarget: chapterWordsTarget}
 }
 
 function throwIfCancelled(context: WorkflowContext, uiLocale: Locale) {
@@ -126,11 +125,8 @@ async function captureBatchFinalizationSnapshot(
           draftId,
           chapterNumber,
           draftStatus: 'draft',
-          projectSessionLease: projectSession.leaseId,
-          contentRevision,
-        }
-        : candidate),
-    }))
+          contentRevision}
+        : candidate)}))
 
     return Object.freeze({
       tabId: tab.id,
@@ -140,8 +136,7 @@ async function captureBatchFinalizationSnapshot(
       chapterNumber,
       chapterTitle,
       content: draftContent,
-      contentRevision,
-    })
+      contentRevision})
   } catch {
     // Editor binding is a renderer projection. Finalization can still use its
     // database-backed fallback when the tab was not opened or already closed.
@@ -210,8 +205,7 @@ async function runOneBatchChapter(
   const draftContent = await new GenerateDraftCommand(chapterInfo, {
     selectedCandidateDrafts: completionMode === 'draft_review'
       ? [...draftReviewCandidates.values()]
-      : [],
-  }).execute({ step, context, callbacks })
+      : []}).execute({ step, context, callbacks })
   throwIfCancelled(context, uiLocale)
 
   if (completionMode === 'draft_review') {
@@ -228,8 +222,7 @@ async function runOneBatchChapter(
       chapterNumber,
       draftId,
       version,
-      content: draftContent,
-    }))
+      content: draftContent}))
     callbacks.setProgress(100)
     return localeText(
       uiLocale,
@@ -266,8 +259,7 @@ async function runOneBatchChapter(
     chapterInfo,
     stopOnPostProcessFailure: true,
     eventSource: 'batch',
-    ...(snapshot ? { snapshot } : {}),
-  }).execute({ step, context, callbacks })
+    ...(snapshot ? { snapshot } : {})}).execute({ step, context, callbacks })
 
   callbacks.setProgress(100)
   return localeText(
@@ -372,9 +364,7 @@ export function createBatchChapterWorkflow(params: BatchChapterWorkflowParams): 
           context,
           callbacks,
           draftReviewCandidates,
-        ),
-      }
+        )}
     }),
-    onComplete: { mode: 'silent' },
-  }
+    onComplete: { mode: 'silent' }}
 }

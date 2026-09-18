@@ -10,7 +10,7 @@ type IpcHandler = (...args: unknown[]) => Promise<unknown>
 const mocks = vi.hoisted(() => ({
   handlers: new Map<string, IpcHandler>(),
   currentProjectPath: '',
-  activeLeaseId: 'lease-A',
+  activeProjectId: 'project-A',
   assertCurrentProjectContext: vi.fn(),
 }))
 
@@ -88,14 +88,9 @@ function rawHandler(channel: string): IpcHandler {
 }
 
 function handler(channel: string): IpcHandler {
-  return handlerWithLease(channel, 'lease-A')
-}
-
-function handlerWithLease(channel: string, leaseId: string): IpcHandler {
   const registered = rawHandler(channel)
   return async (event, ...args) => registered(event, ...args, {
     projectId: 'project-A',
-    leaseId,
     projectPath: mocks.currentProjectPath,
   })
 }
@@ -131,16 +126,16 @@ beforeAll(() => {
 
 beforeEach(() => {
   mocks.currentProjectPath = projectAPath
-  mocks.activeLeaseId = 'lease-A'
+  mocks.activeProjectId = 'project-A'
   vi.restoreAllMocks()
   vi.clearAllMocks()
-  mocks.assertCurrentProjectContext.mockImplementation((context: { projectPath?: string; leaseId?: string } | undefined, currentProjectPath: string) => {
-    if (!context?.projectPath) throw new Error('缺少项目会话上下文，已拒绝操作')
+  mocks.assertCurrentProjectContext.mockImplementation((context: { projectPath?: string; projectId?: string } | undefined, currentProjectPath: string) => {
+    if (!context?.projectPath || !context.projectId) throw new Error('缺少项目会话上下文，已拒绝操作')
     if (context.projectPath !== currentProjectPath) {
       throw new Error('项目会话与当前数据库不匹配，已拒绝操作')
     }
-    if (context.leaseId !== mocks.activeLeaseId) {
-      throw new Error('项目会话租约已失效，已拒绝操作')
+    if (context.projectId !== mocks.activeProjectId) {
+      throw new Error('项目会话已失效，已拒绝操作')
     }
     return { rootPath: currentProjectPath }
   })
@@ -250,20 +245,20 @@ describe('project-scoped filesystem boundary', () => {
     expect(fs.existsSync(missingPath)).toBe(false)
   })
 
-  it('rejects a delayed same-path read when the project is reopened with a new lease', async () => {
+  it('rejects a delayed same-path read when another project becomes active', async () => {
     const target = path.join(projectAPath, 'chapter.md')
     fs.writeFileSync(target, 'old content', 'utf8')
     const pendingRead = deferred<string>()
     const readSpy = vi.spyOn(fsPromises, 'readFile').mockImplementationOnce(async () => pendingRead.promise)
 
-    const resultPromise = handlerWithLease('fs:read-file', 'lease-A')(
+    const resultPromise = handler('fs:read-file')(
       {},
       target,
       projectAPath,
     )
 
     await vi.waitFor(() => expect(readSpy).toHaveBeenCalledOnce())
-    mocks.activeLeaseId = 'lease-B'
+    mocks.activeProjectId = 'project-B'
     pendingRead.resolve('stale content')
 
     expectLocalizedSecurityFailure(await resultPromise, [
@@ -272,7 +267,7 @@ describe('project-scoped filesystem boundary', () => {
     ])
   })
 
-  it('rejects a delayed same-path write before it can replace the target after reopen', async () => {
+  it('rejects a delayed same-path write before it can replace the target after switching projects', async () => {
     const target = path.join(projectAPath, 'chapter.md')
     fs.writeFileSync(target, 'original', 'utf8')
     const pendingWrite = deferred<void>()
@@ -280,7 +275,7 @@ describe('project-scoped filesystem boundary', () => {
     const writeSpy = vi.spyOn(fsPromises, 'writeFile').mockImplementationOnce(async () => pendingWrite.promise)
     const renameSpy = vi.spyOn(fs, 'renameSync').mockImplementationOnce(() => undefined)
 
-    const resultPromise = handlerWithLease('fs:write-file', 'lease-A')(
+    const resultPromise = handler('fs:write-file')(
       {},
       target,
       'stale write',
@@ -288,7 +283,7 @@ describe('project-scoped filesystem boundary', () => {
     )
 
     await vi.waitFor(() => expect(writeSpy).toHaveBeenCalledOnce())
-    mocks.activeLeaseId = 'lease-B'
+    mocks.activeProjectId = 'project-B'
     pendingWrite.resolve()
 
     expectLocalizedSecurityFailure(await resultPromise, [
@@ -301,16 +296,17 @@ describe('project-scoped filesystem boundary', () => {
     expect(fs.readFileSync(target, 'utf8')).toBe('original')
   })
 
-  it('reports committed when the file was replaced before the old project lease became stale', async () => {
+  it('reports committed when the file was replaced before the project switched', async () => {
     const target = path.join(projectAPath, 'chapter.md')
     fs.writeFileSync(target, 'original', 'utf8')
     const writeSpy = vi.spyOn(testFileSystem, 'writeTextAtomically').mockImplementationOnce(async (capability, content, beforeReplace) => {
       await beforeReplace?.()
       fs.writeFileSync(capabilityPath(capability), content, 'utf8')
-      mocks.activeLeaseId = 'lease-B'
+      mocks.activeProjectId = 'project-B'
+      mocks.currentProjectPath = projectBPath
     })
 
-    const result = await handlerWithLease('fs:write-file', 'lease-A')(
+    const result = await handler('fs:write-file')(
       {},
       target,
       'committed content',

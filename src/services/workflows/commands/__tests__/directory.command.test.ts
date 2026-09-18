@@ -50,7 +50,6 @@ function workflowContext(): WorkflowContext {
     projectPath: projectSnapshot.expectedProjectPath,
     projectSession: {
       projectId: 'project-1',
-      leaseId: 'lease-project-1',
       projectPath: projectSnapshot.expectedProjectPath,
     },
     writingLanguage: 'zh-CN',
@@ -292,7 +291,6 @@ beforeEach(() => {
       id: 'project-1',
       name: '测试项目',
       path: projectSnapshot.expectedProjectPath,
-      sessionLease: 'lease-project-1',
       novelConfig: {
         genre: '玄幻',
         subGenre: '',

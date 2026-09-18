@@ -14,7 +14,6 @@ const builtin: PromptTemplate = {
 
 const session: ProjectSessionContext = {
   projectId: 'novel-1',
-  leaseId: 'lease-1',
   projectPath: 'C:/novels/novel-1',
 }
 

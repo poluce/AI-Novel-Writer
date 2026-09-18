@@ -70,7 +70,6 @@ function project(path: string): ProjectData {
     id: path,
     name: path,
     path,
-    sessionLease: `lease-${path}`,
     novelConfig: {
       genre: '玄幻',
       subGenre: '',
@@ -275,7 +274,7 @@ describe('assertBlueprintCoverage', () => {
 })
 
 describe('blueprint persistence helpers', () => {
-  const session = { projectId: 'NovelA', leaseId: 'lease-NovelA', projectPath: 'C:/NovelA' }
+  const session = { projectId: 'NovelA', projectPath: 'C:/NovelA' }
 
   it('throws when saving one blueprint returns an IPC failure', async () => {
     stubIpcInvoke({ success: false, error: 'DB 未打开' })
@@ -380,7 +379,6 @@ describe('directory workflow project context', () => {
       'C:\\novels\\Expected',
       {
         projectId: 'C:\\novels\\Expected',
-        leaseId: 'lease-C:\\novels\\Expected',
         projectPath: 'C:\\novels\\Expected',
       },
       'en-US',
@@ -393,7 +391,6 @@ describe('directory workflow project context', () => {
     useProjectStore.setState({ currentProject: projectA })
     const projectSession = {
       projectId: projectA.id,
-      leaseId: projectA.sessionLease!,
       projectPath: projectA.path,
     }
     const directoryCommand = await import('../commands/directory.command')
@@ -433,7 +430,6 @@ describe('directory workflow project context', () => {
     const projectA = project('C:\\novels\\English-errors')
     const projectSession = {
       projectId: projectA.id,
-      leaseId: projectA.sessionLease!,
       projectPath: projectA.path,
     }
     useProjectStore.setState({ currentProject: projectA })
@@ -465,7 +461,6 @@ describe('directory workflow project context', () => {
     const projectA = project('C:\\novels\\English-command-error')
     const projectSession = {
       projectId: projectA.id,
-      leaseId: projectA.sessionLease!,
       projectPath: projectA.path,
     }
     useProjectStore.setState({ currentProject: projectA })
@@ -507,7 +502,6 @@ describe('directory workflow project context', () => {
     const projectA = project('C:\\novels\\English')
     const projectSession = {
       projectId: projectA.id,
-      leaseId: projectA.sessionLease!,
       projectPath: projectA.path,
     }
     useProjectStore.setState({ currentProject: projectA })
@@ -559,7 +553,6 @@ describe('directory workflow project context', () => {
     })
     const workflow = createDirectoryWorkflow({ mode: 'full' }, projectA.path, {
       projectId: projectA.id,
-      leaseId: projectA.sessionLease!,
       projectPath: projectA.path,
     })
     expect(workflow.resourceKeys).toEqual(['blueprints', 'character-roster'])
@@ -569,7 +562,6 @@ describe('directory workflow project context', () => {
       projectPath: projectA.path,
       projectSession: {
         projectId: projectA.id,
-        leaseId: projectA.sessionLease!,
         projectPath: projectA.path,
       },
       writingLanguage: 'zh-CN',

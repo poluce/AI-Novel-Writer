@@ -14,14 +14,12 @@ import { Button } from '../ui/Button'
 import { toast } from '../ui/Toast'
 import { confirm } from '../ui/Confirm'
 import {
-  Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
-} from '../ui/Dialog'
+  Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription} from '../ui/Dialog'
 import {
   parseDraftMeta,
   type DraftMeta,
   type DraftStatus,
-  type FrozenDraftSourceIdentity,
-} from '../../services/workflows/chapter-workflow'
+  type FrozenDraftSourceIdentity} from '../../services/workflows/chapter-workflow'
 import { getPendingRevisions, getReviewsForVersion, type RevisionEntry } from '../../services/draft-index'
 import { readDraftBody } from '../../stores/draft-store'
 import { ipc } from '../../services/ipc-client'
@@ -39,8 +37,7 @@ import { guardRepairPostProcess } from '../../services/workflow-guards'
 import {
   captureProjectSession,
   isProjectSessionCurrent,
-  isProjectSessionPath,
-} from '../project-session-gate'
+  isProjectSessionPath} from '../project-session-gate'
 
 /** 无批注时共用的空数组：派生值保持同一引用，下游 effect 不会每轮重跑。 */
 const EMPTY_ANNOTATIONS: DraftAnnotation[] = []
@@ -50,8 +47,7 @@ const DRAFT_STATUS_EN: Record<string, string> = {
   revised: 'Revised',
   reviewed: 'Reviewed',
   finalized: 'Finalized',
-  archived: 'Archived',
-}
+  archived: 'Archived'}
 
 interface Props {
   tabId: string
@@ -69,10 +65,10 @@ export default function DraftEditor(props: Props) {
   const currentProject = useProjectStore(s => s.currentProject)
   const projectSession = captureProjectSession(currentProject)
   const sessionKey = projectSession && isProjectSessionPath(projectSession, props.projectKey)
-    ? `${projectSession.projectId}:${projectSession.leaseId}`
+    ? `${projectSession.projectId}:${projectSession.projectPath}`
     : `inactive:${props.projectKey}`
 
-  // 同一路径重新打开会生成新 lease；用会话键重挂载，避免旧会话的本地 UI 状态短暂显示。
+  // 换书后用会话键重挂载，避免旧项目的本地 UI 状态短暂显示。
   return <DraftEditorSession key={sessionKey} {...props} />
 }
 
@@ -175,8 +171,7 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
       return {
         key: annotationKey,
         rows: typeof next === 'function' ? next(currentRows) : next,
-        ready: true,
-      }
+        ready: true}
     })
   }, [annotationKey])
   const [annotationListOpen, setAnnotationListOpen] = useState(false)
@@ -219,26 +214,22 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
       key: 'continuity',
       label: text('剧情连贯性', 'Story continuity'),
       desc: text('与前文是否矛盾', 'Consistency with earlier chapters'),
-      promptLabel: '剧情连贯性',
-    },
+      promptLabel: '剧情连贯性'},
     {
       key: 'logic',
       label: text('剧情合理性', 'Story logic'),
       desc: text('因果逻辑、动机、常识', 'Causality, motivation, and plausibility'),
-      promptLabel: '剧情合理性',
-    },
+      promptLabel: '剧情合理性'},
     {
       key: 'character',
       label: text('角色状态', 'Character state'),
       desc: text('能力/位置/情感一致性', 'Ability, location, and emotional consistency'),
-      promptLabel: '角色状态',
-    },
+      promptLabel: '角色状态'},
     {
       key: 'foreshadow',
       label: text('前后章节串联', 'Chapter connections'),
       desc: text('伏笔、悬念连贯', 'Foreshadowing and suspense continuity'),
-      promptLabel: '前后章节串联',
-    },
+      promptLabel: '前后章节串联'},
   ]
   const [reviewDims, setReviewDims] = useState<Record<string, boolean>>(
     Object.fromEntries(REVIEW_DIMS.map(d => [d.key, true]))
@@ -265,8 +256,7 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
     ) return
     const saveSnapshot = {
       content: targetTab.content ?? draftContent,
-      contentRevision: targetTab.contentRevision ?? 0,
-    }
+      contentRevision: targetTab.contentRevision ?? 0}
     setSaving(true)
     try {
       if (filePath.startsWith('vela://draft/') || filePath.startsWith('vela://manuscript/')) {
@@ -314,8 +304,7 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
       tabId,
       type: 'chapter',
       projectKey,
-      save: () => exitSaveRef.current(currentBodyRef.current),
-    })
+      save: () => exitSaveRef.current(currentBodyRef.current)})
   }, [projectKey, tabId])
 
   const freezeDraftSourceForAI = async (projectSession: NonNullable<ReturnType<typeof captureProjectSession>>) => {
@@ -336,8 +325,7 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
       chapterNumber: meta.chapterNumber,
       version: meta.version,
       status: targetTab.draftStatus ?? meta.status,
-      contentRevision: targetTab.contentRevision ?? 0,
-    })
+      contentRevision: targetTab.contentRevision ?? 0})
 
     if (targetTab.dirty) await doSave(body)
     if (!isProjectSessionCurrent(projectSession)) return null
@@ -388,8 +376,7 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
         draftContent: source.body,
         sourceDraft: source.sourceDraft,
         userRefinePrompt: userRefinePrompt.trim() || undefined,
-        annotations,
-      }, projectSession), false)
+        annotations}, projectSession), false)
     } catch (e) {
       if (!isProjectSessionCurrent(projectSession)) return
       toast.error(text(`修稿启动失败：${e}`, 'Could not start AI revision.'))
@@ -415,8 +402,7 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
         draftPath: filePath,
         draftContent: source.body,
         sourceDraft: source.sourceDraft,
-        reviewFocus: REVIEW_DIMS.filter(d => reviewDims[d.key]).map(d => d.promptLabel).join('、') || undefined,
-      }, projectSession), false)
+        reviewFocus: REVIEW_DIMS.filter(d => reviewDims[d.key]).map(d => d.promptLabel).join('、') || undefined}, projectSession), false)
     } catch (e) {
       if (!isProjectSessionCurrent(projectSession)) return
       toast.error(text(`审稿启动失败：${e}`, 'Could not start AI review.'))
@@ -434,8 +420,7 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
       ),
       {
         title: text('确认定稿', 'Confirm finalization'),
-        confirmText: text('确认定稿', 'Finalize'),
-      }
+        confirmText: text('确认定稿', 'Finalize')}
     )
     if (!ok || !isProjectSessionCurrent(projectSession)) return
     try {
@@ -455,11 +440,9 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
           // 正文仍严格取编辑器可见值，不再回读 SQLite。
           draftId: targetTab.draftId ?? meta.id,
           chapterNumber: targetTab.chapterNumber ?? meta.chapterNumber,
-          content: targetTab.content ?? currentBodyRef.current,
-        },
+          content: targetTab.content ?? currentBodyRef.current},
         projectSession,
-        chapterTitle: meta.chapterTitle ?? '未知标题',
-      })
+        chapterTitle: meta.chapterTitle ?? '未知标题'})
       if (!isProjectSessionCurrent(projectSession)) return
       useEditorStore.setState(state => ({
         tabs: state.tabs.map(tab => tab.id === snapshot.tabId && tab.projectKey === snapshot.projectPath
@@ -467,11 +450,8 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
               ...tab,
               draftId: snapshot.draftId,
               chapterNumber: snapshot.chapterNumber,
-              projectSessionLease: snapshot.projectSession.leaseId,
-              finalizationConflict: undefined,
-            }
-          : tab),
-      }))
+              finalizationConflict: undefined}
+          : tab)}))
 
       if (!isProjectSessionCurrent(projectSession)) return
       useWorkflowStore.getState().startWorkflow(createFinalizeWorkflow({
@@ -480,8 +460,7 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
         chapterTitle: meta.chapterTitle ?? '未知标题',
         draftPath: filePath,
         draftContent: snapshot.content,
-        snapshot,
-      }, projectSession), false)
+        snapshot}, projectSession), false)
     } catch (e) {
       if (!isProjectSessionCurrent(projectSession)) return
       toast.error(text(`定稿启动失败：${e}`, 'Could not start finalization.'))
@@ -507,8 +486,7 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
           && tab.projectKey === projectKey
           && tab.finalizationId === finalizationId
           ? { ...tab, finalizationPublication: 'published' }
-          : tab),
-      }))
+          : tab)}))
       toast.success(text('实体稿已发布', 'Manuscript published'))
     } catch (error) {
       if (!isProjectSessionCurrent(projectSession)) return
@@ -558,8 +536,7 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
     }
     const targetSnapshot = {
       content: targetTab.content ?? content,
-      contentRevision: targetTab.contentRevision ?? 0,
-    }
+      contentRevision: targetTab.contentRevision ?? 0}
     // 使用 vela://revision/{id} 协议路径读取修稿内容
     const revPath = `vela://revision/${rev.id}`
 
@@ -609,8 +586,7 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
       modifiedContent: revision.content,
       revisionPath: revPath,
       targetSnapshot,
-      staleReason,
-    })
+      staleReason})
   }
 
   /** 合并完成回调 —— 就地覆写原草稿（不新建版本，仅蓝图写稿时才产生新版本） */
@@ -696,8 +672,7 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
       chapterDir,
       draftId: meta.id,
       reviewId: latest.id,
-      projectKey,
-    })
+      projectKey})
   }
 
   return (
@@ -707,8 +682,7 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
         className="flex items-center justify-between gap-2 px-3 h-9 flex-shrink-0"
         style={{
           borderBottom: '1px solid var(--color-border)',
-          backgroundColor: 'var(--color-editor-bg)',
-        }}
+          backgroundColor: 'var(--color-editor-bg)'}}
       >
         {/* 左侧：章节标题 + 版本 */}
         <div className="flex items-center gap-1.5 min-w-0">
@@ -762,8 +736,7 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
               className="text-[0.7rem] px-1.5 py-0.5 rounded flex-shrink-0"
               style={{
                 backgroundColor: 'var(--color-hover)',
-                color: DRAFT_STATUS_COLOR[status] ?? 'var(--color-text-muted)',
-              }}
+                color: DRAFT_STATUS_COLOR[status] ?? 'var(--color-text-muted)'}}
             >
               {text(DRAFT_STATUS_LABEL[status] ?? status, DRAFT_STATUS_EN[status] ?? status)}
             </span>
@@ -1043,16 +1016,14 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
                         style={{
                           border: `1px solid ${reviewDims[d.key] ? 'var(--color-accent)' : 'var(--color-border)'}`,
                           backgroundColor: reviewDims[d.key] ? 'rgba(var(--color-accent-rgb),0.1)' : 'transparent',
-                          color: reviewDims[d.key] ? 'var(--color-accent)' : 'var(--color-text-muted)',
-                        }}
+                          color: reviewDims[d.key] ? 'var(--color-accent)' : 'var(--color-text-muted)'}}
                         onClick={() => setReviewDims(prev => ({ ...prev, [d.key]: !prev[d.key] }))}
                       >
                         <div
                           className="w-3 h-3 rounded flex items-center justify-center flex-shrink-0"
                           style={{
                             backgroundColor: reviewDims[d.key] ? 'var(--color-accent)' : 'transparent',
-                            border: `1.5px solid ${reviewDims[d.key] ? 'var(--color-accent)' : 'var(--color-border)'}`,
-                          }}
+                            border: `1.5px solid ${reviewDims[d.key] ? 'var(--color-accent)' : 'var(--color-border)'}`}}
                         >
                           {reviewDims[d.key] && (
                             <Check size={9} strokeWidth={3} color="white" aria-hidden="true" />
@@ -1081,8 +1052,7 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
                   color: 'var(--color-text)',
                   minHeight: 72,
                   resize: 'vertical',
-                  outline: 'none',
-                }}
+                  outline: 'none'}}
                 placeholder={text(
                   '例如：加强打斗场面的画面感；把结尾的伏笔改为更隐晦的暗示；对白太书面化，改为口语化风格...',
                   'For example: make action scenes more vivid; make the final foreshadowing subtler; make dialogue less formal...',
@@ -1119,8 +1089,7 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
             maxWidth: '90vw',
             height: '85vh',
             maxHeight: '85vh',
-            overflow: 'hidden',
-          }}
+            overflow: 'hidden'}}
           /* 阻止点击遮罩关闭，防止误触丢失合并进度 */
           onPointerDownOutside={(e) => e.preventDefault()}
           onEscapeKeyDown={(e) => e.preventDefault()}

@@ -50,7 +50,7 @@ function deferred<T>() {
 }
 
 const project = {
-  id: 'current-project', sessionLease: 'lease-current', name: 'Current Project', path: 'C:\\novels\\current',
+  id: 'current-project', name: 'Current Project', path: 'C:\\novels\\current',
   novelConfig: {
     genre: '', subGenre: '', targetAudience: '', totalChapters: 10, wordsPerChapter: 3000,
     plotStructure: 'three_act', narrativePOV: 'third_limited', coreOutline: '', worldSetting: '',
@@ -394,7 +394,7 @@ describe('current-project reference import', () => {
     await act(async () => useProjectStore.setState({
       currentProject: {
         ...project,
-        id: 'replacement-project', sessionLease: 'lease-replacement', path: 'C:\\novels\\replacement',
+        id: 'replacement-project', path: 'C:\\novels\\replacement',
       } as never,
     }))
     selection.resolve({ success: true, preparation })
@@ -418,7 +418,7 @@ describe('current-project reference import', () => {
       runId: expect.any(String), purpose: 'reference', locale: 'zh-CN', expectedProjectPath: project.path,
     })
     expect(selectionCall?.[2]).toMatchObject({
-      projectId: project.id, leaseId: project.sessionLease, projectPath: project.path,
+      projectId: project.id, projectPath: project.path,
     })
     await expect.element(page.getByText('Current Project', { exact: true })).toBeVisible()
     await expect.element(page.getByText('导入参照文本与构建知识库', { exact: true })).toBeVisible()
@@ -769,7 +769,7 @@ describe('current-project reference import', () => {
         activeRuns: [{
           id: resumable.id,
           projectPath: project.path,
-          projectSession: { projectId: project.id, leaseId: project.sessionLease, projectPath: project.path },
+          projectSession: { projectId: project.id, projectPath: project.path },
           writingLanguage: 'zh-CN', uiLocale: 'zh-CN', type: 'novel_import', title: 'Active import',
           status: 'running', currentStepIndex: 0, createdAt: '2026-01-01', steps: [],
         }],
@@ -1027,7 +1027,7 @@ describe('current-project reference import', () => {
     await act(async () => useProjectStore.setState({
       currentProject: {
         ...project,
-        id: 'replacement-project', sessionLease: 'lease-replacement', path: 'C:\\novels\\replacement',
+        id: 'replacement-project', path: 'C:\\novels\\replacement',
       } as never,
     }))
     restart.resolve({

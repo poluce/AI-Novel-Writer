@@ -26,19 +26,16 @@ vi.mock('../ipc-client', () => ({
 
 const sessionA: ProjectSessionContext = {
   projectId: 'project-a',
-  leaseId: 'lease-a',
   projectPath: 'C:/novels/project-a',
 }
 
 const sessionB: ProjectSessionContext = {
   projectId: 'project-b',
-  leaseId: 'lease-b',
   projectPath: 'C:/novels/project-b',
 }
 
 const replacementSessionA: ProjectSessionContext = {
   ...sessionA,
-  leaseId: 'lease-a-reopened',
 }
 
 function customTemplate(content: string): PromptTemplate {
@@ -164,7 +161,7 @@ describe('project custom prompt session ownership', () => {
     expect(getPromptTemplate('first_chapter_draft', sessionA)?.content).not.toBe('project A override')
   })
 
-  it('fails closed when the same project path is reopened with a new lease', async () => {
+  it('keeps project prompt overrides when the same book is reopened', async () => {
     vi.mocked(ipc.invokeWithProjectSession).mockImplementation((async (
       session: ProjectSessionContext,
       channel: string,
@@ -182,22 +179,18 @@ describe('project custom prompt session ownership', () => {
       if (channel === 'fs:read-file') {
         return {
           success: true,
-          content: JSON.stringify(customTemplate(`override for ${session.leaseId}`)),
+          content: JSON.stringify(customTemplate(`override for ${session.projectId}`)),
         }
       }
       throw new Error(`unexpected channel: ${channel}`)
     }) as never)
 
     await expect(loadProjectCustomPrompts(sessionA)).resolves.toBe(true)
-    expect(getPromptTemplate('first_chapter_draft', sessionA)?.content).toBe('override for lease-a')
+    expect(getPromptTemplate('first_chapter_draft', sessionA)?.content).toBe('override for project-a')
 
     setActiveProjectSessionContext(replacementSessionA)
-    expect(getPromptTemplate('first_chapter_draft', replacementSessionA)?.content).not.toBe('override for lease-a')
-    expect(getPromptTemplate('first_chapter_draft', sessionA)?.content).not.toBe('override for lease-a')
-
-    await expect(loadProjectCustomPrompts(replacementSessionA)).resolves.toBe(true)
-    expect(getPromptTemplate('first_chapter_draft', replacementSessionA)?.content)
-      .toBe('override for lease-a-reopened')
+    expect(getPromptTemplate('first_chapter_draft', replacementSessionA)?.content).toBe('override for project-a')
+    expect(getPromptTemplate('first_chapter_draft', sessionA)?.content).toBe('override for project-a')
   })
 
   it('isolates one damaged project prompt while publishing the remaining valid overrides', async () => {
@@ -245,7 +238,6 @@ describe('project custom prompt session ownership', () => {
     )
     expect(vi.mocked(ipc.invokeWithProjectSession).mock.calls.every(([owner]) => (
       (owner as ProjectSessionContext).projectId === sessionA.projectId
-      && (owner as ProjectSessionContext).leaseId === sessionA.leaseId
       && (owner as ProjectSessionContext).projectPath === sessionA.projectPath
     ))).toBe(true)
   })
@@ -274,7 +266,7 @@ describe('project custom prompt session ownership', () => {
     await expect(loadProjectCustomPrompts(sessionA)).resolves.toBe(true)
     expect(getPromptTemplate('first_chapter_draft', sessionA)?.content).toBe('old workflow override')
 
-    setActiveProjectSessionContext(replacementSessionA)
+    setActiveProjectSessionContext(sessionB)
 
     expect(getPromptTemplate('first_chapter_draft', sessionA)?.content).not.toBe('old workflow override')
   })
@@ -301,10 +293,10 @@ describe('project custom prompt session ownership', () => {
       'utf8',
     )
 
-    expect(source).toContain('captureProjectSession({ id: projectId, path: projectPath, sessionLease: projectLease })')
+    expect(source).toContain('captureProjectSession({ id: projectId, path: projectPath })')
     expect(source).toContain('loadProjectCustomPrompts(session, editingLanguage)')
     expect(source).toContain('isProjectSessionCurrent(session)')
-    expect(source).toContain('[editingLanguage, projectId, projectLease, projectPath, text]')
+    expect(source).toContain('[editingLanguage, projectId, projectPath, text]')
     expect(source).toContain('getPromptTemplate(builtinTemplate.key, projectSession ?? undefined, editingLanguage)')
     expect(source).toContain('getPromptSource(builtinTemplate.key, projectSession ?? undefined, editingLanguage)')
   })

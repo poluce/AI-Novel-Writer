@@ -10,13 +10,11 @@ import type { ProjectSessionContext } from '../../../shared/ipc-channels'
 
 const sessionA: ProjectSessionContext = {
   projectId: 'project-a',
-  leaseId: 'lease-a',
   projectPath: 'C:/novels/A',
 }
 
 const sessionB: ProjectSessionContext = {
   projectId: 'project-b',
-  leaseId: 'lease-b',
   projectPath: 'C:/novels/B',
 }
 
@@ -66,7 +64,6 @@ function createHarness(options: {
     getSession: () => activeSession,
     isSessionUsable: session => (
       activeSession?.projectId === session.projectId
-      && activeSession.leaseId === session.leaseId
       && activeSession.projectPath === session.projectPath
     ),
     read: options.read,

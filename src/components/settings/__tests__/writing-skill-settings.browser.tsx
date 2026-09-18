@@ -51,7 +51,6 @@ beforeEach(async () => {
       id: 'skill-project',
       name: 'Skill project',
       path: 'C:/novels/skill-project',
-      sessionLease: 'skill-project-lease',
       novelConfig: {},
     } as never,
   })
@@ -112,7 +111,7 @@ describe('writing skill settings', () => {
       'C:/novels/skill-project/.vela/writing-skills.json',
       expect.stringContaining('builtin:natural-prose-refinement'),
       'C:/novels/skill-project',
-      expect.objectContaining({ projectId: 'skill-project', leaseId: 'skill-project-lease' }),
+      expect.objectContaining({ projectId: 'skill-project' }),
     ))
   })
 

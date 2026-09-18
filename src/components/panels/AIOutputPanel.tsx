@@ -4,16 +4,14 @@ import {
   useWorkflowStore,
   type WorkflowFailureCode,
   type WorkflowRun,
-  type WorkflowStep,
-} from '../../stores/workflow-store'
+  type WorkflowStep} from '../../stores/workflow-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import { useEditorStore } from '../../stores/editor-store'
 import { useProjectStore } from '../../stores/project-store'
 import {
   projectSessionContextFromProject,
   sameProjectPathKey,
-  sameProjectSessionContext,
-} from '../../shared/project-session-context'
+  sameProjectSessionContext} from '../../shared/project-session-context'
 import type { ProjectSessionContext } from '../../shared/ipc-channels'
 import type { RecoveryCandidate } from '../../shared/recovery-candidate'
 import type { PromptBudgetReport } from '../../services/generation/generation-harness'
@@ -120,9 +118,7 @@ export default function AIOutputPanel() {
       content: currentCandidate.visibleText,
       savedContent: currentCandidate.visibleText,
       dirty: false,
-      projectKey: project.path,
-      projectSessionLease: projectSession!.leaseId,
-    })
+      projectKey: project.path})
     setRecoveryCandidates(items => items.filter(item => item.candidateId !== candidate.candidateId))
     setRecoveryError('')
   }
@@ -187,8 +183,7 @@ export default function AIOutputPanel() {
         className="no-select flex items-center justify-between gap-1.5 px-2 flex-shrink-0"
         style={{
           height: 'var(--height-panel-header)',
-          borderBottom: '1px solid var(--color-border)',
-        }}
+          borderBottom: '1px solid var(--color-border)'}}
       >
         <span
           className="text-xs font-medium uppercase tracking-widest"
@@ -248,8 +243,7 @@ function RecoveryCandidateSection({
   locale,
   onCopy,
   onContinue,
-  onDiscard,
-}: {
+  onDiscard}: {
   candidates: RecoveryCandidate[]
   error: string
   locale: Locale
@@ -310,8 +304,7 @@ function EmptyState() {
 function ActiveRunView({
   run,
   activeRuns,
-  onSwitchRun,
-}: {
+  onSwitchRun}: {
   run: WorkflowRun
   activeRuns: WorkflowRun[]
   onSwitchRun: (id: string) => void
@@ -341,8 +334,7 @@ function ActiveRunView({
       await launchCreativeWorkflow({
         workflow: 'generate_architecture',
         selectedSteps: ['synopsis'],
-        resumeSynopsis: true,
-      }, run.projectSession)
+        resumeSynopsis: true}, run.projectSession)
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error)
       toast.error(runText(locale, `续写启动失败：${detail}`, `Failed to start the continuation: ${detail}`))
@@ -408,8 +400,7 @@ function ActiveRunView({
               className="text-[0.68rem] px-2 py-0.5 rounded transition-all flex-shrink-0"
               style={{
                 backgroundColor: r.id === run.id ? 'var(--color-hover)' : 'transparent',
-                color: r.id === run.id ? 'var(--color-text)' : 'var(--color-text-muted)',
-              }}
+                color: r.id === run.id ? 'var(--color-text)' : 'var(--color-text-muted)'}}
             >
               {r.title.replace(/^[^\s]+\s/, '')}
             </button>
@@ -425,8 +416,7 @@ function ActiveRunView({
             width: `${Math.max(isActive ? 3 : 0, overallProgress)}%`,
             backgroundColor: run.status === 'completed' ? 'var(--color-success)' : 'var(--color-accent)',
             borderRadius: 1,
-            transition: 'width 0.6s ease',
-          }}
+            transition: 'width 0.6s ease'}}
         />
       </div>
 
@@ -567,8 +557,7 @@ function StepOutputBlock({ step, index, total, isActiveRun, isCurrentStep, local
           color: isRunning ? 'var(--color-text)' :
                  isCompleted ? 'var(--color-text-secondary)' :
                  isFailed ? 'var(--color-error-text)' :
-                 'var(--color-text-muted)',
-        }}
+                 'var(--color-text-muted)'}}
         title={rawText ? runText(locale, '点击查看该步骤的历史输出', 'View output history for this step') : undefined}
       >
         {/* 状态图标 */}
@@ -603,8 +592,7 @@ function StepOutputBlock({ step, index, total, isActiveRun, isCurrentStep, local
             style={{
               transition: 'transform 0.2s',
               transform: expanded ? 'rotate(90deg)' : 'none',
-              opacity: 0.4,
-            }}
+              opacity: 0.4}}
           />
         ) : (
           <span className="font-mono text-[0.6rem] flex-shrink-0 opacity-30">
@@ -655,8 +643,7 @@ function WorkflowFailureNotice({
   locale,
   resumeSynopsisAvailable = false,
   resumingSynopsis = false,
-  onResumeSynopsis,
-}: {
+  onResumeSynopsis}: {
   failureCode?: WorkflowFailureCode
   error?: string
   promptBudgetReport?: PromptBudgetReport
@@ -692,8 +679,7 @@ function WorkflowFailureNotice({
       id: 'config',
       name: locale === 'zh-CN' ? '小说配置' : 'Novel configuration',
       type: 'config',
-      projectKey: projectPath,
-    })
+      projectKey: projectPath})
   }
 
   return (
@@ -703,8 +689,7 @@ function WorkflowFailureNotice({
       style={{
         color: 'var(--color-error-text)',
         backgroundColor: 'color-mix(in srgb, var(--color-error) 10%, transparent)',
-        border: '1px solid color-mix(in srgb, var(--color-error) 35%, transparent)',
-      }}
+        border: '1px solid color-mix(in srgb, var(--color-error) 35%, transparent)'}}
     >
       <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" aria-hidden="true" />
       <div className="min-w-0">
@@ -725,8 +710,7 @@ function WorkflowFailureNotice({
               backgroundColor: 'var(--color-hover)',
               border: '1px solid var(--color-border)',
               opacity: matchesCurrentProject ? 1 : 0.55,
-              cursor: matchesCurrentProject ? 'pointer' : 'not-allowed',
-            }}
+              cursor: matchesCurrentProject ? 'pointer' : 'not-allowed'}}
           >
             <SlidersHorizontal size={12} aria-hidden="true" />
             {presentation.actionLabel}
@@ -753,8 +737,7 @@ function WorkflowFailureNotice({
                 backgroundColor: 'var(--color-accent)',
                 border: '1px solid var(--color-accent)',
                 opacity: matchesCurrentProject ? 1 : 0.5,
-                cursor: matchesCurrentProject ? 'pointer' : 'not-allowed',
-              }}
+                cursor: matchesCurrentProject ? 'pointer' : 'not-allowed'}}
             >
               {resumingSynopsis
                 ? <Loader2 size={12} className="animate-spin" aria-hidden="true" />
@@ -834,8 +817,7 @@ function ThinkingBlock({ thinking, showCursor, hasContent, locale }: { thinking:
           size={12}
           style={{
             transition: 'transform 0.2s',
-            transform: expanded ? 'rotate(90deg)' : 'none',
-          }}
+            transform: expanded ? 'rotate(90deg)' : 'none'}}
         />
         <span>
           {showCursor
@@ -858,8 +840,7 @@ function ThinkingBlock({ thinking, showCursor, hasContent, locale }: { thinking:
             maxHeight: 250,
             fontFamily: 'var(--font-mono)',
             fontSize: '0.75rem',
-            lineHeight: 1.6,
-          }}
+            lineHeight: 1.6}}
         >
           {thinking}
           {showCursor && <span className="ai-stream-cursor" style={{ height: 12, width: 3 }} />}

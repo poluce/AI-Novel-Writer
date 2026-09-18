@@ -6,11 +6,10 @@ import { ipc } from '../../../services/ipc-client'
 import {
   buildChapterBlueprintProposal,
   buildNovelConfigProposal,
-  type ProposalFieldDiff,
-} from '../../../shared/domain-proposals'
+  type ProposalFieldDiff} from '../../../shared/domain-proposals'
 import { useLocaleStore } from '../../../stores/locale-store'
 import { useProjectStore } from '../../../stores/project-store'
-import { projectSessionContextFromProject, sameProjectSessionContext } from '../../../shared/project-session-context'
+import { projectSessionContextFromProject, proposalBelongsToOpenProject } from '../../../shared/project-session-context'
 
 export const CONFIG_LABELS: Record<string, readonly [string, string]> = {
   genre: ['类型', 'Genre'], subGenre: ['子类型', 'Subgenre'], targetAudience: ['目标读者', 'Target audience'],
@@ -19,13 +18,11 @@ export const CONFIG_LABELS: Record<string, readonly [string, string]> = {
   coreOutline: ['核心大纲', 'Core outline'], worldSetting: ['世界设定', 'World setting'],
   goldenFinger: ['金手指', 'Special advantage'], protagonistProfile: ['主角设定', 'Protagonist profile'],
   globalGuidance: ['全局指导', 'Global guidance'], writingStyle: ['写作风格', 'Writing style'],
-  referenceWorks: ['参考作品', 'Reference works'], writingLanguage: ['写作语言', 'Writing language'],
-}
+  referenceWorks: ['参考作品', 'Reference works'], writingLanguage: ['写作语言', 'Writing language']}
 export const BLUEPRINT_LABELS: Record<string, readonly [string, string]> = {
   title: ['章节标题', 'Chapter title'], role: ['章节定位', 'Chapter role'], purpose: ['章节目的', 'Purpose'],
   keyEvents: ['关键事件', 'Key events'], characters: ['出场角色', 'Characters'], suspenseHook: ['悬念钩子', 'Suspense hook'],
-  userGuidance: ['作者指导', 'Author guidance'], notes: ['备注', 'Notes'],
-}
+  userGuidance: ['作者指导', 'Author guidance'], notes: ['备注', 'Notes']}
 
 export interface DomainProposalPreview {
   kind: 'none' | 'loading' | 'valid' | 'invalid' | 'stale'
@@ -45,10 +42,7 @@ export function useDomainProposalPreview(toolCall: ToolCallInfo): DomainProposal
   const [blueprintPreview, setBlueprintPreview] = useState<DomainProposalPreview>({ kind: 'loading', diffs: [] })
   const isConfig = toolCall.toolName === 'novel_config'
   const isBlueprint = toolCall.toolName === 'propose_chapter_blueprint'
-  const sessionCurrent = !!toolCall.projectSession && sameProjectSessionContext(
-    toolCall.projectSession,
-    projectSessionContextFromProject(currentProject),
-  )
+  const sessionCurrent = proposalBelongsToOpenProject(toolCall.projectSession, currentProject)
 
   const configPreview = useMemo<DomainProposalPreview>(() => {
     if (!isConfig) return { kind: 'none', diffs: [] }
@@ -61,7 +55,7 @@ export function useDomainProposalPreview(toolCall: ToolCallInfo): DomainProposal
 
   const blueprintImmediate = useMemo<DomainProposalPreview | null>(() => {
     if (!isBlueprint) return { kind: 'none', diffs: [] }
-    if (!currentProject || !sessionCurrent || !toolCall.projectSession) return { kind: 'stale', diffs: [] }
+    if (!currentProject || !sessionCurrent) return { kind: 'stale', diffs: [] }
     const chapterNumber = toolCall.arguments.chapter_number
     if (!Number.isInteger(chapterNumber) || (chapterNumber as number) <= 0) {
       return { kind: 'invalid', diffs: [], error: '章节号无效' }
@@ -70,15 +64,17 @@ export function useDomainProposalPreview(toolCall: ToolCallInfo): DomainProposal
   }, [currentProject, isBlueprint, sessionCurrent, toolCall.arguments, toolCall.projectSession])
 
   useEffect(() => {
-    if (blueprintImmediate || !currentProject || !toolCall.projectSession) return
+    if (blueprintImmediate || !currentProject) return
+    const liveSession = projectSessionContextFromProject(currentProject)
+    if (!liveSession) return
     const chapterNumber = toolCall.arguments.chapter_number
     let disposed = false
     void ipc.invokeWithProjectSession(
-      toolCall.projectSession, 'db:blueprint-get', chapterNumber as number, currentProject.path,
+      liveSession, 'db:blueprint-get', chapterNumber as number, currentProject.path,
     ).then((blueprint) => {
       if (disposed) return
       const now = useProjectStore.getState().currentProject
-      if (!sameProjectSessionContext(toolCall.projectSession, projectSessionContextFromProject(now))) {
+      if (!proposalBelongsToOpenProject(toolCall.projectSession, now)) {
         setBlueprintPreview({ kind: 'stale', diffs: [] })
         return
       }

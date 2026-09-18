@@ -12,7 +12,6 @@ import DraftEditor from '../DraftEditor'
 const PROJECT_PATH = 'C:\\novels\\revision-source'
 const PROJECT_SESSION = Object.freeze({
   projectId: 'revision-source-project',
-  leaseId: 'revision-source-lease',
   projectPath: PROJECT_PATH,
 })
 const SOURCE = '生成修订时的源稿 A。'
@@ -115,7 +114,6 @@ beforeEach(async () => {
       id: PROJECT_SESSION.projectId,
       name: 'Revision source',
       path: PROJECT_PATH,
-      sessionLease: PROJECT_SESSION.leaseId,
       novelConfig: { writingLanguage: 'zh-CN' },
     } as never,
   })
@@ -133,7 +131,6 @@ beforeEach(async () => {
       draftStatus: 'draft',
       chapterNumber: 1,
       projectKey: PROJECT_PATH,
-      projectSessionLease: PROJECT_SESSION.leaseId,
       contentRevision: 0,
     }],
     activeTabId: 'draft-7',
@@ -188,13 +185,13 @@ describe('DraftEditor revision source binding', () => {
         id: 'draft-7', name: 'Chapter 1', type: 'chapter' as const,
         filePath: 'vela://draft/7', content: firstContent, savedContent: SOURCE,
         dirty: true, draftId: 7, draftStatus: 'draft' as const, chapterNumber: 1,
-        projectKey: PROJECT_PATH, projectSessionLease: PROJECT_SESSION.leaseId, contentRevision: 1,
+        projectKey: PROJECT_PATH, contentRevision: 1,
       },
       {
         id: 'draft-8', name: 'Chapter 2', type: 'chapter' as const,
         filePath: 'vela://draft/8', content: secondContent, savedContent: '第二章旧稿。',
         dirty: true, draftId: 8, draftStatus: 'draft' as const, chapterNumber: 2,
-        projectKey: PROJECT_PATH, projectSessionLease: PROJECT_SESSION.leaseId, contentRevision: 1,
+        projectKey: PROJECT_PATH, contentRevision: 1,
       },
     ]
     useEditorStore.setState({ tabs, activeTabId: 'draft-7' })

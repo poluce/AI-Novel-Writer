@@ -241,7 +241,7 @@ function fakeOutcomes(...outcomes: GenerationOutcome[]) {
 
 function leaseReceipt(overrides: Partial<ModelExecutionLeaseReceipt> = {}): ModelExecutionLeaseReceipt {
   return {
-    leaseId: 'draft-lease-a',
+    leaseId: 'model-execution-lease-a',
     modelId: 'model-a',
     provider: 'custom',
     protocol: 'openai',
@@ -448,7 +448,6 @@ describe('GenerateDraftCommand generation runtime boundary', () => {
         id: 'generation-runtime',
         name: 'generation-runtime',
         path: projectPath,
-        sessionLease: 'lease-generation-runtime',
         novelConfig: {
           writingLanguage: options.writingLanguage ?? 'zh-CN',
           totalChapters: 10,
@@ -468,7 +467,6 @@ describe('GenerateDraftCommand generation runtime boundary', () => {
       projectPath,
       projectSession: {
         projectId: 'generation-runtime',
-        leaseId: 'lease-generation-runtime',
         projectPath,
       },
       data: {},

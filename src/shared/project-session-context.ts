@@ -10,7 +10,6 @@ export function isProjectSessionContext(value: unknown): value is ProjectSession
   if (!value || typeof value !== 'object') return false
   const context = value as Partial<ProjectSessionContext>
   return typeof context.projectId === 'string'
-    && typeof context.leaseId === 'string'
     && typeof context.projectPath === 'string'
 }
 
@@ -85,14 +84,12 @@ export function sameProjectPathKey(
 }
 
 export function projectSessionContextFromProject(
-  project: Pick<ProjectData, 'id' | 'path' | 'sessionLease'> | null | undefined,
+  project: Pick<ProjectData, 'id' | 'path'> | null | undefined,
 ): ProjectSessionContext | null {
-  if (!project?.id || !project.path || !project.sessionLease) return null
+  if (!project?.id || !project.path) return null
   return Object.freeze({
     projectId: project.id,
-    leaseId: project.sessionLease,
-    projectPath: project.path,
-  })
+    projectPath: project.path})
 }
 
 /** Renderer 唯一的当前会话登记处；写入时复制并冻结，避免异步任务借用后续会话。 */
@@ -113,6 +110,18 @@ export function sameProjectSessionContext(
   return !!left
     && !!right
     && left.projectId === right.projectId
-    && left.leaseId === right.leaseId
     && sameProjectPathKey(left.projectPath, right.projectPath)
+}
+
+/**
+ * 确认卡认不认当前打开的书。没带会话时，只要当前开着项目，就当作这本书。
+ */
+export function proposalBelongsToOpenProject(
+  proposal: Pick<ProjectSessionContext, 'projectId' | 'projectPath'> | null | undefined,
+  project: Pick<ProjectData, 'id' | 'path'> | null | undefined,
+): boolean {
+  if (!project?.id || !project.path) return false
+  if (!proposal) return true
+  return proposal.projectId === project.id
+    && sameProjectPathKey(proposal.projectPath, project.path)
 }

@@ -38,7 +38,6 @@ it('checks project prompt diagnostics for the language selected in settings', as
       id: 'english-project',
       name: 'English Project',
       path: 'C:/novels/english',
-      sessionLease: 'lease-english',
       novelConfig: { writingLanguage: 'en-US' },
     } as never,
   })
@@ -80,7 +79,6 @@ it('keeps the project error visible when a later global retry succeeds', async (
       id: 'project-a',
       name: 'Project A',
       path: 'C:/novels/project-a',
-      sessionLease: 'lease-a',
       novelConfig: {},
     } as never,
   })

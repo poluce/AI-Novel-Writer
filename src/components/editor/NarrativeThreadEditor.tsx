@@ -6,13 +6,11 @@ import {
   resolveNarrativeThreadDormantThreshold,
   type NarrativeThreadEventType,
   type NarrativeThreadPlanInput,
-  type NarrativeThreadView,
-} from '../../shared/narrative-thread'
+  type NarrativeThreadView} from '../../shared/narrative-thread'
 import type {
   PlotTreeSnapshot,
   PlotTreeSourceBundle,
-  PlotTreeSourceReference,
-} from '../../shared/plot-tree'
+  PlotTreeSourceReference} from '../../shared/plot-tree'
 import { hasUsablePlotTreeEventSource } from '../../shared/plot-tree'
 import { resolveWritingLanguage } from '../../shared/writing-language'
 import { ipc } from '../../services/ipc-client'
@@ -20,8 +18,7 @@ import {
   narrativeThreadCandidateGenerator,
   type NarrativeThreadCandidateGenerator,
   type NarrativeThreadEventCandidate,
-  type NarrativeThreadPlanCandidate,
-} from '../../services/narrative-thread-candidate-generator'
+  type NarrativeThreadPlanCandidate} from '../../services/narrative-thread-candidate-generator'
 import {
   generatePlotTree,
   PlotTreeGenerationError,
@@ -32,8 +29,7 @@ import {
   PlotTreeSourceLimitError,
   type GeneratePlotTreeInput,
   type PlotTreeGenerationErrorCode,
-  type PlotTreeResponseErrorCode,
-} from '../../services/plot-tree-generator'
+  type PlotTreeResponseErrorCode} from '../../services/plot-tree-generator'
 import { useLLMStore } from '../../stores/llm-store'
 import { useLocaleStore } from '../../stores/locale-store'
 import { useProjectStore } from '../../stores/project-store'
@@ -41,8 +37,7 @@ import { useWorkflowStore } from '../../stores/workflow-store'
 import { captureProjectSession, isProjectSessionCurrent, isProjectSessionPath } from '../project-session-gate'
 import { Button } from '../ui/Button'
 import {
-  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
-} from '../ui/Dialog'
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle} from '../ui/Dialog'
 import { Input } from '../ui/Input'
 import { Label } from '../ui/Label'
 import { NativeSelect } from '../ui/NativeSelect'
@@ -52,16 +47,14 @@ import { openBuiltinEditor, openChapterFile } from '../panels/sidebar/sidebar-fi
 import PlotTreeView from './PlotTreeView'
 
 const EMPTY_PLAN: NarrativeThreadPlanInput = {
-  title: '', type: '', targetStartChapter: 1, targetEndChapter: 1, authorIntent: '',
-}
+  title: '', type: '', targetStartChapter: 1, targetEndChapter: 1, authorIntent: ''}
 
 const STATUS_LABELS: Record<NarrativeThreadView['status'], [string, string]> = {
   planned: ['已计划', 'Planned'],
   planted: ['已埋设', 'Planted'],
   progressing: ['推进中', 'Progressing'],
   resolved: ['已解决', 'Resolved'],
-  abandoned: ['已放弃', 'Abandoned'],
-}
+  abandoned: ['已放弃', 'Abandoned']}
 
 interface NarrativeThreadEditorProps {
   projectKey: string
@@ -188,8 +181,7 @@ export default function NarrativeThreadEditor({
   candidateGenerator = narrativeThreadCandidateGenerator,
   initialView = 'plans',
   viewRequest,
-  plotTreeGenerator = generatePlotTree,
-}: NarrativeThreadEditorProps) {
+  plotTreeGenerator = generatePlotTree}: NarrativeThreadEditorProps) {
   const currentProject = useProjectStore(s => s.currentProject)
   const text = useLocaleStore(s => s.text)
   const models = useLLMStore(s => s.models)
@@ -302,11 +294,11 @@ export default function NarrativeThreadEditor({
 
   useEffect(() => {
     if (view === 'plans') queueMicrotask(() => { void reload() })
-  }, [reload, currentProject?.sessionLease, view])
+  }, [reload, currentProject?.id, view])
 
   useEffect(() => {
     if (view === 'plot-tree') queueMicrotask(() => { void loadPlotTree() })
-  }, [loadPlotTree, currentProject?.sessionLease, view])
+  }, [loadPlotTree, currentProject?.id, view])
 
   useEffect(() => {
     if (previousViewRequestRef.current === viewRequest) return
@@ -321,7 +313,7 @@ export default function NarrativeThreadEditor({
 
   useEffect(() => () => {
     plotAbortRef.current?.abort()
-  }, [currentProject?.sessionLease, projectKey])
+  }, [currentProject?.id, projectKey])
 
   useEffect(() => {
     if (!loadedModels) void loadModels()
@@ -356,8 +348,7 @@ export default function NarrativeThreadEditor({
         modelId: frozenModelId,
         projectSession: session,
         sources: plotSources,
-        signal: controller.signal,
-      })
+        signal: controller.signal})
       if (!isProjectSessionCurrent(session) || controller.signal.aborted) return
       let saved
       try {
@@ -500,8 +491,7 @@ export default function NarrativeThreadEditor({
         writingLanguage: resolveWritingLanguage(projectSnapshot.novelConfig.writingLanguage),
         totalChapters,
         blueprint,
-        signal: controller.signal,
-      })
+        signal: controller.signal})
       if (!isProjectSessionCurrent(session) || controller.signal.aborted) return
       setPlanCandidates(candidates)
     } catch {
@@ -539,15 +529,13 @@ export default function NarrativeThreadEditor({
         draftId: draftSnapshot.id,
         chapterNumber: draftSnapshot.chapterNumber,
         finalizedContent: fullDraft.content,
-        signal: controller.signal,
-      })
+        signal: controller.signal})
       if (!isProjectSessionCurrent(session) || controller.signal.aborted) return
       setEventCandidates(candidates.map(candidate => ({
         ...candidate,
         planId: planSnapshot.id,
         draftId: draftSnapshot.id,
-        chapterNumber: draftSnapshot.chapterNumber,
-      })))
+        chapterNumber: draftSnapshot.chapterNumber})))
     } catch {
       if (isProjectSessionCurrent(session) && !controller.signal.aborted) {
         setAiError(text(
@@ -590,8 +578,7 @@ export default function NarrativeThreadEditor({
         draftId: candidate.draftId,
         type: candidate.type,
         evidence: candidate.evidence,
-        reason: candidate.reason,
-      }, projectKey)
+        reason: candidate.reason}, projectKey)
       if (!result.success) throw new Error(result.error)
       if (!isProjectSessionCurrent(session)) return
       setEventCandidates(previous => previous.filter(item => item !== candidate))
@@ -646,8 +633,7 @@ export default function NarrativeThreadEditor({
     try {
       const result = await ipc.invokeWithProjectSession(session, 'db:narrative-thread-event-confirm', {
         planId: eventPlanId, draftId: eventDraftId, type: eventType,
-        evidence: eventEvidence, reason: eventReason,
-      }, projectKey)
+        evidence: eventEvidence, reason: eventReason}, projectKey)
       if (!result.success) {
         if (result.error?.includes('短证据必须来自绑定的定稿正文')) {
           setEventError(text(
@@ -744,8 +730,7 @@ export default function NarrativeThreadEditor({
             className="rounded-lg border p-4 space-y-3"
             style={{
               borderColor: sourcePlanId === thread.id ? 'var(--color-accent)' : 'var(--color-border)',
-              background: 'var(--color-panel)',
-            }}
+              background: 'var(--color-panel)'}}
           >
             <div className="flex items-start justify-between gap-3">
               <div>

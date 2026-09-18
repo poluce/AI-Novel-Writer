@@ -87,7 +87,6 @@ function project(path: string) {
     id: 'main',
     name: path,
     path,
-    sessionLease: 'lease-main',
     novelConfig,
   }
 }
@@ -95,7 +94,7 @@ function project(path: string) {
 const context: WorkflowContext = {
   runId: 'plot-batch-run',
   projectPath: projectAPath,
-  projectSession: { projectId: 'main', leaseId: 'lease-main', projectPath: projectAPath },
+  projectSession: { projectId: 'main', projectPath: projectAPath },
   writingLanguage: 'zh-CN',
   uiLocale: 'zh-CN',
   data: {},

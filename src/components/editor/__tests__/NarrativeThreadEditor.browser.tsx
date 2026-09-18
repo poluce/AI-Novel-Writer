@@ -120,7 +120,7 @@ beforeEach(() => {
   }
   useLocaleStore.setState({ locale: 'zh-CN' })
   const project: ProjectData = {
-    id: 'thread-project', sessionLease: 'thread-lease', name: '线索测试', path: PROJECT_PATH,
+    id: 'thread-project', name: '线索测试', path: PROJECT_PATH,
     novelConfig: { genre: '', subGenre: '', targetAudience: '', totalChapters: 10, wordsPerChapter: 2000, plotStructure: 'three_act', narrativePOV: 'third_limited', coreOutline: '', worldSetting: '', goldenFinger: '', protagonistProfile: '', globalGuidance: '' },
     characterStates: '', createdAt: '', updatedAt: '',
   }
@@ -136,7 +136,7 @@ beforeEach(() => {
   })
   resetEditorSessionStores()
   useWorkflowStore.setState({ globalLogs: [] })
-  setActiveProjectSessionContext({ projectId: project.id, leaseId: project.sessionLease!, projectPath: PROJECT_PATH })
+  setActiveProjectSessionContext({ projectId: project.id, projectPath: PROJECT_PATH })
   installIpc()
   container = document.createElement('div')
   document.body.append(container)
@@ -198,7 +198,6 @@ describe('NarrativeThreadEditor', () => {
       modelId: 'grok',
       projectSession: expect.objectContaining({
         projectId: 'thread-project',
-        leaseId: 'thread-lease',
         projectPath: PROJECT_PATH,
       }),
       sources: expect.objectContaining({ sourceRevision: 'a'.repeat(64) }),
@@ -208,7 +207,7 @@ describe('NarrativeThreadEditor', () => {
       refreshedSnapshot,
       'a'.repeat(64),
       PROJECT_PATH,
-      expect.objectContaining({ projectId: 'thread-project', leaseId: 'thread-lease' }),
+      expect.objectContaining({ projectId: 'thread-project' }),
     )
     expect(useLLMStore.getState().defaultModelId).toBe('glm')
 
@@ -572,7 +571,7 @@ describe('NarrativeThreadEditor', () => {
     expect(invoke).toHaveBeenCalledWith(
       'db:plot-tree-clear',
       PROJECT_PATH,
-      expect.objectContaining({ projectId: 'thread-project', leaseId: 'thread-lease' }),
+      expect.objectContaining({ projectId: 'thread-project' }),
     )
     expect(plotSources).toMatchObject({
       synopsis: { content: '林岚追查被篡改的航海日志。' },

@@ -134,7 +134,6 @@ describe('LLM stream completion propagation', () => {
         id: 'project-a',
         name: 'Novel A',
         path: 'C:/projects/A',
-        sessionLease: 'lease-a',
         novelConfig: {
           creativeStrategy: 'consistency-first',
           genre: 'fantasy',

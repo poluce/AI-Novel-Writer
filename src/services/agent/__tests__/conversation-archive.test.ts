@@ -22,13 +22,11 @@ vi.mock('../../ipc-client', () => ({
 
 const sessionA = {
   projectId: 'a',
-  leaseId: 'lease-a',
   projectPath: 'C:\\novels\\A',
 }
 
 const sessionB = {
   projectId: 'b',
-  leaseId: 'lease-b',
   projectPath: 'C:\\novels\\B',
 }
 

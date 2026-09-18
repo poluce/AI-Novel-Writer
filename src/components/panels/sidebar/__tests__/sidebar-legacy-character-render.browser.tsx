@@ -39,7 +39,6 @@ let container: HTMLDivElement | undefined
 function project(): ProjectData {
   return {
     id: 'legacy-character-sidebar',
-    sessionLease: 'legacy-character-sidebar-lease',
     name: '旧角色项目',
     path: PROJECT_PATH,
     novelConfig: {

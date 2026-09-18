@@ -16,7 +16,6 @@ import {
 
 const projectSession = {
   projectId: 'project-1',
-  leaseId: 'lease-1',
   projectPath: 'C:\\novels\\A',
 }
 

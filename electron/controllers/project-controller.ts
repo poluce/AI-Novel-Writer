@@ -6,24 +6,20 @@ import { removeDirectoryWithWindowsRetry } from '../utils/remove-directory'
 import {
   ProjectData,
   type CreateProjectConfig,
-  type ProjectSessionContext,
-} from '../../src/shared/ipc-channels'
+  type ProjectSessionContext} from '../../src/shared/ipc-channels'
 import { DIR_PROMPTS } from '../../src/shared/project-paths'
 import { sameProjectPathKey } from '../../src/shared/project-session-context'
 import {
-  resolveWritingLanguage,
-} from '../../src/shared/writing-language'
+  resolveWritingLanguage} from '../../src/shared/writing-language'
 import {
   closeProjectDatabase,
   getCurrentProjectPath,
   getProjectDb,
-  initProjectDatabase,
-} from '../database'
+  initProjectDatabase} from '../database'
 import { closeConnection as closeVectorConnection } from '../vector-store'
 import {
   ProjectCoreRepository,
-  type ProjectCoreData,
-} from '../repositories/project-core-repository'
+  type ProjectCoreData} from '../repositories/project-core-repository'
 import { projectAccess, type ProjectSessionLease } from '../services/project-access'
 import { assertExpectedProjectPath, assertRequiredExpectedProjectPath } from '../utils/project-context'
 import { sanitizeProjectName } from './project-path'
@@ -38,8 +34,7 @@ function projectRootSelectionFailure(error: unknown) {
   ) {
     return {
       errorCode: 'PROJECT_ROOT_REQUIRED' as const,
-      error: error instanceof Error ? error.message : String(error),
-    }
+      error: error instanceof Error ? error.message : String(error)}
   }
   return null
 }
@@ -115,7 +110,7 @@ function narrativeThreadSettingsCoreUpdate(
     : { narrativeThreadDormantChapterThreshold: novelConfig.narrativeThreadDormantChapterThreshold }
 }
 
-/** 项目配置读写必须显式携带当前会话租约，路径本身不是授权。 */
+/** 项目配置读写必须显式携带当前项目 ID，路径本身不是授权。 */
 function assertRequiredProjectSession(
   projectId: string,
   data: Partial<ProjectData>,
@@ -129,7 +124,6 @@ function assertRequiredProjectSession(
     !projectId
     || context.projectId !== projectId
     || (data.id && data.id !== projectId)
-    || (data.sessionLease !== undefined && data.sessionLease !== context.leaseId)
   ) {
     throw new Error('项目身份不匹配，已拒绝操作')
   }
@@ -149,8 +143,7 @@ function databaseStateFor(expectedProjectPath: string | null): ProjectDatabaseSt
   return {
     databaseRestored: dbReady,
     dbReady,
-    activeProjectPath,
-  }
+    activeProjectPath}
 }
 
 function failedDatabaseState(): ProjectDatabaseState {
@@ -166,8 +159,7 @@ function failedDatabaseState(): ProjectDatabaseState {
   return {
     databaseRestored: false,
     dbReady: false,
-    activeProjectPath: getCurrentProjectPath(),
-  }
+    activeProjectPath: getCurrentProjectPath()}
 }
 
 function neutralDatabaseState(): ProjectDatabaseState {
@@ -178,8 +170,7 @@ function neutralDatabaseState(): ProjectDatabaseState {
   return {
     databaseRestored: neutral,
     dbReady: neutral,
-    activeProjectPath,
-  }
+    activeProjectPath}
 }
 
 function requireReadyDatabase(
@@ -213,9 +204,7 @@ function captureProjectRollbackBoundary(): ProjectRollbackBoundary {
       snapshot: Object.freeze({
         session: Object.freeze({ ...activeSession }),
         rootPath: activeSession.rootPath,
-        databaseRoot,
-      }),
-    }
+        databaseRoot})}
   } catch {
     return { kind: 'untrusted' }
   }
@@ -224,8 +213,6 @@ function captureProjectRollbackBoundary(): ProjectRollbackBoundary {
 function restoreTrustedProjectDatabase(
   snapshot: TrustedProjectRollbackSnapshot,
 ): ProjectDatabaseState {
-  // A matching path is not enough: reopening it creates a fresh lease. Check
-  // the frozen lease before any filesystem/database side effect.
   const activeSession = projectAccess.assertCurrentSession(snapshot.session)
   if (
     !sameProjectPath(activeSession.rootPath, snapshot.rootPath)
@@ -237,9 +224,7 @@ function restoreTrustedProjectDatabase(
   initProjectDatabase(snapshot.rootPath)
   const restoredSession = projectAccess.assertCurrentProjectContext({
     projectId: snapshot.session.projectId,
-    leaseId: snapshot.session.leaseId,
-    projectPath: snapshot.rootPath,
-  }, getCurrentProjectPath())
+    projectPath: snapshot.rootPath}, getCurrentProjectPath())
   if (!sameProjectPath(restoredSession.rootPath, snapshot.rootPath)) {
     throw new Error('项目回滚会话根目录不匹配，已拒绝恢复数据库')
   }
@@ -298,8 +283,7 @@ export function registerProjectController() {
     const database = getProjectDb()
     return {
       activeProjectPath,
-      dbReady: activeProjectPath === null ? database === null : database !== null,
-    }
+      dbReady: activeProjectPath === null ? database === null : database !== null}
   })
 
   ipcMain.handle('project:smoke-open-request', async () => {
@@ -324,8 +308,7 @@ export function registerProjectController() {
       }
       fs.writeFileSync(markerPath, JSON.stringify({
         projectPath: path.resolve(currentProjectPath),
-        openedAt: new Date().toISOString(),
-      }), 'utf8')
+        openedAt: new Date().toISOString()}), 'utf8')
       return { success: true }
     } catch (error) {
       return { success: false, error: String(error) }
@@ -350,8 +333,7 @@ export function registerProjectController() {
           projectId: '',
           requestToken,
           stale: true,
-          ...databaseState,
-        }
+          ...databaseState}
       }
 
       try {
@@ -365,8 +347,7 @@ export function registerProjectController() {
         ProjectCoreRepository.init(projectName, resolveWritingLanguage(config.writingLanguage))
         ProjectCoreRepository.update({
           genre: config.genre,
-          targetAudience: config.targetAudience,
-        })
+          targetAudience: config.targetAudience})
 
         const updatedAt = new Date().toISOString()
         if (!isLatestRequest()) {
@@ -384,23 +365,20 @@ export function registerProjectController() {
               requestToken,
               stale: true,
               ...databaseState,
-              error: String(restoreError),
-            }
+              error: String(restoreError)}
           }
           return {
             success: false,
             projectId: '',
             requestToken,
             stale: true,
-            ...databaseState,
-          }
+            ...databaseState}
         }
 
         addRecentProject({
           name: projectName,
           path: projectDir,
-          updatedAt,
-        })
+          updatedAt})
         // 创建只提交磁盘数据；渲染进程随后通过同一串行队列执行打开。
         // 在此之前恢复旧项目，避免主进程与仍显示旧项目的界面身份分裂。
         const databaseState = requireReadyDatabase(
@@ -412,8 +390,7 @@ export function registerProjectController() {
           projectId,
           projectPath: projectDir,
           requestToken,
-          ...databaseState,
-        }
+          ...databaseState}
       } catch (error) {
         let rollbackError: unknown
         let databaseState: ProjectDatabaseState
@@ -434,8 +411,7 @@ export function registerProjectController() {
           ...(projectStoragePreflightFailure(error) ?? {}),
           error: rollbackError
             ? `${String(error)}；回滚失败：${String(rollbackError)}`
-            : String(error),
-        }
+            : String(error)}
       }
     })
   })
@@ -459,8 +435,7 @@ export function registerProjectController() {
           project: null,
           requestToken,
           stale: true,
-          ...databaseState,
-        }
+          ...databaseState}
       }
 
       try {
@@ -502,12 +477,10 @@ export function registerProjectController() {
             protagonistProfile: updatedCoreData.protagonistProfile,
             globalGuidance: updatedCoreData.globalGuidance,
             writingStyle: updatedCoreData.writingStyle,
-            referenceWorks: updatedCoreData.referenceWorks,
-          },
+            referenceWorks: updatedCoreData.referenceWorks},
           characterStates: updatedCoreData.characterStates,
           createdAt: new Date().toISOString(), // 数据库中实际上有，但这里先提供时间值避免前端报错
-          updatedAt: new Date().toISOString(),
-        }
+          updatedAt: new Date().toISOString()}
 
         // 初始化与读取期间若同步触发了更新请求，旧事务必须恢复渲染进程仍展示的项目。
         // 此处不再主动让出事件循环，避免其他项目级进程通信观察到尚未提交的数据库连接。
@@ -526,36 +499,31 @@ export function registerProjectController() {
               requestToken,
               stale: true,
               ...databaseState,
-              error: String(restoreError),
-            }
+              error: String(restoreError)}
           }
           return {
             success: false,
             project: null,
             requestToken,
             stale: true,
-            ...databaseState,
-          }
+            ...databaseState}
         }
 
         addRecentProject({
           name: projectData.name,
           path: resolvedProjectPath,
-          updatedAt: projectData.updatedAt,
-        })
+          updatedAt: projectData.updatedAt})
 
         const databaseState = requireReadyDatabase(
           databaseStateFor(resolvedProjectPath),
           '项目数据库初始化后未处于可用状态',
         )
-        const session = projectAccess.beginSession(trustedProject)
-        projectData.sessionLease = session.leaseId
+        projectAccess.beginSession(trustedProject)
         return {
           success: true,
           project: projectData,
           requestToken,
-          ...databaseState,
-        }
+          ...databaseState}
       } catch (error) {
         let rollbackError: unknown
         let databaseState: ProjectDatabaseState
@@ -577,8 +545,7 @@ export function registerProjectController() {
           requestToken,
           ...databaseState,
           ...(projectStoragePreflightFailure(error) ?? projectRootSelectionFailure(error) ?? {}),
-          error: errorMessage,
-        }
+          error: errorMessage}
       }
     })
   })
@@ -619,8 +586,7 @@ export function registerProjectController() {
           worldSetting: data.novelConfig.worldSetting,
           protagonistProfile: data.novelConfig.protagonistProfile,
           writingStyle: data.novelConfig.writingStyle ?? '',
-          referenceWorks: data.novelConfig.referenceWorks ?? '',
-        })
+          referenceWorks: data.novelConfig.referenceWorks ?? ''})
       }
 
       if (data.name) {
@@ -643,16 +609,14 @@ export function registerProjectController() {
         addRecentProject({
           name: data.name ?? ProjectCoreRepository.get()?.projectName ?? 'Unknown',
           path: data.path,
-          updatedAt: new Date().toISOString(),
-        })
+          updatedAt: new Date().toISOString()})
         return { success: true, recentProjectUpdated: true }
       } catch (recentProjectError) {
         console.warn('[Project] 项目核心数据已保存，但最近项目列表更新失败:', recentProjectError)
         return {
           success: true,
           recentProjectUpdated: false,
-          warning: '项目已保存，但最近项目列表暂未更新',
-        }
+          warning: '项目已保存，但最近项目列表暂未更新'}
       }
     } catch (error) {
       return { success: false, error: String(error) }
@@ -678,7 +642,6 @@ export function registerProjectController() {
       _event,
       projectPath: string,
       _legacyProjectId: string,
-      _legacySessionLease: string,
       context?: ProjectSessionContext,
     ) => {
     let resolvedPath: string
@@ -690,9 +653,7 @@ export function registerProjectController() {
         getCurrentProjectPath(),
       )
       resolvedPath = projectAccess.authorizeDeletion({
-        projectId: activeSession.projectId,
-        leaseId: activeSession.leaseId,
-      }, projectPath)
+        projectId: activeSession.projectId}, projectPath)
       const currentProjectPath = getCurrentProjectPath()
       if (!sameProjectPath(currentProjectPath, resolvedPath)) {
         throw new Error('项目会话与当前数据库不匹配，已拒绝删除')
@@ -709,8 +670,7 @@ export function registerProjectController() {
         success: false,
         directoryDeleted: false,
         databaseRestored: true,
-        error: String(error),
-      }
+        error: String(error)}
     }
 
     let deletionError: unknown
@@ -748,15 +708,13 @@ export function registerProjectController() {
         success: true,
         directoryDeleted: true,
         databaseRestored: false,
-        ...(deletionError ? { warning: `项目目录已删除：${String(deletionError)}` } : {}),
-      }
+        ...(deletionError ? { warning: `项目目录已删除：${String(deletionError)}` } : {})}
     } catch (recentProjectError) {
       return {
         success: true,
         directoryDeleted: true,
         databaseRestored: false,
-        warning: `项目目录已删除，但最近项目列表更新失败：${String(recentProjectError)}`,
-      }
+        warning: `项目目录已删除，但最近项目列表更新失败：${String(recentProjectError)}`}
     }
     },
   )
@@ -764,8 +722,7 @@ export function registerProjectController() {
   ipcMain.handle('dialog:select-folder', async () => {
     const result = await dialog.showOpenDialog({
       properties: ['openDirectory', 'createDirectory'],
-      title: '选择项目保存位置',
-    })
+      title: '选择项目保存位置'})
     if (result.canceled || result.filePaths.length === 0) return null
     return result.filePaths[0]
   })

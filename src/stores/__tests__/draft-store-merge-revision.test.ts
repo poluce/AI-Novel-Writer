@@ -34,7 +34,6 @@ vi.mock('../project-store', () => ({
         id: 'project-a',
         name: '隔离测试项目',
         path: 'C:\\novels\\project-a',
-        sessionLease: 'lease-a',
       },
       refreshFileTree,
     }),
@@ -57,7 +56,6 @@ import { useDraftStore } from '../draft-store'
 const projectPath = 'C:\\novels\\project-a'
 const projectSession = {
   projectId: 'project-a',
-  leaseId: 'lease-a',
   projectPath,
 }
 

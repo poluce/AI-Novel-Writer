@@ -65,7 +65,6 @@ const projectPath = 'C:\\test-project'
 function projectSession() {
   return {
     projectId: 'test-project',
-    leaseId: 'lease-test-project',
     projectPath,
   }
 }
@@ -85,7 +84,6 @@ function resetWorkflowState() {
       id: 'test-project',
       name: 'Test project',
       path: projectPath,
-      sessionLease: 'lease-test-project',
       novelConfig: {},
     } as never,
   })
@@ -141,7 +139,6 @@ describe('batch chapter workflow limits', () => {
       projectPath: 'C:\\test-project',
       projectSession: {
         projectId: 'test-project',
-        leaseId: 'lease-test-project',
         projectPath: 'C:\\test-project',
       },
       startChapterNumber: 4,

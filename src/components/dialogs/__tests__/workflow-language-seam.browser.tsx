@@ -31,7 +31,6 @@ let container: HTMLDivElement | undefined
 function project(writingLanguage: 'zh-CN' | 'en-US'): ProjectData {
   return {
     id: `workflow-language-${writingLanguage}`,
-    sessionLease: `lease-${writingLanguage}`,
     name: `Workflow ${writingLanguage}`,
     path: `C:\\novels\\workflow-language-${writingLanguage}`,
     novelConfig: {
@@ -74,7 +73,6 @@ describe('workflow launch language seams', () => {
     const currentProject = project('zh-CN')
     const projectSession = {
       projectId: currentProject.id,
-      leaseId: currentProject.sessionLease!,
       projectPath: currentProject.path,
     }
     let dbSynopsis = [
@@ -167,7 +165,6 @@ describe('workflow launch language seams', () => {
       const currentProject = project(writingLanguage)
       const projectSession = {
         projectId: currentProject.id,
-        leaseId: currentProject.sessionLease!,
         projectPath: currentProject.path,
       }
       const modelId = 'browser-language-model'
@@ -235,7 +232,6 @@ describe('workflow launch language seams', () => {
                 return {
                   success: true,
                   lease: {
-                    leaseId: 'browser-language-lease',
                     modelId,
                     provider: 'custom',
                     protocol: 'openai',

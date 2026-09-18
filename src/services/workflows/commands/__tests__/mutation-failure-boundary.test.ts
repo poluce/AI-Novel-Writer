@@ -106,7 +106,7 @@ function context(): WorkflowContext {
   return {
     runId: 'mutation-boundary',
     projectPath: PROJECT_PATH,
-    projectSession: { projectId: 'A', leaseId: 'lease-A', projectPath: PROJECT_PATH },
+    projectSession: { projectId: 'A', projectPath: PROJECT_PATH },
     writingLanguage: 'zh-CN',
     uiLocale: 'zh-CN',
     data: {},
@@ -175,7 +175,6 @@ beforeEach(() => {
       id: 'A',
       name: 'A',
       path: PROJECT_PATH,
-      sessionLease: 'lease-A',
       novelConfig: {
         globalGuidance: '',
         wordsPerChapter: 3000,
@@ -300,7 +299,6 @@ describe('workflow mutation failure boundaries', () => {
         projectPath: PROJECT_PATH,
         projectSession: Object.freeze({
           projectId: 'A',
-          leaseId: 'lease-A',
           projectPath: PROJECT_PATH,
         }),
         draftId: 1,
@@ -372,7 +370,6 @@ describe('workflow mutation failure boundaries', () => {
         projectPath: PROJECT_PATH,
         projectSession: Object.freeze({
           projectId: 'A',
-          leaseId: 'lease-A',
           projectPath: PROJECT_PATH,
         }),
         draftId: 1,
@@ -489,7 +486,7 @@ describe('workflow mutation failure boundaries', () => {
         source: finalizedSource(41, 1, '作者正文'),
       },
       PROJECT_PATH,
-      expect.objectContaining({ projectId: 'A', leaseId: 'lease-A' }),
+      expect.objectContaining({ projectId: 'A' }),
     )
     expect(stepCallbacks.log).toHaveBeenCalledWith('已投影连续性事实：0 条')
   })
@@ -520,7 +517,7 @@ describe('workflow mutation failure boundaries', () => {
       41,
       'knowledge-document-41',
       PROJECT_PATH,
-      expect.objectContaining({ projectId: 'A', leaseId: 'lease-A' }),
+      expect.objectContaining({ projectId: 'A' }),
     )
   })
 
@@ -552,7 +549,7 @@ describe('workflow mutation failure boundaries', () => {
       draftContent,
       `Chapter 1 ${chapterTitle}.txt`,
       PROJECT_PATH,
-      expect.objectContaining({ projectId: 'A', leaseId: 'lease-A' }),
+      expect.objectContaining({ projectId: 'A' }),
     )
   })
 
@@ -972,7 +969,7 @@ describe('workflow mutation failure boundaries', () => {
       'db:character-roster-commit',
       expect.objectContaining({ source: sourceReceipt }),
       PROJECT_PATH,
-      expect.objectContaining({ projectId: 'A', leaseId: 'lease-A' }),
+      expect.objectContaining({ projectId: 'A' }),
     )
   })
 
@@ -1010,7 +1007,7 @@ describe('workflow mutation failure boundaries', () => {
       'db:character-roster-commit',
       expect.objectContaining({ source: sourceReceipt }),
       PROJECT_PATH,
-      expect.objectContaining({ projectId: 'A', leaseId: 'lease-A' }),
+      expect.objectContaining({ projectId: 'A' }),
     )
   })
 
@@ -1046,7 +1043,7 @@ describe('workflow mutation failure boundaries', () => {
       'db:character-roster-commit',
       expect.objectContaining({ source: sourceReceipt }),
       PROJECT_PATH,
-      expect.objectContaining({ projectId: 'A', leaseId: 'lease-A' }),
+      expect.objectContaining({ projectId: 'A' }),
     )
   })
 

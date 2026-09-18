@@ -6,7 +6,6 @@ import { setActiveProjectSessionContext } from '../../shared/project-session-con
 const invoke = vi.fn()
 const frozenSession = {
   projectId: 'project-a',
-  leaseId: 'lease-a',
   projectPath: 'C:\\NovelA',
 }
 
@@ -36,7 +35,6 @@ describe('retryFinalizationPublication', () => {
   it('rejects a retry after the same path is reopened under a new lease', async () => {
     setActiveProjectSessionContext({
       ...frozenSession,
-      leaseId: 'lease-b',
       projectPath: 'c:/NovelA/.',
     })
 

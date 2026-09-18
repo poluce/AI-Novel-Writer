@@ -55,7 +55,6 @@ function switchProject(path: string, id: string): void {
   useProjectStore.setState({
     currentProject: {
       id,
-      sessionLease: `${id}-lease`,
       name: id,
       path,
       novelConfig: {},
@@ -74,7 +73,6 @@ beforeEach(() => {
   useProjectStore.setState({
     currentProject: {
       id: 'authoritative-titles',
-      sessionLease: 'authoritative-titles-lease',
       name: 'Authoritative titles',
       path: PROJECT_PATH,
       novelConfig: {},

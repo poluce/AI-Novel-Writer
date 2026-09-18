@@ -100,7 +100,6 @@ describe('authoritative finalized export integration', () => {
 
     const projectSession: ProjectSessionContext = {
       projectId: 'project-integration',
-      leaseId: 'lease-integration',
       projectPath,
     }
     setActiveProjectSessionContext(projectSession)
@@ -127,7 +126,6 @@ describe('authoritative finalized export integration', () => {
       { format: 'split-md', grantId: grant.grantId },
       {
         id: projectSession.projectId,
-        sessionLease: projectSession.leaseId,
         path: projectPath,
         name: 'Sparse Novel',
         novelConfig: {
@@ -153,7 +151,6 @@ describe('authoritative finalized export integration', () => {
       { format: 'split-md', grantId: grant.grantId },
       {
         id: projectSession.projectId,
-        sessionLease: projectSession.leaseId,
         path: projectPath,
         name: 'Sparse Novel',
         novelConfig: { genre: 'fantasy', targetAudience: 'general', writingLanguage: 'zh-CN' },

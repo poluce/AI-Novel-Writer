@@ -28,7 +28,7 @@ let activeImportSessionKey: string | null = null
 let activeImportDraft: ImportDraft = EMPTY_IMPORT_DRAFT
 
 function importSessionKey(session: ProjectSessionContext): string {
-  return `${session.projectId}:${session.leaseId}:${session.projectPath}`
+  return `${session.projectId}:${session.projectPath}`
 }
 
 function notifyImportDraftListeners(): void {

@@ -13,7 +13,6 @@ import {
 const projectPath = 'C:\\novels\\english-chapter'
 const projectSession: ProjectSessionContext = {
   projectId: 'english-chapter',
-  leaseId: 'english-chapter-lease',
   projectPath,
 }
 const originalLocale = useLocaleStore.getState().locale

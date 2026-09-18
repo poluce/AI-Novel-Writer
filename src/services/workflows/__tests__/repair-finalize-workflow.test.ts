@@ -26,7 +26,6 @@ vi.mock('../commands/finalize-chapter.command', () => ({
 const PROJECT_PATH = 'C:\\novels\\repair-finalize'
 const PROJECT_SESSION = Object.freeze({
   projectId: 'repair-finalize',
-  leaseId: 'lease-repair-finalize',
   projectPath: PROJECT_PATH,
 })
 const originalLocale = useLocaleStore.getState().locale
@@ -111,7 +110,6 @@ describe('createRepairFinalizeWorkflow', () => {
         id: PROJECT_SESSION.projectId,
         name: 'Repair finalize',
         path: PROJECT_PATH,
-        sessionLease: PROJECT_SESSION.leaseId,
       } as never,
     })
     const invoke = vi.fn(async (channel: string) => {
@@ -155,7 +153,6 @@ describe('createRepairFinalizeWorkflow', () => {
         id: PROJECT_SESSION.projectId,
         name: 'Repair finalize',
         path: PROJECT_PATH,
-        sessionLease: PROJECT_SESSION.leaseId,
       } as never,
     })
     const invoke = vi.fn(async (channel: string) => {
@@ -216,7 +213,6 @@ describe('createRepairFinalizeWorkflow', () => {
           id: PROJECT_SESSION.projectId,
           name: 'Repair finalize',
           path: PROJECT_PATH,
-          sessionLease: PROJECT_SESSION.leaseId,
         } as never,
       })
     }

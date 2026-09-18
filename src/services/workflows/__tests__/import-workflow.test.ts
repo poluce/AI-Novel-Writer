@@ -29,7 +29,7 @@ import {
 import type { StepCallbacks, WorkflowContext } from '../../../stores/workflow-store'
 import { useProjectStore } from '../../../stores/project-store'
 
-const session = { projectId: 'test-project', leaseId: 'lease-test-project', projectPath: 'C:\\test-project' }
+const session = { projectId: 'test-project', projectPath: 'C:\\test-project' }
 const executionOwner = 'test-import-executor'
 
 function run(overrides: Partial<ImportRunSnapshot> = {}): ImportRunSnapshot {
@@ -59,7 +59,7 @@ beforeEach(() => {
   characterSyncMocks.retry.mockResolvedValue({ operationId: 'sync-1' })
   useProjectStore.setState({
     currentProject: {
-      id: 'test-project', sessionLease: 'lease-test-project', name: '测试项目', path: session.projectPath,
+      id: 'test-project', name: '测试项目', path: session.projectPath,
       novelConfig: {} as never, characterStates: '', createdAt: '', updatedAt: '',
     },
   })
@@ -251,7 +251,7 @@ describe('createImportWorkflow', () => {
   it('rejects a stale project lease before creating any task', () => {
     expect(() => createImportWorkflow({
       projectPath: session.projectPath,
-      projectSession: { ...session, leaseId: 'stale' },
+      projectSession: { ...session },
       run: run(),
       executionOwner,
     })).toThrow('当前项目已切换')

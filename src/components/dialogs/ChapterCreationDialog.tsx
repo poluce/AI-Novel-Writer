@@ -10,16 +10,14 @@ import {
   CHAPTER_WORDS_TARGET_MIN,
   createChapterInfoFromDialogInput,
   DEFAULT_CHAPTER_WORDS_TARGET,
-  normalizeChapterWordsTarget,
-} from '../../services/workflows/chapter-creation-parameters'
+  normalizeChapterWordsTarget} from '../../services/workflows/chapter-creation-parameters'
 import { guardChapterWriting } from '../../services/workflow-guards'
 import { ipc } from '../../services/ipc-client'
 import { requireIpcSuccess } from '../../services/ipc-result'
 import { readAuthoritativeNextChapter } from '../../services/authoritative-chapter-sequence'
 import { readConsistencyPreflight, type ConsistencyPreflightResult } from '../../services/consistency-preflight'
 import {
-  Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
-} from '../ui/Dialog'
+  Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription} from '../ui/Dialog'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Textarea } from '../ui/Textarea'
@@ -27,12 +25,10 @@ import { Label } from '../ui/Label'
 import { NativeSelect } from '../ui/NativeSelect'
 import { useLocaleStore } from '../../stores/locale-store'
 import {
-  ChapterCreationLoadGate,
-} from './chapter-creation-load-gate'
+  ChapterCreationLoadGate} from './chapter-creation-load-gate'
 import {
   captureProjectSession,
-  isProjectSessionCurrent,
-} from '../project-session-gate'
+  isProjectSessionCurrent} from '../project-session-gate'
 import type { ModelProfile, ProjectSessionContext } from '../../shared/ipc-channels'
 import ConsistencyPreflightPanel from './ConsistencyPreflightPanel'
 
@@ -80,7 +76,7 @@ export default function ChapterCreationDialog(props: Props) {
   const currentProject = useProjectStore(s => s.currentProject)
   const projectSession = captureProjectSession(currentProject)
   const sessionKey = projectSession
-    ? `${projectSession.projectId}:${projectSession.leaseId}`
+    ? `${projectSession.projectId}:${projectSession.projectPath}`
     : 'inactive'
 
   // A closed dialog gets its own instance, so each open snapshots the current
@@ -341,8 +337,7 @@ function ChapterCreationDialogSession({ isOpen, onClose, prefill }: Props) {
           characters: characters.split(/[、,，]/u).map(value => value.trim()).filter(Boolean),
           suspenseHook: '',
           userGuidance,
-          notes: '',
-        }])
+          notes: ''}])
         if (!isProjectSessionCurrent(projectSession)) return
         setConsistencyPreflight(preflight)
         if (preflight.findings.length > 0) return
@@ -388,8 +383,7 @@ function ChapterCreationDialogSession({ isOpen, onClose, prefill }: Props) {
       userGuidance,
       knowledgeQueryHint: knowledgeHint,
       wordsTarget: normalizedWordsTarget,
-      defaultWordsTarget: currentProject?.novelConfig.wordsPerChapter ?? DEFAULT_CHAPTER_WORDS_TARGET,
-    }), projectSession, { generationModelId: frozenGenerationModelId })
+      defaultWordsTarget: currentProject?.novelConfig.wordsPerChapter ?? DEFAULT_CHAPTER_WORDS_TARGET}), projectSession, { generationModelId: frozenGenerationModelId })
 
     // 启动任务后关闭设定弹窗，由全局 Overlay 接管展示
     if (!isProjectSessionCurrent(projectSession)) return
@@ -567,8 +561,7 @@ function ChapterCreationDialogSession({ isOpen, onClose, prefill }: Props) {
                   requireIpcSuccess(await ipc.invokeWithProjectSession(session, 'db:consistency-exemption-revoke', stableFactKey, session.projectPath), text('撤销一致性安排', 'Revoke consistency arrangement'))
                   setConsistencyPreflight(current => current ? {
                     ...current,
-                    exemptions: current.exemptions.map(item => item.stableFactKey === stableFactKey ? { ...item, revoked: true } : item),
-                  } : null)
+                    exemptions: current.exemptions.map(item => item.stableFactKey === stableFactKey ? { ...item, revoked: true } : item)} : null)
                 }}
               />
             ) : null}

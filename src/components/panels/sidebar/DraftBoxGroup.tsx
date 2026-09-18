@@ -18,19 +18,16 @@ import { useProjectStore } from '../../../stores/project-store'
 import {
   captureProjectSession,
   isProjectSessionCurrent,
-  isProjectSessionPath,
-} from '../../project-session-gate'
+  isProjectSessionPath} from '../../project-session-gate'
 import { deleteFinalizedChapter } from './finalized-chapter-deletion'
 
 const DRAFT_STATUS_EN: Record<string, string> = {
-  draft: 'Draft', revising: 'Revising', reviewed: 'Reviewed', finalized: 'Finalized', archived: 'Archived',
-}
+  draft: 'Draft', revising: 'Revising', reviewed: 'Reviewed', finalized: 'Finalized', archived: 'Archived'}
 
 // ===== 草稿箱折叠组 =====
 
 export default function DraftBoxGroup({
-  draftsByChapter,
-}: {
+  draftsByChapter}: {
   draftsByChapter: Record<number, DraftMeta[]>
 }) {
   const [open, setOpen] = useState(true)
@@ -100,8 +97,7 @@ export default function DraftBoxGroup({
 function DraftChapterGroup({
   chapterNumber,
   drafts,
-  projectKey,
-}: {
+  projectKey}: {
   chapterNumber: number
   drafts: DraftMeta[]
   projectKey: string
@@ -211,8 +207,7 @@ function DraftItem({
   draft,
   chapterTitleText,
   projectKey,
-  archived = false,
-}: {
+  archived = false}: {
   draft: DraftMeta
   chapterTitleText: string
   projectKey: string
@@ -237,9 +232,7 @@ function DraftItem({
       draftId: draft.id,
       chapterNumber: draft.chapterNumber,
       draftStatus: draft.status,
-      projectKey,
-      projectSessionLease: projectSession.leaseId,
-    })
+      projectKey})
   }
 
   /** 删除草稿 */
@@ -252,8 +245,7 @@ function DraftItem({
         chapterNumber: draft.chapterNumber,
         displayName: `${chapterTitleText} v${draft.version}`,
         tabFilePath: draft.filePath,
-        surface: 'draft',
-      })
+        surface: 'draft'})
       return
     }
 
@@ -285,8 +277,7 @@ function DraftItem({
         chapterNumber: draft.chapterNumber,
         displayName: `${chapterTitleText} v${draft.version}`,
         tabFilePath: draft.filePath,
-        surface: 'draft',
-      })
+        surface: 'draft'})
       return
     }
     if (!result.success) {
@@ -307,8 +298,7 @@ function DraftItem({
     globalEventBus.emit('REFRESH_RESOURCE', {
       resources: ['drafts', 'fileTree'],
       projectPath: projectKey,
-      projectSession,
-    })
+      projectSession})
     toast.success(text(`已删除 ${chapterTitleText} v${draft.version}`, `Deleted ${chapterTitleText} v${draft.version}`))
   }
 
@@ -322,31 +312,27 @@ function DraftItem({
         paddingRight: 8,
         paddingTop: 3,
         paddingBottom: 3,
-        opacity: archived ? 0.45 : 1,
-      }}
+        opacity: archived ? 0.45 : 1}}
       onClick={openDraft}
       onContextMenu={e => showSidebarMenu([
         {
           key: 'open',
           label: text('打开草稿', 'Open draft'),
           icon: <FolderOpen size={13} />,
-          onClick: openDraft,
-        },
+          onClick: openDraft},
         { key: 'div1', type: 'divider' as const },
         {
           key: 'copy-path',
           label: text('复制文件路径', 'Copy file path'),
           icon: <Copy size={13} />,
-          onClick: () => navigator.clipboard.writeText(draft.filePath).catch(() => { }),
-        },
+          onClick: () => navigator.clipboard.writeText(draft.filePath).catch(() => { })},
         { key: 'div2', type: 'divider' as const },
         {
           key: 'delete',
           label: text('删除这一稿', 'Delete draft'),
           icon: <Trash2 size={13} />,
           danger: true,
-          onClick: deleteDraft,
-        },
+          onClick: deleteDraft},
       ], e)}
       title={text(`点击打开 — ${chapterTitleText} v${draft.version}（${DRAFT_STATUS_LABEL[draft.status] || draft.status}）`, `Open — ${chapterTitleText} v${draft.version} (${statusLabel})`)}
     >

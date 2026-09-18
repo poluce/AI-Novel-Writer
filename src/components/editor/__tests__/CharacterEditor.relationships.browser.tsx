@@ -22,7 +22,6 @@ let container: HTMLDivElement | undefined
 function project(): ProjectData {
   return {
     id: 'relationship-editor',
-    sessionLease: 'relationship-editor-lease',
     name: '关系网测试项目',
     path: PROJECT_PATH,
     novelConfig: {
@@ -87,7 +86,6 @@ beforeEach(() => {
     rosterRevision: 1,
     dataProjectSession: {
       projectId: 'relationship-editor',
-      leaseId: 'relationship-editor-lease',
       projectPath: PROJECT_PATH,
     },
   })
@@ -211,7 +209,6 @@ describe('CharacterEditor relationship field', () => {
       PROJECT_PATH,
       expect.objectContaining({
         projectId: 'relationship-editor',
-        leaseId: 'relationship-editor-lease',
       }),
     )
   })

@@ -6,7 +6,7 @@ import {
   type ToolArtifact,
 } from '../../../shared/agent-artifacts'
 
-const session = { projectId: 'p', leaseId: 'lease', projectPath: 'C:\\novels\\p' }
+const session = { projectId: 'p', projectPath: 'C:\\novels\\p' }
 const context = { projectPath: session.projectPath, projectSession: session }
 
 describe('ToolArtifact contract', () => {

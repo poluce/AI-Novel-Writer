@@ -63,7 +63,6 @@ function project(): ProjectData {
     id: 'project-a',
     name: '测试项目',
     path: 'C:\\novels\\project-a',
-    sessionLease: 'lease-project-a',
     novelConfig: {
       genre: '玄幻',
       subGenre: '',
@@ -90,14 +89,12 @@ function projectB(): ProjectData {
     id: 'project-b',
     name: '测试项目 B',
     path: 'C:\\novels\\project-b',
-    sessionLease: 'lease-project-b',
   }
 }
 
 function projectSession(currentProject: ProjectData) {
   return {
     projectId: currentProject.id,
-    leaseId: currentProject.sessionLease!,
     projectPath: currentProject.path,
   }
 }

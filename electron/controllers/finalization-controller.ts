@@ -30,7 +30,6 @@ function snapshotMatchesContext(
 ): boolean {
   return snapshot.projectPath === context.projectPath
     && snapshot.projectSession.projectId === context.projectId
-    && snapshot.projectSession.leaseId === context.leaseId
     && snapshot.projectSession.projectPath === context.projectPath
 }
 
@@ -59,8 +58,7 @@ export function registerFinalizationController(): void {
         chapterNumber: candidate.chapterNumber,
         chapterTitle: candidate.chapterTitle,
         content: candidate.content,
-        contentRevision: candidate.contentRevision,
-      })
+        contentRevision: candidate.contentRevision})
     } catch (error) {
       return { success: false, committed: false, error: String(error) }
     }
@@ -81,8 +79,7 @@ export function registerFinalizationController(): void {
       const active = projectAccess.assertCurrentProjectContext(context, getCurrentProjectPath())
       return await finalizationService.retry({
         projectRoot: active.rootPath,
-        finalizationId,
-      })
+        finalizationId})
     } catch (error) {
       return { success: false, committed: false, error: String(error) }
     }

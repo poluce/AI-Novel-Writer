@@ -37,7 +37,6 @@ const mocks = vi.hoisted(() => ({
     kind: 'manifest'
     projectId: string
     rootPath: string
-    leaseId: string
   },
   leaseSequence: 0,
 }))
@@ -151,9 +150,8 @@ function handler(channel: string): IpcHandler {
 function projectSession(
   projectId = 'project-A',
   projectPath = projectA,
-  leaseId = 'lease-project-A',
 ) {
-  return { projectId, leaseId, projectPath }
+  return { projectId, projectPath }
 }
 
 const projectA = path.resolve('C:/projects/A')
@@ -187,7 +185,6 @@ beforeEach(() => {
     kind: 'manifest',
     projectId: 'project-A',
     rootPath: projectA,
-    leaseId: 'lease-project-A',
   }
   mocks.recentProjects = []
   mocks.rmSync.mockImplementation(() => undefined)
@@ -213,7 +210,6 @@ beforeEach(() => {
     const session = {
       kind: 'manifest' as const,
       ...project,
-      leaseId: `lease-${project.projectId}-${++mocks.leaseSequence}`,
     } as const
     mocks.activeSession = session
     return session
@@ -227,15 +223,12 @@ beforeEach(() => {
   ))
   mocks.projectAccess.assertCurrentSession.mockImplementation((lease: {
     projectId?: string
-    leaseId?: string
   }) => {
     const active = mocks.activeSession
     if (
       !active
       || !lease.projectId
-      || !lease.leaseId
       || active.projectId !== lease.projectId
-      || active.leaseId !== lease.leaseId
     ) {
       throw new Error('项目会话已失效，已拒绝操作')
     }
@@ -243,17 +236,15 @@ beforeEach(() => {
   })
   mocks.projectAccess.assertCurrentProjectContext.mockImplementation((context: {
     projectId?: string
-    leaseId?: string
     projectPath?: string
   } | undefined, currentProjectPath: string | null) => {
-    if (!context?.projectId || !context.leaseId || !context.projectPath) {
+    if (!context?.projectId || !context.projectPath) {
       throw new Error('缺少项目会话上下文，已拒绝操作')
     }
     const active = mocks.activeSession
     if (
       !active
       || active.projectId !== context.projectId
-      || active.leaseId !== context.leaseId
       || !mocks.projectAccess.sameCanonicalProjectRoot(active.rootPath, context.projectPath)
     ) {
       throw new Error('项目会话已失效，已拒绝操作')
@@ -264,8 +255,8 @@ beforeEach(() => {
     return { ...active }
   })
   mocks.projectAccess.authorizeDeletion.mockImplementation((lease: unknown, projectPath: string) => {
-    const credential = lease as { projectId?: string; leaseId?: string }
-    if (!credential.projectId || !credential.leaseId) {
+    const credential = lease as { projectId?: string }
+    if (!credential.projectId) {
       throw new Error('项目会话已失效，已拒绝操作')
     }
     return path.resolve(projectPath)
@@ -290,7 +281,6 @@ describe('project controller project identity', () => {
         project: {
           id: 'project-B',
           path: projectB,
-          sessionLease: 'lease-project-B-1',
           novelConfig: {
             writingLanguage: 'en-US',
             coreOutline: '独立核心大纲',
@@ -310,11 +300,11 @@ describe('project controller project identity', () => {
 
     expect(first).toMatchObject({
       success: true,
-      project: { id: 'project-B', sessionLease: 'lease-project-B-1' },
+      project: { id: 'project-B' },
     })
     expect(second).toMatchObject({
       success: true,
-      project: { id: 'project-B', sessionLease: 'lease-project-B-2' },
+      project: { id: 'project-B' },
     })
   })
 
@@ -386,7 +376,6 @@ describe('project controller project identity', () => {
     expect(mocks.projectAccess.captureCurrentSession).toHaveBeenCalledOnce()
     expect(mocks.activeSession).toMatchObject({
       rootPath: projectA,
-      leaseId: 'lease-project-A',
     })
   })
 
@@ -508,7 +497,6 @@ describe('project controller project identity', () => {
         project: {
           id: 'project-C',
           path: projectC,
-          sessionLease: 'lease-project-C-1',
         },
         activeProjectPath: projectC,
         databaseRestored: true,
@@ -517,7 +505,6 @@ describe('project controller project identity', () => {
     expect(mocks.activeSession).toMatchObject({
       projectId: 'project-C',
       rootPath: projectC,
-      leaseId: 'lease-project-C-1',
     })
   })
 
@@ -605,39 +592,30 @@ describe('project controller project identity', () => {
     expect(mocks.createdVelaDirectories).not.toContain(path.join(ordinaryDirectory, '.vela'))
   })
 
-  it('fails closed rather than reviving an old same-root lease after that lease expires during recovery', async () => {
+  it('restores the same book when recovery still sees that project identity', async () => {
     mocks.failCorePaths.add(projectD)
     mocks.onCoreGet = () => {
-      // Same root, but a later open has already issued a new lease. The old
-      // operation's snapshot is no longer trusted even though its path matches.
       mocks.activeSession = {
         kind: 'manifest',
         projectId: 'project-A',
         rootPath: projectA,
-        leaseId: 'lease-project-A-new',
       }
     }
 
     await expect(handler('project:open')(
       {},
       projectD,
-      'request-open-D-expired-rollback',
+      'request-open-D-same-book-rollback',
       projectA,
     )).resolves.toMatchObject({
       success: false,
-      requestToken: 'request-open-D-expired-rollback',
-      activeProjectPath: null,
-      databaseRestored: false,
-      dbReady: false,
+      requestToken: 'request-open-D-same-book-rollback',
+      activeProjectPath: projectA,
+      databaseRestored: true,
+      dbReady: true,
     })
 
-    expect(mocks.initCalls).toEqual([projectD])
-    expect(mocks.projectAccess.assertCurrentSession).toHaveBeenCalledWith(expect.objectContaining({
-      leaseId: 'lease-project-A',
-    }))
-    expect(mocks.closeProjectDatabase).toHaveBeenCalledOnce()
-    expect(mocks.projectAccess.invalidateCurrentSession).toHaveBeenCalledOnce()
-    expect(mocks.activeSession).toBeNull()
+    expect(mocks.initCalls).toEqual([projectD, projectA])
   })
 
   it('fails closed when a failed open has no trusted rollback snapshot', async () => {
@@ -749,7 +727,6 @@ describe('project controller project identity', () => {
   it('rejects missing or stale project identities before project config writes', async () => {
     const data = {
       path: projectA,
-      sessionLease: 'lease-project-A',
       name: 'Project A',
       novelConfig: {
         genre: 'fantasy',
@@ -787,7 +764,6 @@ describe('project controller project identity', () => {
   it('allows project config writes only for the explicitly active project', async () => {
     const data = {
       path: projectA,
-      sessionLease: 'lease-project-A',
       name: 'Project A',
       novelConfig: {
         genre: 'fantasy',
@@ -803,7 +779,6 @@ describe('project controller project identity', () => {
   it('persists the project creative strategy independently from model settings', async () => {
     const data = {
       path: projectA,
-      sessionLease: 'lease-project-A',
       name: 'Project A',
       novelConfig: {
         genre: 'fantasy',
@@ -821,7 +796,6 @@ describe('project controller project identity', () => {
   it('persists the project writing language independently from the application locale', async () => {
     const data = {
       path: projectA,
-      sessionLease: 'lease-project-A',
       name: 'Project A',
       novelConfig: {
         genre: 'fantasy',
@@ -839,7 +813,6 @@ describe('project controller project identity', () => {
   it('does not reset a saved creative strategy during an unrelated partial config write', async () => {
     const data = {
       path: projectA,
-      sessionLease: 'lease-project-A',
       novelConfig: { genre: 'mystery' },
     }
 
@@ -855,11 +828,10 @@ describe('project controller project identity', () => {
     })
     const data = {
       path: projectA,
-      sessionLease: 'stale-lease',
       novelConfig: { genre: 'fantasy' },
     }
 
-    await expect(handler('project:save')({}, 'project-A', data, projectA, projectSession('project-A', projectA, 'stale-lease')))
+    await expect(handler('project:save')({}, 'project-A', data, projectA, projectSession('project-A', projectA)))
       .resolves.toMatchObject({
         success: false,
         error: expect.stringContaining('项目会话已失效'),
@@ -873,7 +845,6 @@ describe('project controller project identity', () => {
     })
     const data = {
       path: projectA,
-      sessionLease: 'lease-project-A',
       name: 'Project A',
       characterStates: 'committed',
     }
@@ -909,7 +880,7 @@ describe('project controller project identity', () => {
       throw new Error('directory locked')
     })
 
-    await expect(handler('project:delete')({}, projectA, 'project-A', 'lease-project-A', projectSession())).resolves.toMatchObject({
+    await expect(handler('project:delete')({}, projectA, 'project-A', projectSession())).resolves.toMatchObject({
       success: false,
       directoryDeleted: false,
       databaseRestored: true,
@@ -926,7 +897,7 @@ describe('project controller project identity', () => {
     })
     mocks.failInitPaths.add(projectA)
 
-    await expect(handler('project:delete')({}, projectA, 'project-A', 'lease-project-A', projectSession())).resolves.toMatchObject({
+    await expect(handler('project:delete')({}, projectA, 'project-A', projectSession())).resolves.toMatchObject({
       success: false,
       directoryDeleted: false,
       databaseRestored: false,
@@ -943,7 +914,7 @@ describe('project controller project identity', () => {
       throw new Error('recent list locked')
     })
 
-    await expect(handler('project:delete')({}, projectA, 'project-A', 'lease-project-A', projectSession())).resolves.toMatchObject({
+    await expect(handler('project:delete')({}, projectA, 'project-A', projectSession())).resolves.toMatchObject({
       success: true,
       directoryDeleted: true,
       databaseRestored: false,
@@ -972,8 +943,7 @@ describe('project controller project identity', () => {
       {},
       projectA,
       'project-A',
-      'legacy-lease-argument',
-      projectSession('project-A', projectA, 'stale-lease'),
+      projectSession('project-A', projectA),
     )).resolves.toMatchObject({
       success: false,
       directoryDeleted: false,
@@ -985,7 +955,7 @@ describe('project controller project identity', () => {
   it('rejects a leased deletion when its project is no longer the active database root', async () => {
     mocks.currentProjectPath = projectB
 
-    await expect(handler('project:delete')({}, projectA, 'project-A', 'lease-project-A', projectSession('project-A', projectA)))
+    await expect(handler('project:delete')({}, projectA, 'project-A', projectSession('project-A', projectA)))
       .resolves.toMatchObject({
         success: false,
         directoryDeleted: false,

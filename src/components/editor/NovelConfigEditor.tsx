@@ -10,12 +10,10 @@ import {
   DEFAULT_NARRATIVE_THREAD_DORMANT_THRESHOLD,
   MAX_NARRATIVE_THREAD_DORMANT_THRESHOLD,
   MIN_NARRATIVE_THREAD_DORMANT_THRESHOLD,
-  resolveNarrativeThreadDormantThreshold,
-} from '../../shared/narrative-thread'
+  resolveNarrativeThreadDormantThreshold} from '../../shared/narrative-thread'
 import {
   resolveWritingLanguage,
-  type WritingLanguage,
-} from '../../shared/writing-language'
+  type WritingLanguage} from '../../shared/writing-language'
 import type { GeneratableField } from '../../services/workflows/commands/generate-field.command'
 import { Button } from '../ui/Button'
 import { confirm } from '../ui/Confirm'
@@ -28,8 +26,7 @@ import { useLayoutStore } from '../../stores/layout-store'
 import {
   captureProjectSession,
   isProjectSessionCurrent,
-  isProjectSessionPath,
-} from '../project-session-gate'
+  isProjectSessionPath} from '../project-session-gate'
 import { AUDIENCE_EN, GENRE_EN } from './novel-config-labels'
 import { DocumentBody, SettingDocument, SettingSection } from './SettingSections'
 
@@ -38,10 +35,10 @@ export default function NovelConfigEditor({ projectKey }: { projectKey: string }
   const currentProject = useProjectStore(s => s.currentProject)
   const projectSession = captureProjectSession(currentProject)
   const sessionKey = projectSession && isProjectSessionPath(projectSession, projectKey)
-    ? `${projectSession.projectId}:${projectSession.leaseId}`
+    ? `${projectSession.projectId}:${projectSession.projectPath}`
     : `inactive:${projectKey}`
 
-  // 同路径项目重新打开时强制重挂载，避免旧会话的保存/生成状态泄漏到新 lease。
+  // 换书后强制重挂载，避免旧项目的保存/生成状态泄漏。
   return <NovelConfigEditorSession key={sessionKey} projectKey={projectKey} />
 }
 
@@ -72,8 +69,7 @@ function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
     registerEditorExitSaveHandler({
       type: 'config',
       projectKey,
-      save: () => exitSaveRef.current(),
-    })
+      save: () => exitSaveRef.current()})
   }, [projectKey])
 
   // 直接写 Store — 消除双向同步风险
@@ -136,8 +132,7 @@ function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
     goldenFinger: { zhCN: '核心金手指', enUS: 'Golden finger' },
     protagonistProfile: { zhCN: '主角设定', enUS: 'Protagonist profile' },
     globalGuidance: { zhCN: '创作指导', enUS: 'Creative guidance' },
-    writingStyle: { zhCN: '写作风格', enUS: 'Writing style' },
-  }
+    writingStyle: { zhCN: '写作风格', enUS: 'Writing style' }}
 
   /** 单字段 AI 原地快速生成 */
   const handleFieldGenerate = async (fieldKey: GeneratableField) => {
@@ -170,17 +165,14 @@ function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
         uiLocale: locale,
         data: {},
         cancelled: false,
-        generationModelId: effectiveModelId,
-      }
+        generationModelId: effectiveModelId}
       await cmd.execute({
         step: { id: `step-${fieldKey}`, commandId: 'generate-field', name: fieldName, params: {} },
         context,
         callbacks: {
           log: (msg: string) => addLog('info', msg),
           setProgress: () => {},
-          appendText: () => {},
-        },
-      })
+          appendText: () => {}}})
       toast.success(text(`【${fieldName}】生成完成！`, `"${fieldName}" generated successfully!`))
       addLog('info', text(`【${fieldName}】已生成并保存`, `"${fieldName}" was generated and saved.`))
     } catch (e) {
@@ -206,7 +198,7 @@ function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
         title: text('清除确认', 'Confirm Clear'),
         confirmText: text('清除', 'Clear'),
         danger: true,
-      },
+        overlay: false},
     )
     if (!ok) return
     if (!isProjectSessionCurrent(projectSession)) return
@@ -554,8 +546,7 @@ function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
 function Section({
   title,
   desc,
-  children,
-}: {
+  children}: {
   title: string
   desc?: string
   children: React.ReactNode
@@ -578,8 +569,7 @@ function Field({
   label,
   htmlFor,
   tipItems,
-  children,
-}: {
+  children}: {
   label: string
   htmlFor?: string
   tipItems?: string[]
@@ -628,8 +618,7 @@ function Field({
                   boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
                   zIndex: 10000,
                   width: 260,
-                  pointerEvents: 'none',
-                }}
+                  pointerEvents: 'none'}}
               >
                 {tipItems.map((item, i) => (
                   <div key={i}>
