@@ -33,11 +33,26 @@ import {
 
 function resolveModel(modelId: string | undefined): ModelProfile | null {
   const models = readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
-  if (modelId) return models.find((m) => m.id === modelId) ?? null
+  if (models.length === 0) return null
+
+  if (modelId) {
+    const byId = models.find((m) => m.id === modelId)
+    if (byId) return byId
+    const byName = models.find((m) => m.modelName === modelId)
+    if (byName) return byName
+  }
+
   const config = readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)
   const assistantConfigId = config.taskModelRouting?.assistant?.modelId?.trim()
   const defaultId = assistantConfigId || config.defaultModelId
-  return models.find((m) => m.id === defaultId) ?? models[0] ?? null
+
+  if (defaultId) {
+    const foundDefault = models.find((m) => m.id === defaultId)
+      ?? models.find((m) => m.modelName === defaultId)
+    if (foundDefault) return foundDefault
+  }
+
+  return models.find((m) => m.purposes?.includes('generation')) ?? models[0] ?? null
 }
 
 function resolveLanguage(): WritingLanguage {

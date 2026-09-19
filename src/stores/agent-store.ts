@@ -643,7 +643,15 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       conv = get().createConversation()
     }
     const convId = conv.id
-    const modelId = conv.modelId ?? undefined
+    const allModels = useLLMStore.getState().models
+    let modelId = conv.modelId ?? undefined
+    if (modelId && allModels.length > 0) {
+      const match = allModels.find(m => m.id === modelId)
+        ?? allModels.find(m => m.modelName === modelId)
+      if (match) {
+        modelId = match.id
+      }
+    }
     // 会话级思考等级随这一轮下发；没选时不传，主进程按 Pi 默认的 off 处理。
     const thinkingLevel = conv.thinkingLevel ?? undefined
     const executionContext = createAgentExecutionContext(modelId, requestLocale)
