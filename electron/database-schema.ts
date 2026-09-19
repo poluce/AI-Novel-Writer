@@ -129,6 +129,7 @@ export function ensureProjectSchema(db: BetterSqlite3.Database, importSourceSecr
       end_offset INTEGER NOT NULL,
       quote TEXT NOT NULL,
       note TEXT NOT NULL,
+      resolved INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL,
       FOREIGN KEY (draft_id) REFERENCES drafts(id) ON DELETE CASCADE
     );
@@ -569,6 +570,11 @@ export function ensureProjectSchema(db: BetterSqlite3.Database, importSourceSecr
   const draftColumns = db.prepare('PRAGMA table_info(drafts)').all() as Array<{ name: string }>
   if (!draftColumns.some(column => column.name === 'source_dependencies')) {
     db.exec("ALTER TABLE drafts ADD COLUMN source_dependencies TEXT NOT NULL DEFAULT '[]'")
+  }
+
+  const draftAnnotationColumns = db.prepare('PRAGMA table_info(draft_annotations)').all() as Array<{ name: string }>
+  if (!draftAnnotationColumns.some(column => column.name === 'resolved')) {
+    db.exec('ALTER TABLE draft_annotations ADD COLUMN resolved INTEGER NOT NULL DEFAULT 0')
   }
 
   // Legacy candidates did not freeze the draft identity. Keep them marked

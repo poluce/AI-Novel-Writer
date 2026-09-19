@@ -13,11 +13,12 @@ import {
 } from '../../../src/shared/writing-language'
 
 const DraftAction = Type.Union([
-  Type.Literal('read', { description: '读取草稿正文内容，自动附带作者划词标注列表（默认）' }),
+  Type.Literal('read', { description: '读取草稿正文内容，自动附带未处理的作者划词标注列表（默认）' }),
   Type.Literal('write', { description: '整篇写草稿：为章节新建首版草稿、整章推倒重写（追加新版本）或覆盖未定稿草稿' }),
-  Type.Literal('replace_excerpt', { description: '指定位置局部替换：精确替换章节草稿中的一段原文（润色、扩写、微调）' }),
+  Type.Literal('replace_excerpt', { description: '指定位置局部替换：精确替换章节草稿中的一段原文或多处原文（批量替换），自动返回上下文预览' }),
   Type.Literal('list_versions', { description: '查看章节拥有的所有草稿版本清单（版本号、字数、状态、创建时间）' }),
-  Type.Literal('list_annotations', { description: '专项查询：仅查看本章当前草稿中作者留下的所有划词批注与修改意见' }),
+  Type.Literal('list_annotations', { description: '专项查询：仅查看本章当前草稿中作者留下的待处理划词批注与修改意见' }),
+  Type.Literal('resolve_annotation', { description: '标记批注已解决：将已处理的作者划词批注标记归档（可传 annotation_id 或 resolve_all: true）' }),
   Type.Literal('delete', { description: '删除未定稿的草稿版本' }),
 ], { description: '操作类型' })
 
@@ -47,8 +48,19 @@ const Schema = Type.Object({
   mode: Type.Optional(WriteMode),
 
   // === replace_excerpt 参数 ===
-  old_text: Type.Optional(Type.String({ description: '要被替换的原文片段（必须在当前草稿中一字不差且唯一存在）' })),
-  new_text: Type.Optional(Type.String({ description: '替换后的新正文片段（润色、扩写或修改后的段落）' })),
+  old_text: Type.Optional(Type.String({ description: '单处替换：要被替换的原文片段（必须唯一存在）' })),
+  new_text: Type.Optional(Type.String({ description: '单处替换：替换后的新正文片段（润色、扩写或修改后的段落）' })),
+  replacements: Type.Optional(Type.Array(
+    Type.Object({
+      old_text: Type.String({ description: '要替换的原文片段（必须唯一匹配）' }),
+      new_text: Type.String({ description: '替换后的新段落内容' }),
+    }),
+    { description: '批量替换列表（一次性原子应用全章多处修改，优先于单组 old_text/new_text）' },
+  )),
+
+  // === resolve_annotation 参数 ===
+  annotation_id: Type.Optional(Type.String({ description: '要标记已解决的批注 ID（resolve_annotation 操作使用）' })),
+  resolve_all: Type.Optional(Type.Boolean({ description: '是否将本章所有未解决批注一次性标记为已解决（resolve_annotation 操作使用）' })),
 
   // === 通用版本指定 / 删除参数 ===
   draft_id: Type.Optional(Type.Integer({ minimum: 1, description: '可选的具体草稿版本数据库 ID（delete 操作必填）' })),
@@ -62,8 +74,8 @@ export function createManageDraftsTool(
   const text = (zhCN: string, enUS: string) => writingLanguageText(language, zhCN, enUS)
 
   const description = isEn
-    ? 'All-in-one Chapter Draft Tool: read chapter drafts (latest, specific versions, paginated); write complete chapter drafts (creating initial draft v1 from scratch, rewriting whole chapters into new versions, or overwriting unfinalized drafts); precisely replace passages at exact locations with unique matching; view version lists; and delete unfinalized drafts. Finalized manuscripts are protected from destructive overwrites.'
-    : '全功能草稿中枢工具：支持按章节读取草稿正文（最新稿、初稿或特定版本，支持行号分页）；支持整篇写草稿（为从未动笔的章节创建首版草稿 v1、整章推倒重写追加新版 v2/v3、或覆盖未定稿草稿）；支持指定位置无损局部精准替换（唯一匹配润色）；支持草稿多版本清单查看；支持安全删除未定稿草稿。已定稿正文受不可变保护，严禁意外覆盖。'
+    ? 'All-in-one Chapter Draft Tool: read drafts with active author annotations; batch or single replace passages with surrounding context previews and whitespace tolerance; write or rewrite complete drafts; resolve/archive addressed annotations; view versions; and delete unfinalized drafts.'
+    : '全功能草稿中枢工具：支持读取草稿正文及待处理的作者划词批注；支持单处或批量（replacements）精准替换正文，自动返回带行号的局部上下文预览切片，兼具换行与行末空白弱容错；支持新建首版草稿与整章推倒重写；支持将已改动的批注标记为已解决（resolve_annotation）归档；支持草稿版本清单查看与安全删除未定稿草稿。'
 
   return {
     name: 'manage_drafts',
@@ -201,27 +213,45 @@ export function createManageDraftsTool(
       }
 
       // =========================================================================
-      // 3. 指定位置局部精准替换 (replace_excerpt)
+      // 3. 指定位置局部精准替换 (replace_excerpt - 单处或批量)
       // =========================================================================
       if (rawAction === 'replace_excerpt' || rawAction === '局部替换' || rawAction === '修改段落' || rawAction === '润色') {
+        const hasBatch = Array.isArray(params.replacements) && params.replacements.length > 0
         const oldText = params.old_text ?? ''
         const newText = params.new_text ?? ''
 
-        if (!oldText) {
-          throw new Error(text('缺少要替换的原文 old_text', 'old_text is required for replace_excerpt'))
+        if (!hasBatch && !oldText) {
+          throw new Error(text('缺少要替换的原文 old_text 或 replacements 批量列表', 'old_text or replacements list is required for replace_excerpt'))
         }
-        if (oldText.length > MAX_DRAFT_EXCERPT_CHARS || newText.length > MAX_DRAFT_EXCERPT_CHARS) {
-          throw new Error(text(
-            `替换片段过长（最多 ${MAX_DRAFT_EXCERPT_CHARS} 字）`,
-            `The excerpt is too long (max ${MAX_DRAFT_EXCERPT_CHARS} characters)`,
-          ))
+
+        if (hasBatch) {
+          for (let i = 0; i < params.replacements!.length; i++) {
+            const r = params.replacements![i]
+            if (!r.old_text || !r.old_text.trim()) {
+              throw new Error(text(`第 ${i + 1} 项要替换的原文 old_text 不能为空`, `Item ${i + 1} old_text cannot be empty`))
+            }
+            if (r.old_text.length > MAX_DRAFT_EXCERPT_CHARS || (r.new_text && r.new_text.length > MAX_DRAFT_EXCERPT_CHARS)) {
+              throw new Error(text(
+                `第 ${i + 1} 项替换片段过长（单处最多 ${MAX_DRAFT_EXCERPT_CHARS} 字）`,
+                `Item ${i + 1} excerpt is too long (max ${MAX_DRAFT_EXCERPT_CHARS} characters)`,
+              ))
+            }
+          }
+        } else {
+          if (oldText.length > MAX_DRAFT_EXCERPT_CHARS || newText.length > MAX_DRAFT_EXCERPT_CHARS) {
+            throw new Error(text(
+              `替换片段过长（最多 ${MAX_DRAFT_EXCERPT_CHARS} 字）`,
+              `The excerpt is too long (max ${MAX_DRAFT_EXCERPT_CHARS} characters)`,
+            ))
+          }
         }
 
         const outcome = await rendererAction({
           type: 'replace_draft_excerpt',
           chapterNumber,
-          oldText,
-          newText,
+          oldText: hasBatch ? undefined : oldText,
+          newText: hasBatch ? undefined : newText,
+          replacements: hasBatch ? params.replacements : undefined,
           draftId: params.draft_id,
         })
 
@@ -232,7 +262,56 @@ export function createManageDraftsTool(
 
         return {
           content: [{ type: 'text', text: outcome.summary }],
-          details: { chapterNumber, oldLength: oldText.length, newLength: newText.length },
+          details: {
+            chapterNumber,
+            batchCount: hasBatch ? params.replacements!.length : 1,
+          },
+        }
+      }
+
+      // =========================================================================
+      // 4. 标记批注已解决 (resolve_annotation)
+      // =========================================================================
+      if (rawAction === 'resolve_annotation' || rawAction === '解决批注' || rawAction === '解决标注' || rawAction === '归档批注') {
+        const allDrafts = DraftRepository.listByChapter(chapterNumber)
+        if (allDrafts.length === 0) {
+          throw new Error(text(`第 ${chapterNumber} 章暂无草稿`, `No draft found for chapter ${chapterNumber}`))
+        }
+
+        const targetMeta = params.draft_id
+          ? DraftRepository.getMeta(params.draft_id)
+          : DraftRepository.getLatestByChapter(chapterNumber)
+
+        if (!targetMeta) {
+          throw new Error(text(`未找到第 ${chapterNumber} 章对应的草稿`, `Could not find draft for chapter ${chapterNumber}`))
+        }
+
+        if (!params.resolve_all && !params.annotation_id) {
+          throw new Error(text('resolve_annotation 必须提供 annotation_id 或 resolve_all: true', 'annotation_id or resolve_all: true is required for resolve_annotation'))
+        }
+
+        const resolvedCount = params.resolve_all
+          ? DraftAnnotationRepository.resolve(targetMeta.id, 'all')
+          : (params.annotation_id ? DraftAnnotationRepository.resolve(targetMeta.id, [params.annotation_id]) : 0)
+
+        // 通知渲染进程刷新
+        await rendererAction({
+          type: 'sync_draft_content',
+          chapterNumber,
+          draftId: targetMeta.id,
+          content: '',
+          isNewVersion: false,
+        })
+
+        return {
+          content: [{
+            type: 'text',
+            text: text(
+              `已成功将第 ${chapterNumber} 章（Draft v${targetMeta.version}）的 ${resolvedCount} 处作者批注标记为已解决并归档。\n下次调用 read 或 list_annotations 时将不再展示已解决项。`,
+              `Successfully resolved ${resolvedCount} annotation(s) for chapter ${chapterNumber} (Draft v${targetMeta.version}).`,
+            ),
+          }],
+          details: { chapterNumber, draftId: targetMeta.id, resolvedCount },
         }
       }
 

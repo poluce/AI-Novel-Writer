@@ -345,6 +345,10 @@ export class AgentSession {
         || rawAction === '查看标注'
         || rawAction === '标注列表'
         || rawAction === '批注'
+        || rawAction === 'resolve_annotation'
+        || rawAction === '解决批注'
+        || rawAction === '解决标注'
+        || rawAction === '归档批注'
       ) {
         return false
       }

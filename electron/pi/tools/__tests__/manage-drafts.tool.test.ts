@@ -21,6 +21,7 @@ vi.mock('../../../repositories/draft-annotation-repository', () => ({
   DraftAnnotationRepository: {
     list: vi.fn(),
     replace: vi.fn(),
+    resolve: vi.fn(),
   },
 }))
 
@@ -365,6 +366,28 @@ describe('manage_drafts tool', () => {
       expect(textOf(res)).toContain('替换一处原文')
     })
 
+    it('supports batch replacements with replacements array', async () => {
+      const tool = createManageDraftsTool('zh-CN', rendererAction)
+      const res = await tool.execute('c-batch', {
+        action: 'replace_excerpt',
+        chapter_number: 1,
+        replacements: [
+          { old_text: '第一句', new_text: '第1句修改' },
+          { old_text: '第二句', new_text: '第2句修改' },
+        ],
+      })
+
+      expect(rendererAction).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'replace_draft_excerpt',
+        chapterNumber: 1,
+        replacements: [
+          { old_text: '第一句', new_text: '第1句修改' },
+          { old_text: '第二句', new_text: '第2句修改' },
+        ],
+      }))
+      expect(res.details.batchCount).toBe(2)
+    })
+
     it('rejects empty old_text in replace_excerpt', async () => {
       const tool = createManageDraftsTool('zh-CN', rendererAction)
       await expect(tool.execute('c12', {
@@ -373,6 +396,67 @@ describe('manage_drafts tool', () => {
         old_text: '',
         new_text: '新文本',
       })).rejects.toThrow('缺少要替换的原文 old_text')
+    })
+  })
+
+  // =========================================================================
+  // 5. 标记批注已解决 (resolve_annotation)
+  // =========================================================================
+  describe('resolve_annotation operation', () => {
+    it('resolves a specific annotation by id', async () => {
+      vi.mocked(DraftRepository.listByChapter).mockReturnValue([
+        { id: 20, chapterNumber: 1, version: 1, status: 'draft', source: 'write', contentId: 20, wordCount: 1000, sourceDependencies: [], dependenciesStale: false, createdAt: '2026-09-18', updatedAt: '2026-09-18' },
+      ])
+      vi.mocked(DraftRepository.getLatestByChapter).mockReturnValue({
+        id: 20, chapterNumber: 1, version: 1, status: 'draft', source: 'write', contentId: 20, wordCount: 1000, sourceDependencies: [], dependenciesStale: false, createdAt: '2026-09-18', updatedAt: '2026-09-18',
+      })
+      vi.mocked(DraftAnnotationRepository.resolve).mockReturnValue(1)
+
+      const tool = createManageDraftsTool('zh-CN', rendererAction)
+      const res = await tool.execute('c-res-1', {
+        action: 'resolve_annotation',
+        chapter_number: 1,
+        annotation_id: 'ann-123',
+      })
+
+      expect(DraftAnnotationRepository.resolve).toHaveBeenCalledWith(20, ['ann-123'])
+      expect(res.details.resolvedCount).toBe(1)
+      expect(textOf(res)).toContain('已成功将第 1 章（Draft v1）的 1 处作者批注标记为已解决并归档')
+    })
+
+    it('resolves all annotations when resolve_all is true', async () => {
+      vi.mocked(DraftRepository.listByChapter).mockReturnValue([
+        { id: 20, chapterNumber: 1, version: 1, status: 'draft', source: 'write', contentId: 20, wordCount: 1000, sourceDependencies: [], dependenciesStale: false, createdAt: '2026-09-18', updatedAt: '2026-09-18' },
+      ])
+      vi.mocked(DraftRepository.getLatestByChapter).mockReturnValue({
+        id: 20, chapterNumber: 1, version: 1, status: 'draft', source: 'write', contentId: 20, wordCount: 1000, sourceDependencies: [], dependenciesStale: false, createdAt: '2026-09-18', updatedAt: '2026-09-18',
+      })
+      vi.mocked(DraftAnnotationRepository.resolve).mockReturnValue(5)
+
+      const tool = createManageDraftsTool('zh-CN', rendererAction)
+      const res = await tool.execute('c-res-all', {
+        action: 'resolve_annotation',
+        chapter_number: 1,
+        resolve_all: true,
+      })
+
+      expect(DraftAnnotationRepository.resolve).toHaveBeenCalledWith(20, 'all')
+      expect(res.details.resolvedCount).toBe(5)
+    })
+
+    it('rejects resolve_annotation when neither annotation_id nor resolve_all is passed', async () => {
+      vi.mocked(DraftRepository.listByChapter).mockReturnValue([
+        { id: 20, chapterNumber: 1, version: 1, status: 'draft', source: 'write', contentId: 20, wordCount: 1000, sourceDependencies: [], dependenciesStale: false, createdAt: '2026-09-18', updatedAt: '2026-09-18' },
+      ])
+      vi.mocked(DraftRepository.getLatestByChapter).mockReturnValue({
+        id: 20, chapterNumber: 1, version: 1, status: 'draft', source: 'write', contentId: 20, wordCount: 1000, sourceDependencies: [], dependenciesStale: false, createdAt: '2026-09-18', updatedAt: '2026-09-18',
+      })
+
+      const tool = createManageDraftsTool('zh-CN', rendererAction)
+      await expect(tool.execute('c-res-fail', {
+        action: 'resolve_annotation',
+        chapter_number: 1,
+      })).rejects.toThrow('resolve_annotation 必须提供 annotation_id 或 resolve_all: true')
     })
   })
 

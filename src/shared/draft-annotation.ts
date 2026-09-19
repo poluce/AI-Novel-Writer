@@ -10,6 +10,7 @@ export interface DraftAnnotation {
   to: number
   quote: string
   note: string
+  resolved?: boolean
   createdAt: number
 }
 
@@ -46,6 +47,7 @@ export function parseDraftAnnotations(value: unknown): DraftAnnotation[] {
       to: item.to,
       quote: item.quote,
       note: item.note.trim(),
+      resolved: Boolean(item.resolved),
       createdAt: item.createdAt,
     })
   }

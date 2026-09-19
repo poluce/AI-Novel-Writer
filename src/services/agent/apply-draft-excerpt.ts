@@ -1,6 +1,9 @@
 import { countDraftUnits } from '../../shared/draft-units'
 import type { RendererActionResult } from '../../shared/agent-events'
-import { replaceExactOnce } from '../../shared/draft-excerpt'
+import {
+  batchReplaceExcerpts,
+  type ExcerptReplacementItem,
+} from '../../shared/draft-excerpt'
 import { projectSessionContextFromProject } from '../../shared/project-session-context'
 import { ipc } from '../ipc-client'
 import { requireIpcSuccess } from '../ipc-result'
@@ -10,8 +13,9 @@ import { useLocaleStore } from '../../stores/locale-store'
 
 export interface ReplaceDraftExcerptRequest {
   chapterNumber: number
-  oldText: string
-  newText: string
+  oldText?: string
+  newText?: string
+  replacements?: ExcerptReplacementItem[]
   draftId?: number
 }
 
@@ -34,10 +38,21 @@ export async function applyDraftExcerptReplace(
   if (!project || !session) {
     return { ok: false, error: text('未打开项目，无法修改草稿。', 'No project is open, so the draft was not changed.') }
   }
-  const oldText = request.oldText
-  const newText = request.newText
-  if (!oldText) {
-    return { ok: false, error: text('缺少要替换的原文。', 'The original excerpt is missing.') }
+
+  // 规范化替换列表（兼容单个 oldText/newText 与批量 replacements 数组）
+  const items: ExcerptReplacementItem[] = []
+  if (Array.isArray(request.replacements) && request.replacements.length > 0) {
+    for (const r of request.replacements) {
+      if (r && typeof r.old_text === 'string') {
+        items.push({ old_text: r.old_text, new_text: r.new_text ?? '' })
+      }
+    }
+  } else if (typeof request.oldText === 'string' && request.oldText) {
+    items.push({ old_text: request.oldText, new_text: request.newText ?? '' })
+  }
+
+  if (items.length === 0) {
+    return { ok: false, error: text('缺少要替换的原文 old_text 或 replacements 列表。', 'old_text or replacements list is required.') }
   }
 
   const tab = findDraftTab(request, project.path)
@@ -76,21 +91,9 @@ export async function applyDraftExcerptReplace(
     draftId = full.id
   }
 
-  const replaced = replaceExactOnce(body, oldText, newText)
+  const replaced = batchReplaceExcerpts(body, items)
   if (!replaced.ok) {
-    if (replaced.reason === 'not_found') {
-      return { ok: false, error: text(
-        '草稿中找不到这段原文。请用工具再读一次当前正文，复制完全相同的片段后再替换。',
-        'That excerpt was not found in the draft. Read the current body and copy the exact text before replacing.',
-      ) }
-    }
-    if (replaced.reason === 'ambiguous') {
-      return { ok: false, error: text(
-        '这段原文在草稿中出现了不止一次。请多复制前后文，使匹配唯一。',
-        'That excerpt occurs more than once. Include more surrounding text so it matches exactly once.',
-      ) }
-    }
-    return { ok: false, error: text('替换原文不能为空。', 'The original excerpt cannot be empty.') }
+    return { ok: false, error: replaced.message }
   }
 
   const wordCount = countDraftUnits(replaced.next)
@@ -110,11 +113,16 @@ export async function applyDraftExcerptReplace(
     useEditorStore.getState().markTabSaved(openTab.id, replaced.next)
   }
 
+  const summaryHeader = text(
+    `已成功在第 ${request.chapterNumber} 章草稿中替换 ${replaced.count} 处正文：\n\n`,
+    `Successfully replaced ${replaced.count} passage(s) in chapter ${request.chapterNumber}:\n\n`,
+  )
+  const previewsText = replaced.previews
+    .map((p, idx) => `[改动 ${idx + 1} 局部上下文预览]：\n${p}`)
+    .join('\n\n')
+
   return {
     ok: true,
-    summary: text(
-      `已在第 ${request.chapterNumber} 章草稿中替换一处原文（${oldText.length} → ${newText.length} 字）。`,
-      `Replaced one excerpt in chapter ${request.chapterNumber} (${oldText.length} → ${newText.length} characters).`,
-    ),
+    summary: `${summaryHeader}${previewsText}`,
   }
 }

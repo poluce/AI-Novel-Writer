@@ -54,6 +54,7 @@ export async function handleRendererAction(action: RendererAction): Promise<Rend
           chapterNumber: action.chapterNumber,
           oldText: action.oldText,
           newText: action.newText,
+          replacements: action.replacements,
           draftId: action.draftId,
         })
       } catch (error) {

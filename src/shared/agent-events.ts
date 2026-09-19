@@ -33,7 +33,14 @@ export type BuiltinEditorTarget =
 export type RendererAction =
   | { type: 'open_editor'; target: 'builtin'; editor: BuiltinEditorTarget }
   | { type: 'open_editor'; target: 'file'; filePath: string; content: string; fileName: string }
-  | { type: 'replace_draft_excerpt'; chapterNumber: number; oldText: string; newText: string; draftId?: number }
+  | {
+      type: 'replace_draft_excerpt'
+      chapterNumber: number
+      oldText?: string
+      newText?: string
+      replacements?: Array<{ old_text: string; new_text: string }>
+      draftId?: number
+    }
   | { type: 'refresh_project_config' }
   | { type: 'refresh_blueprint' }
   | { type: 'refresh_architecture'; section?: string }
