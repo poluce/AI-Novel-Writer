@@ -334,6 +334,12 @@ export class AgentSession {
         return false
       }
     }
+    if (toolName === 'manage_drafts') {
+      const rawAction = String(args?.action ?? 'read').toLowerCase().trim()
+      if (rawAction === 'read' || rawAction === 'list_versions' || rawAction === '版本清单' || rawAction === '查看版本') {
+        return false
+      }
+    }
     return true
   }
 

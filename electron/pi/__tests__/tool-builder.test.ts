@@ -35,10 +35,9 @@ describe('buildAgentTools', () => {
     // 没有项目时项目读写工具只会失败，一律不挂。
     for (const projectTool of [
       'novel_config', 'story_architecture',
-      'read_architecture', 'manage_characters', 'read_blueprint', 'read_drafts',
+      'read_architecture', 'manage_characters', 'read_blueprint', 'manage_drafts',
       'read_project_state', 'search_knowledge', 'read_file',
       'install_writing_skill', 'bind_writing_skill', 'open_editor',
-      'replace_draft_excerpt',
       'propose_chapter_blueprint',
     ]) {
       expect(names).not.toContain(projectTool)
@@ -55,15 +54,13 @@ describe('buildAgentTools', () => {
   it('marks write and MCP tools sequential so reads can run in parallel', () => {
     const tools = buildAgentTools('zh-CN', () => {})
     const novelConfig = tools.find(tool => tool.name === 'novel_config')
-    const replace = tools.find(tool => tool.name === 'replace_draft_excerpt')
+    const manageDrafts = tools.find(tool => tool.name === 'manage_drafts')
     const mcp = tools.find(tool => tool.name === 'mcp__docs__search')
     const read = tools.find(tool => tool.name === 'read_file')
-    const drafts = tools.find(tool => tool.name === 'read_drafts')
     expect(novelConfig?.executionMode).toBe('sequential')
-    expect(replace?.executionMode).toBe('sequential')
+    expect(manageDrafts?.executionMode).toBe('sequential')
     expect(mcp?.executionMode).toBe('sequential')
     expect(read?.executionMode).toBeUndefined()
-    expect(drafts?.executionMode).toBeUndefined()
   })
 
   it('exposes one overview tool and no list_chapters', () => {
@@ -95,10 +92,10 @@ describe('buildAgentTools', () => {
       'edit',
       'install_writing_skill',
       'manage_characters',
+      'manage_drafts',
       'novel_config',
       'open_editor',
       'propose_chapter_blueprint',
-      'replace_draft_excerpt',
       'story_architecture',
       'write',
     ])

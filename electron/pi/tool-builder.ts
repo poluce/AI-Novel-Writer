@@ -7,7 +7,7 @@ import { createReadArchitectureTool } from './tools/read-architecture.tool'
 import { createNovelConfigTool } from './tools/novel-config.tool'
 import { createStoryArchitectureTool } from './tools/story-architecture.tool'
 import { createReadBlueprintTool } from './tools/read-blueprint.tool'
-import { createReadDraftsTool } from './tools/read-drafts.tool'
+import { createManageDraftsTool } from './tools/manage-drafts.tool'
 import { createReadProjectStateTool } from './tools/read-project-state.tool'
 import { createSearchKnowledgeTool } from './tools/search-knowledge.tool'
 import { createReadFileTool } from './tools/read-file.tool'
@@ -16,7 +16,6 @@ import { createLoadWritingSkillTool } from './tools/load-writing-skill.tool'
 import { createInstallWritingSkillTool } from './tools/install-writing-skill.tool'
 import { createBindWritingSkillTool } from './tools/bind-writing-skill.tool'
 import { createOpenEditorTool } from './tools/open-editor.tool'
-import { createReplaceDraftExcerptTool } from './tools/replace-draft-excerpt.tool'
 import { createProposeChapterBlueprintTool } from './tools/propose-chapter-blueprint.tool'
 import { createManageCharactersTool } from './tools/manage-characters.tool'
 import { buildMcpAgentTools } from './tools/mcp.tool'
@@ -52,14 +51,13 @@ export function buildAgentTools(
       createStoryArchitectureTool(language, rendererAction),
       createReadArchitectureTool(language),
       createReadBlueprintTool(language),
-      createReadDraftsTool(language),
+      createManageDraftsTool(language, rendererAction),
       createReadProjectStateTool(language),
       createSearchKnowledgeTool(language),
       createReadFileTool(language),
       createInstallWritingSkillTool(language),
       createBindWritingSkillTool(language),
       createOpenEditorTool(language, rendererAction),
-      createReplaceDraftExcerptTool(language, rendererAction),
       createProposeChapterBlueprintTool(language),
       createManageCharactersTool(language, rendererAction),
     ]
@@ -85,7 +83,7 @@ export function confirmationToolNames(): ReadonlySet<string> {
     'edit',
     'bash',
     'open_editor',
-    'replace_draft_excerpt',
+    'manage_drafts',
     'novel_config',
     'story_architecture',
     'propose_chapter_blueprint',

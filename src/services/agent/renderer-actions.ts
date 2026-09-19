@@ -124,5 +124,28 @@ export async function handleRendererAction(action: RendererAction): Promise<Rend
       })
       return
     }
+    case 'sync_draft_content': {
+      const project = useProjectStore.getState().currentProject
+      if (!project) return
+      const projectSession = projectSessionContextFromProject(project)
+      if (!projectSession) return
+
+      const { useDraftStore } = await import('../../stores/draft-store')
+      void useDraftStore.getState().loadChapterDrafts(action.chapterNumber, project.path, projectSession)
+      void useProjectStore.getState().refreshFileTree(project.path)
+
+      const { useEditorStore } = await import('../../stores/editor-store')
+      const tabs = useEditorStore.getState().tabs
+      const matchingTab = tabs.find(t =>
+        t.projectKey === project.path &&
+        t.type === 'chapter' &&
+        (t.draftId === action.draftId || (!action.isNewVersion && t.chapterNumber === action.chapterNumber))
+      )
+      if (matchingTab && action.content) {
+        useEditorStore.getState().syncTabContent(matchingTab.id, action.content)
+        useEditorStore.getState().markTabSaved(matchingTab.id, action.content)
+      }
+      return
+    }
   }
 }

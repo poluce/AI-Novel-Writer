@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createOpenEditorTool } from '../open-editor.tool'
-import { createReplaceDraftExcerptTool } from '../replace-draft-excerpt.tool'
 import type { RendererAction } from '../../renderer-action'
 
 vi.mock('../../../database', () => ({
@@ -73,32 +72,3 @@ describe('open_editor', () => {
   })
 })
 
-describe('replace_draft_excerpt', () => {
-  it('reports the renderer receipt to the model', async () => {
-    const tool = createReplaceDraftExcerptTool('zh-CN', async () => ({
-      ok: true,
-      summary: '已在第 1 章草稿中替换一处原文（3 → 5 字）。',
-    }))
-    const result = await tool.execute('c1', {
-      chapter_number: 1,
-      old_text: '他走了',
-      new_text: '他离开了',
-    })
-    expect(result.content[0]).toMatchObject({
-      type: 'text',
-      text: '已在第 1 章草稿中替换一处原文（3 → 5 字）。',
-    })
-  })
-
-  it('returns a unique-match failure to the model', async () => {
-    const tool = createReplaceDraftExcerptTool('zh-CN', async () => ({
-      ok: false,
-      error: '这段原文在草稿中出现了不止一次。请多复制前后文，使匹配唯一。',
-    }))
-    await expect(tool.execute('c1', {
-      chapter_number: 1,
-      old_text: '他走了',
-      new_text: '他离开了',
-    })).rejects.toThrow('不止一次')
-  })
-})
