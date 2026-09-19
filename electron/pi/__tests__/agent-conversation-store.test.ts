@@ -160,6 +160,11 @@ describe('AgentConversationStore.forGlobal', () => {
 
     const { laneConfig } = await import('@earendil-works/pi-agent-core/harness/session')
     const { AGENT_LANE_NAME } = await import('../agent-session')
+    const { MODELS_CONFIG_PATH } = await import('../../utils/config-utils')
+    fs.mkdirSync(path.dirname(MODELS_CONFIG_PATH), { recursive: true })
+    fs.writeFileSync(MODELS_CONFIG_PATH, JSON.stringify([
+      { id: 'prof-gemini-pro', name: 'Gemini 2.5 Pro', provider: 'google', modelName: 'gemini-2.5-pro' },
+    ]))
 
     await session!.setValue(laneConfig(AGENT_LANE_NAME), {
       model: { provider: 'google', modelId: 'gemini-2.5-pro' },
@@ -170,7 +175,7 @@ describe('AgentConversationStore.forGlobal', () => {
     const list = await store.listConversations()
     expect(list).toHaveLength(1)
     expect(list[0].thinkingLevel).toBe('high')
-    expect(list[0].modelId).toBe('gemini-2.5-pro')
+    expect(list[0].modelId).toBe('prof-gemini-pro')
 
     await store.close()
   })

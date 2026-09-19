@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { useLLMStore } from './llm-store'
 import type { ToolCallInfo } from '../shared/agent-ui-types'
 import { skillRegistry, type LoadedSkill } from '../services/agent/skill-registry'
 import { buildAgentSkillCatalog, skillDisplayName } from '../services/agent/skill-catalog'
@@ -357,7 +358,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       updatedAt: Date.now(),
       mode: get().defaultMode,
       // 新会话抄当前这条同作用域对话的模型和思考档；没有上一条才留空，
-      // 运行时再冻结默认模型 / Pi 默认思考。
+      // 运行时自动跟随项目助手预设模型 / 默认思考。
       modelId: inheritFromPrevious?.modelId ?? null,
       thinkingLevel: inheritFromPrevious?.thinkingLevel ?? null,
       scope,
@@ -542,6 +543,14 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         c.id === conv.id ? { ...c, modelId } : c
       ),
     }))
+    // 仅项目助手自动将用户选择的模型持久化保存到全局 taskModelRouting['assistant']
+    if (conv.scope === 'project' && modelId) {
+      const currentRouting = useLLMStore.getState().taskModelRouting['assistant']
+      void useLLMStore.getState().setTaskConfig('assistant', {
+        ...currentRouting,
+        modelId,
+      })
+    }
   },
 
   setThinkingLevel: (thinkingLevel) => {
@@ -551,6 +560,14 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         c.id === conv.id ? { ...c, thinkingLevel } : c
       ),
     }))
+    // 仅项目助手自动将用户选择的思考档位持久化保存到全局 taskModelRouting['assistant']
+    if (conv.scope === 'project' && thinkingLevel) {
+      const currentRouting = useLLMStore.getState().taskModelRouting['assistant']
+      void useLLMStore.getState().setTaskConfig('assistant', {
+        ...currentRouting,
+        thinkingLevel: thinkingLevel === 'off' ? 'off' : thinkingLevel,
+      })
+    }
   },
 
   sendMessage: async (content) => {

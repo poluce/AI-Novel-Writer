@@ -12,9 +12,10 @@ import { laneConfig } from '@earendil-works/pi-agent-core/harness/session'
 
 import { DIR_VELA_INTERNAL } from '../../src/shared/project-paths'
 import { logFailure, logInfo } from '../../src/shared/fail-log'
-import { VELA_HOME } from '../utils/config-utils'
+import { MODELS_CONFIG_PATH, readJsonFile, VELA_HOME } from '../utils/config-utils'
 import { AGENT_LANE_NAME } from './agent-session'
 import { isAssistantThinkingLevel, type AssistantThinkingLevel } from '../../src/shared/agent-runtime'
+import type { ModelProfile } from '../../src/shared/ipc-channels'
 import type {
   PersistedAgentConversation,
   PersistedAgentMessage,
@@ -333,13 +334,18 @@ export class AgentConversationStore {
       const configEntry = await session.getValue(laneConfig(AGENT_LANE_NAME), BACKGROUND_CONTEXT)
       const val = configEntry?.value as {
         thinkingLevel?: string
-        model?: { modelId?: string }
+        model?: { modelId?: string; provider?: string }
       } | undefined
       if (val?.thinkingLevel && isAssistantThinkingLevel(val.thinkingLevel)) {
         thinkingLevel = val.thinkingLevel
       }
       if (typeof val?.model?.modelId === 'string' && val.model.modelId) {
-        modelId = val.model.modelId
+        const rawModelId = val.model.modelId
+        const models = readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
+        const matched = models.find(m => m.id === rawModelId)
+          ?? models.find(m => m.modelName === rawModelId && (!val?.model?.provider || m.provider === val.model.provider))
+          ?? models.find(m => m.modelName === rawModelId)
+        modelId = matched ? matched.id : rawModelId
       }
     } catch {
       // session may not have laneConfig yet

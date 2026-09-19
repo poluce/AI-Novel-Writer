@@ -28,7 +28,7 @@ describe('Agent IPC bridge', () => {
       composerCitations: [],
     })
     useLocaleStore.setState({ locale: 'zh-CN', initialized: true })
-    useLLMStore.setState({ defaultModelId: 'model-a' })
+    useLLMStore.setState({ defaultModelId: 'model-a', taskModelRouting: {} })
     vi.stubGlobal('crypto', { randomUUID: vi.fn(() => 'uuid') })
     ipcInvoke.mockReset()
   })

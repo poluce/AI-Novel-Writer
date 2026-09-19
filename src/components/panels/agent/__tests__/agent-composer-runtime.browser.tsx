@@ -112,6 +112,7 @@ describe('assistant composer runtime pickers', () => {
 
     const active = useAgentStore.getState().getActiveConversation()
     expect(active?.modelId).toBe('p2')
+    expect(useLLMStore.getState().taskModelRouting['assistant']?.modelId).toBe('p2')
     // 菜单收起后触发按钮更新为新选中的模型
     expect(buttonWithText('gemini-3.1-pro-low')).toBeDefined()
   })

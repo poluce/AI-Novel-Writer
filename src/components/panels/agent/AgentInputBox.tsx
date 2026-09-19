@@ -39,10 +39,10 @@ export default function AgentInputBox() {
   const executionMode = useAgentStore(s => s.executionMode)
   const generating = useAgentStore(selectIsGenerating)
   const models = useLLMStore(s => s.models)
-  const defaultModelId = useLLMStore(s => s.defaultModelId)
+  const assistantConfiguredModelId = useLLMStore(s => s.resolveTaskModelId('assistant'))
   const currentModelId = useAgentStore(s => {
     const active = s.conversations.find(c => c.id === s.activeConversationId)
-    return active?.modelId ?? defaultModelId
+    return active?.modelId ?? assistantConfiguredModelId
   })
   const currentThinkingLevel = useAgentStore(s => {
     const active = s.conversations.find(c => c.id === s.activeConversationId)
@@ -53,7 +53,7 @@ export default function AgentInputBox() {
   const chatModels = models.filter(m => !(m.purposes.length === 1 && m.purposes[0] === 'embedding'))
 
   // 找到当前模型信息
-  const currentModel = models.find(m => m.id === currentModelId)
+  const currentModel = models.find(m => m.id === currentModelId || m.modelName === currentModelId)
   // 同一渠道（provider + 协议 + baseUrl）下的模型归成一组：菜单按「渠道 → 模型」两层展示。
   const modelGroups = groupModelsByChannel(chatModels)
 
@@ -349,7 +349,7 @@ export default function AgentInputBox() {
                       {group.channelName || group.label}
                     </div>
                     {group.models.map(entry => {
-                      const isSelected = entry.profile.id === currentModelId
+                      const isSelected = entry.profile.id === currentModelId || entry.profile.modelName === currentModelId
                       return (
                         <button
                           key={entry.profile.id}
