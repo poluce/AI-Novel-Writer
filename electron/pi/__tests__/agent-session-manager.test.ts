@@ -271,6 +271,32 @@ describe('AgentSessionManager', () => {
     expect(h.sessions[0].close).toHaveBeenCalled()
   })
 
+  it('rebuilds the session when the model apiKey or baseUrl changes', async () => {
+    let currentApiKey = 'key-1'
+    const profile = {
+      id: 'm1',
+      name: 'M',
+      provider: 'gemini',
+      protocol: 'gemini',
+      modelName: 'g',
+      get apiKey() { return currentApiKey },
+      baseUrl: 'https://x',
+      temperature: 0.7,
+      maxTokens: 100,
+      purposes: ['generation'],
+    }
+    const { manager } = buildManager(null, () => profile as never)
+
+    await manager.prompt('conv-1', 'first')
+    expect(h.sessions).toHaveLength(1)
+
+    // User updates apiKey in settings
+    currentApiKey = 'key-2'
+    await manager.prompt('conv-1', 'second')
+    expect(h.sessions).toHaveLength(2)
+    expect(h.sessions[0].close).toHaveBeenCalled()
+  })
+
   it('keeps the session when the runtime is unchanged but the profile disappears', async () => {
     let missing = false
     const { manager } = buildManager(null, () => (missing

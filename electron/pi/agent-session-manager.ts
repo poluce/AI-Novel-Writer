@@ -25,9 +25,17 @@ import type { ModelProfile } from '../../src/shared/ipc-channels'
 import type { WritingLanguage } from '../../src/shared/writing-language'
 import { logFailure, logInfo } from '../../src/shared/fail-log'
 
-/** 会话的运行时身份：换模型或换思考等级都算换运行时，会话要重建。 */
+/** 会话的运行时身份：换模型、凭据、端点或思考等级都算换运行时，会话要重建。 */
 function agentRuntimeKey(profile: ModelProfile, thinkingLevel: AssistantThinkingLevel): string {
-  return `${profile.id}\u0000${profile.modelName}\u0000${thinkingLevel}`
+  return [
+    profile.id,
+    profile.provider,
+    profile.protocol,
+    profile.modelName,
+    profile.baseUrl,
+    profile.apiKey,
+    thinkingLevel,
+  ].join('\u0000')
 }
 
 /**
