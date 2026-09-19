@@ -38,6 +38,11 @@ export type { PiAgentEvent } from '../../src/shared/agent-events'
 
 /** 一个会话文件里的唯一 lane；分支/导航能力留给后续产品。 */
 export const AGENT_LANE_NAME = 'main'
+export const VELA_SESSION_CONFIG = Object.freeze({
+  namespace: 'vela',
+  key: 'session-config',
+  kind: 'value' as const,
+})
 
 /**
  * 一个会话的完整工具表 = 领域工具 + harness 执行工具。
@@ -118,6 +123,8 @@ export class AgentSession {
   private readonly applySamplingThinking: boolean
   /** 只为旧存档播种时补全 `AssistantMessage` 的元数据。 */
   private readonly model: PiModelRuntime['model']
+  private readonly session: Session<SessionMetadata>
+  private readonly thinkingLevel: AssistantThinkingLevel
   /** 执行工具的提交态记录；没有执行环境时为 null。 */
   private readonly commitTracker: ConfinedExecutionEnv | null
   /** 挂 harness 执行工具的执行环境；`setTools` 每轮要用它把执行工具补回来。 */
@@ -156,6 +163,8 @@ export class AgentSession {
     this.systemPrompt = options.systemPrompt
     this.modelIdentity = options.modelIdentity
     this.model = options.model
+    this.session = options.session
+    this.thinkingLevel = options.thinkingLevel ?? 'off'
     this.applySamplingThinking = options.applySamplingThinking ?? true
     this.executionEnv = options.executionEnv ?? null
     this.commitTracker = options.executionEnv instanceof ConfinedExecutionEnv
@@ -208,6 +217,12 @@ export class AgentSession {
         BACKGROUND_CONTEXT,
       )
       await this.lane.setActiveTools([...toolNames], BACKGROUND_CONTEXT)
+      // 权威写入 Vela 会话配置快照（包含准确的 ModelProfile.id，避免反序列化时的字符串猜谜）
+      await this.session.setValue(VELA_SESSION_CONFIG as never, {
+        modelId: this.modelIdentity.modelId,
+        modelName: this.modelIdentity.modelName,
+        thinkingLevel: this.thinkingLevel,
+      }, BACKGROUND_CONTEXT)
     } catch (error) {
       logFailure('Agent', 'failed to reconcile lane configuration', error, {
         conversationId: this.conversationId,

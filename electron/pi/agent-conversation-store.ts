@@ -13,7 +13,7 @@ import { laneConfig } from '@earendil-works/pi-agent-core/harness/session'
 import { DIR_VELA_INTERNAL } from '../../src/shared/project-paths'
 import { logFailure, logInfo } from '../../src/shared/fail-log'
 import { MODELS_CONFIG_PATH, readJsonFile, VELA_HOME } from '../utils/config-utils'
-import { AGENT_LANE_NAME } from './agent-session'
+import { AGENT_LANE_NAME, VELA_SESSION_CONFIG } from './agent-session'
 import { isAssistantThinkingLevel, type AssistantThinkingLevel } from '../../src/shared/agent-runtime'
 import type { ModelProfile } from '../../src/shared/ipc-channels'
 import type {
@@ -331,24 +331,41 @@ export class AgentConversationStore {
     let thinkingLevel: AssistantThinkingLevel | null = null
     let modelId: string | null = null
     try {
-      const configEntry = await session.getValue(laneConfig(AGENT_LANE_NAME), BACKGROUND_CONTEXT)
-      const val = configEntry?.value as {
+      // 1. 优先读取 Vela 原生写入的权威配置快照（包含确切的 ModelProfile.id 与 thinkingLevel）
+      const velaConfig = await session.getValue(VELA_SESSION_CONFIG, BACKGROUND_CONTEXT)
+      const velaVal = velaConfig?.value as {
+        modelId?: string
         thinkingLevel?: string
-        model?: { modelId?: string; provider?: string }
       } | undefined
-      if (val?.thinkingLevel && isAssistantThinkingLevel(val.thinkingLevel)) {
-        thinkingLevel = val.thinkingLevel
+
+      if (typeof velaVal?.modelId === 'string' && velaVal.modelId) {
+        modelId = velaVal.modelId
       }
-      if (typeof val?.model?.modelId === 'string' && val.model.modelId) {
-        const rawModelId = val.model.modelId
-        const models = readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
-        const matched = models.find(m => m.id === rawModelId)
-          ?? models.find(m => m.modelName === rawModelId && (!val?.model?.provider || m.provider === val.model.provider))
-          ?? models.find(m => m.modelName === rawModelId)
-        modelId = matched ? matched.id : rawModelId
+      if (velaVal?.thinkingLevel && isAssistantThinkingLevel(velaVal.thinkingLevel)) {
+        thinkingLevel = velaVal.thinkingLevel
+      }
+
+      // 2. 兼容老会话（未写入 VELA_SESSION_CONFIG 时，从 laneConfig 兼容提取）
+      if (!modelId || !thinkingLevel) {
+        const configEntry = await session.getValue(laneConfig(AGENT_LANE_NAME), BACKGROUND_CONTEXT)
+        const val = configEntry?.value as {
+          thinkingLevel?: string
+          model?: { modelId?: string; provider?: string }
+        } | undefined
+        if (!thinkingLevel && val?.thinkingLevel && isAssistantThinkingLevel(val.thinkingLevel)) {
+          thinkingLevel = val.thinkingLevel
+        }
+        if (!modelId && typeof val?.model?.modelId === 'string' && val.model.modelId) {
+          const rawModelId = val.model.modelId
+          const models = readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
+          const matched = models.find(m => m.id === rawModelId)
+            ?? models.find(m => m.modelName === rawModelId && (!val?.model?.provider || m.provider === val.model.provider))
+            ?? models.find(m => m.modelName === rawModelId)
+          modelId = matched ? matched.id : rawModelId
+        }
       }
     } catch {
-      // session may not have laneConfig yet
+      // session may not have config yet
     }
 
     return {
