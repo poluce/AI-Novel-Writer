@@ -316,6 +316,7 @@ describe('manage_drafts tool', () => {
 
       expect(res.details.mode).toBe('overwrite')
       expect(DraftRepository.updateContent).toHaveBeenCalledWith(5, '覆盖更新后的正文。', expect.any(Number))
+      expect(DraftAnnotationRepository.replace).toHaveBeenCalledWith(5, [])
       expect(emittedActions).toContainEqual(expect.objectContaining({
         type: 'sync_draft_content',
         chapterNumber: 1,

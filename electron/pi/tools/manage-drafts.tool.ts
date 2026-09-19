@@ -308,6 +308,8 @@ export function createManageDraftsTool(
           }
 
           DraftRepository.updateContent(targetMeta.id, content, wordCount)
+          // 全盘覆盖重写时，自动清理旧正文绑定的历史批注，避免悬空残留
+          DraftAnnotationRepository.replace(targetMeta.id, [])
 
           await rendererAction({
             type: 'sync_draft_content',
