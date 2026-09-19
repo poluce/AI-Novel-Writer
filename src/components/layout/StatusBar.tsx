@@ -13,7 +13,7 @@ export default function StatusBar() {
   const defaultModelId = useLLMStore(s => s.defaultModelId)
   const openSettings = useLayoutStore(s => s.openSettings)
   const defaultModel = models.find(
-    (m) => m.id === defaultModelId && m.purposes?.some((p) => p !== 'embedding')
+    (m) => m.id === defaultModelId && (m.purposes?.some((p) => p !== 'embedding') ?? true)
   )
   const text = useLocaleStore(s => s.text)
 

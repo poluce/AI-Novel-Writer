@@ -38,7 +38,9 @@ interface Props {
 }
 
 function isGenerationModel(model: ModelProfile): boolean {
-  return model.purposes.includes('generation')
+  return Array.isArray(model?.purposes)
+    ? model.purposes.includes('generation')
+    : true
 }
 
 function availableGenerationModelId(

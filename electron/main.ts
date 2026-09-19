@@ -38,6 +38,8 @@ import {
 } from './services/official-homepage-navigation'
 import { configureSingleInstanceRuntime } from './services/single-instance-runtime'
 import { installWindowCloseGuard } from './controllers/window-controller'
+import { appendVelaLog } from './utils/app-log'
+import { describeError } from '../src/shared/fail-log'
 
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
@@ -47,6 +49,26 @@ import path from 'node:path'
 if (process.platform === 'win32') {
   app.commandLine.appendSwitch('disable-gpu-sandbox')
 }
+
+process.on('uncaughtException', (error) => {
+  appendVelaLog({
+    ts: new Date().toISOString(),
+    level: 'error',
+    scope: 'MainProcess',
+    event: 'uncaughtException',
+    error: describeError(error),
+  })
+})
+
+process.on('unhandledRejection', (reason) => {
+  appendVelaLog({
+    ts: new Date().toISOString(),
+    level: 'error',
+    scope: 'MainProcess',
+    event: 'unhandledRejection',
+    error: describeError(reason),
+  })
+})
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -156,6 +178,39 @@ function createWindow() {
   }))
   // 渲染进程不能把现有主窗口导航到外部内容。
   win.webContents.on('will-navigate', preventRendererNavigation)
+
+  win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    appendVelaLog({
+      ts: new Date().toISOString(),
+      level: 'error',
+      scope: 'WindowLoad',
+      event: 'did-fail-load',
+      errorCode,
+      errorDescription,
+      validatedURL,
+    })
+  })
+
+  win.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    appendVelaLog({
+      ts: new Date().toISOString(),
+      level: level >= 2 ? 'error' : 'info',
+      scope: 'RendererConsole',
+      event: message,
+      line,
+      sourceId,
+    })
+  })
+
+  win.webContents.on('render-process-gone', (_event, details) => {
+    appendVelaLog({
+      ts: new Date().toISOString(),
+      level: 'error',
+      scope: 'Window',
+      event: 'render-process-gone',
+      details,
+    })
+  })
 
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL)

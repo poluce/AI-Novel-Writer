@@ -693,7 +693,7 @@ function ModelForm({
       m.id !== model.id &&
       m.provider === model.provider &&
       m.protocol === model.protocol &&
-      m.baseUrl.replace(/\/+$/, '').toLowerCase() === model.baseUrl.replace(/\/+$/, '').toLowerCase() &&
+      (m.baseUrl || '').replace(/\/+$/, '').toLowerCase() === (model.baseUrl || '').replace(/\/+$/, '').toLowerCase() &&
       m.apiKey === model.apiKey
     ))
     for (const o of others) {

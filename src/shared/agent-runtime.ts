@@ -35,7 +35,7 @@ export function acceptedAssistantThinkingLevel(value: unknown): AssistantThinkin
 export function modelChannelKey(
   profile: Pick<ModelProfile, 'provider' | 'protocol' | 'baseUrl'> & { channelName?: string },
 ): string {
-  const baseUrl = profile.baseUrl.replace(/\/+$/, '').toLowerCase()
+  const baseUrl = (profile.baseUrl ?? '').replace(/\/+$/, '').toLowerCase()
   const channel = profile.channelName?.trim()
   return channel
     ? `${profile.provider}\u0000${profile.protocol}\u0000${baseUrl}\u0000${channel}`
@@ -49,7 +49,7 @@ export function modelChannelLabel(
   if (profile.channelName?.trim()) {
     return profile.channelName.trim()
   }
-  const raw = profile.baseUrl.trim()
+  const raw = (profile.baseUrl ?? '').trim()
   if (raw) {
     try {
       return new URL(raw).host
@@ -114,14 +114,14 @@ export function channelHasModel(
   modelName: string,
 ): boolean {
   const normalized = modelName.trim()
-  const channelBase = channel.baseUrl.replace(/\/+$/, '').toLowerCase()
+  const channelBase = (channel.baseUrl ?? '').replace(/\/+$/, '').toLowerCase()
   const channelName = channel.channelName?.trim()
 
   return profiles.some(profile => {
     if (profile.modelName.trim() !== normalized) return false
     if (profile.provider !== channel.provider) return false
     if (profile.protocol !== channel.protocol) return false
-    const profileBase = profile.baseUrl.replace(/\/+$/, '').toLowerCase()
+    const profileBase = (profile.baseUrl ?? '').replace(/\/+$/, '').toLowerCase()
     if (profileBase !== channelBase) return false
     if (channelName && profile.channelName?.trim() && profile.channelName.trim() !== channelName) {
       return false

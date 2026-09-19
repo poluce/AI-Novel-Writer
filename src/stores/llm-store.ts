@@ -92,6 +92,16 @@ interface LLMState {
   discoverModels: (request: ModelDiscoveryRequest) => Promise<ModelDiscoveryResult>
 }
 
+function normalizeClientModels(models: unknown): ModelProfile[] {
+  if (!Array.isArray(models)) return []
+  return models.map((m: any) => ({
+    ...m,
+    purposes: Array.isArray(m.purposes) && m.purposes.length > 0
+      ? m.purposes
+      : ['generation', 'refinement', 'summary'],
+  }))
+}
+
 let initializationFlight: Promise<void> | null = null
 
 export const useLLMStore = create<LLMState>()((set, get) => ({
@@ -112,14 +122,15 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
         set({ loaded: true })
         return
       }
-      const [models, defaultModelId, defaultEmbeddingModelId, config] = await Promise.all([
+      const [rawModels, defaultModelId, defaultEmbeddingModelId, config] = await Promise.all([
         ipc.invoke('llm:list-models'),
         ipc.invoke('llm:get-default-model'),
         ipc.invoke('llm:get-default-embedding-model'),
         ipc.invoke('config:get').catch(() => null),
       ])
+      const models = normalizeClientModels(rawModels)
       const resolvedDefaultModelId = defaultModelId
-        ?? (Array.isArray(models) ? models.find((m: { purposes?: string[] }) => m.purposes?.includes('generation'))?.id : null)
+        ?? models.find(m => m.purposes.includes('generation'))?.id
         ?? null
       const configObj = config as GlobalConfig | null
       set({
@@ -139,8 +150,8 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
 
   loadModels: async () => {
     if (!ipc.isElectron) return
-    const models = await ipc.invoke('llm:list-models')
-    set({ models })
+    const rawModels = await ipc.invoke('llm:list-models')
+    set({ models: normalizeClientModels(rawModels) })
   },
 
   saveModel: async (model) => {

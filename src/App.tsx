@@ -336,36 +336,38 @@ export default function App() {
       <StatusBar />
 
       {/* 全局对话框 — 由 layout-store 控制开关，不再依赖 window.dispatchEvent */}
-      <NewProjectDialog
-        open={newProjectOpen}
-        onClose={closeNewProject}
-      />
-      <AuthorManuscriptImportDialog
-        open={authorManuscriptImportOpen}
-        onClose={closeAuthorManuscriptImport}
-      />
-      <NovelDeconstructionDialog
-        open={novelDeconstructionOpen}
-        onClose={closeNovelDeconstruction}
-      />
-      <ImportNovelDialog
-        open={importNovelOpen && !novelDeconstructionOpen && !authorManuscriptImportOpen}
-        onClose={closeImportNovel}
-      />
-      <ChapterCreationDialog
-        isOpen={chapterCreationOpen}
-        prefill={chapterCreationPrefill}
-        onClose={closeChapterCreation}
-      />
-      <ExportDialog
-        isOpen={exportOpen}
-        onClose={closeExport}
-      />
-      {/* 全屏设置弹窗 */}
-      <SettingsModal
-        open={settingsOpen}
-        onClose={closeSettings}
-      />
+      <ErrorBoundary fallbackLabel={text('对话框加载失败', 'Dialog failed to render')}>
+        <NewProjectDialog
+          open={newProjectOpen}
+          onClose={closeNewProject}
+        />
+        <AuthorManuscriptImportDialog
+          open={authorManuscriptImportOpen}
+          onClose={closeAuthorManuscriptImport}
+        />
+        <NovelDeconstructionDialog
+          open={novelDeconstructionOpen}
+          onClose={closeNovelDeconstruction}
+        />
+        <ImportNovelDialog
+          open={importNovelOpen && !novelDeconstructionOpen && !authorManuscriptImportOpen}
+          onClose={closeImportNovel}
+        />
+        <ChapterCreationDialog
+          isOpen={chapterCreationOpen}
+          prefill={chapterCreationPrefill}
+          onClose={closeChapterCreation}
+        />
+        <ExportDialog
+          isOpen={exportOpen}
+          onClose={closeExport}
+        />
+        {/* 全屏设置弹窗 */}
+        <SettingsModal
+          open={settingsOpen}
+          onClose={closeSettings}
+        />
+      </ErrorBoundary>
 
     </AppSkinRoot>
   )

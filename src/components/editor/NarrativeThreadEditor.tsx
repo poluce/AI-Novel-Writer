@@ -173,7 +173,9 @@ interface BoundEventCandidate extends NarrativeThreadEventCandidate {
 }
 
 function isGenerationModel(model: ModelProfile): boolean {
-  return model.purposes.includes('generation')
+  return Array.isArray(model?.purposes)
+    ? model.purposes.includes('generation')
+    : true
 }
 
 export default function NarrativeThreadEditor({

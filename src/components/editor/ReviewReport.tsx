@@ -224,7 +224,9 @@ function SeverityIcon({ severity }: { severity: ReviewIssue['severity'] }) {
 }
 
 function isGenerationModel(model: ModelProfile): boolean {
-  return model.purposes.includes('generation')
+  return Array.isArray(model?.purposes)
+    ? model.purposes.includes('generation')
+    : true
 }
 
 function availableGenerationModelId(

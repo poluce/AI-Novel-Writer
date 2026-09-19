@@ -362,6 +362,6 @@ export function formatDraftPassageCitations(
     const heading = language === 'en-US'
       ? `[Draft excerpt${location ? ` — ${location}` : ''}]`
       : `【草稿引用${location ? ` — ${location}` : ''}】`
-    return `${heading}\n「${citation.quote}」`
+    return `${heading}\n「${citation.quote ?? ''}」`
   }).join('\n\n')
 }

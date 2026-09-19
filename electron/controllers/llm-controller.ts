@@ -29,8 +29,17 @@ interface ActiveStream {
 const activeStreams = new Map<string, ActiveStream>()
 const CONNECTION_TEST_MAX_TOKENS = 1024
 
+function normalizeModelProfile(profile: ModelProfile): ModelProfile {
+  return {
+    ...profile,
+    purposes: Array.isArray(profile.purposes) && profile.purposes.length > 0
+      ? profile.purposes
+      : ['generation', 'refinement', 'summary'],
+  }
+}
+
 function loadModelConfigs(): ModelProfile[] {
-  return readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
+  return readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, []).map(normalizeModelProfile)
 }
 
 function loadModelConfigsForUpdate(): ModelProfile[] {
@@ -38,7 +47,7 @@ function loadModelConfigsForUpdate(): ModelProfile[] {
   if (result.status === 'error') {
     throw new Error('模型配置损坏，已拒绝覆盖', { cause: result.error })
   }
-  return result.status === 'ok' ? result.value : []
+  return (result.status === 'ok' ? result.value : []).map(normalizeModelProfile)
 }
 
 function loadGlobalConfigForUpdate(): GlobalConfig {

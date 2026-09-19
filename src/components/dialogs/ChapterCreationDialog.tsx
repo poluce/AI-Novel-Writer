@@ -53,7 +53,9 @@ interface Props {
 const CREATION_LOG_REL = '.vela/chapter_creation_log.json'
 
 function isGenerationModel(model: ModelProfile): boolean {
-  return model.purposes.includes('generation')
+  return Array.isArray(model?.purposes)
+    ? model.purposes.includes('generation')
+    : true
 }
 
 function availableGenerationModelId(

@@ -50,7 +50,7 @@ export default function AgentInputBox() {
   })
 
   // 过滤出非仅限 embedding 专用的模型
-  const chatModels = models.filter(m => !(m.purposes.length === 1 && m.purposes[0] === 'embedding'))
+  const chatModels = models.filter(m => !(Array.isArray(m?.purposes) && m.purposes.length === 1 && m.purposes[0] === 'embedding'))
 
   // 找到当前模型信息
   const currentModel = models.find(m => m.id === currentModelId || m.modelName === currentModelId)
@@ -442,7 +442,8 @@ export default function AgentInputBox() {
                   : `L${citation.fromLine}`)
                 : '',
             ].filter(Boolean).join(' · ')
-            const preview = citation.quote.replace(/\s+/g, ' ').trim()
+            const quoteText = citation.quote ?? ''
+            const preview = quoteText.replace(/\s+/g, ' ').trim()
             return (
               <span
                 key={citation.id}
@@ -451,7 +452,7 @@ export default function AgentInputBox() {
                   backgroundColor: 'var(--color-panel)',
                   border: '1px solid var(--color-accent)',
                   color: 'var(--color-text)'}}
-                title={`${location}\n${citation.quote}`}
+                title={`${location}\n${quoteText}`}
               >
                 <span className="truncate">
                   {location}

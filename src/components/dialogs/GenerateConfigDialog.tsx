@@ -73,7 +73,7 @@ export default function GenerateConfigDialog({ isOpen, onClose, onGenerated }: P
     const projectSession = captureProjectSession(currentProject)
     if (!projectSession) return
     const models = useLLMStore.getState().models
-    const effectiveModelId = defaultModelId ?? models.find(m => m.purposes?.includes('generation'))?.id
+    const effectiveModelId = defaultModelId ?? models.find(m => Array.isArray(m.purposes) ? m.purposes.includes('generation') : true)?.id
     if (!effectiveModelId) {
       toast.warning(text('请先在「设置 → AI 生成模型」中配置默认模型', 'Configure an AI model in Settings first.'))
       useLayoutStore.getState().openSettings('llm')
