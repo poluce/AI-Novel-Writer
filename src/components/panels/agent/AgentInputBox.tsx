@@ -495,22 +495,21 @@ export default function AgentInputBox() {
       {/* 底部工具栏 */}
       <div className="flex items-center justify-between gap-1 px-1 mt-0.5">
 
-        {/* 左侧：添加上下文 */}
-        <div ref={contextRef} className="shrink-0">
-          <ToolbarIconBtn
-            title={text('添加上下文', 'Add context')}
-            onClick={() => {
-              setShowModelSelectMenu(false)
-              setShowModeMenu(false)
-              setShowContextMenu(v => !v)
-            }}
-          >
-            <Plus size={14} />
-          </ToolbarIconBtn>
-        </div>
-
-        {/* 右侧：统一靠右对齐（执行模式 + 模型与思考 + 发送按钮） */}
-        <div className="flex items-center gap-1.5 min-w-0 shrink-0 ml-auto">
+        {/* 左侧：添加上下文 (+) 与 执行模式 (计划/写作) */}
+        <div className="flex items-center gap-1 shrink-0">
+          {/* + 添加上下文 */}
+          <div ref={contextRef} className="shrink-0">
+            <ToolbarIconBtn
+              title={text('添加上下文', 'Add context')}
+              onClick={() => {
+                setShowModelSelectMenu(false)
+                setShowModeMenu(false)
+                setShowContextMenu(v => !v)
+              }}
+            >
+              <Plus size={14} />
+            </ToolbarIconBtn>
+          </div>
 
           {/* 执行模式切换：单触发器 + 弹窗菜单 */}
           <div ref={modeMenuRef} className="relative shrink-0">
@@ -539,7 +538,7 @@ export default function AgentInputBox() {
 
             {showModeMenu && (
               <div
-                className="absolute bottom-[calc(100%+8px)] right-0 z-50 py-1 rounded-lg shadow-lg"
+                className="absolute bottom-[calc(100%+8px)] left-0 z-50 py-1 rounded-lg shadow-lg"
                 style={{
                   width: 170,
                   backgroundColor: 'var(--color-sidebar)',
@@ -593,7 +592,10 @@ export default function AgentInputBox() {
               </div>
             )}
           </div>
+        </div>
 
+        {/* 右侧：模型与思考（紧贴） + 发送按钮 */}
+        <div className="flex items-center gap-1.5 min-w-0 shrink-0 ml-auto">
           {/* DSH 风格模型与思考选择器：紧凑触发器 + 二级面板联动 */}
           <div ref={modelSelectRef} className="relative min-w-0 max-w-full">
             <button
