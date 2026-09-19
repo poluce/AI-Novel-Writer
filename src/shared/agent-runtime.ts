@@ -79,8 +79,10 @@ export function groupModelsByChannel(profiles: readonly ModelProfile[]): ModelCh
     let group = groups.get(key)
     if (!group) {
       const explicitChannel = profiles.find(p => modelChannelKey(p) === key && p.channelName?.trim())?.channelName?.trim()
+      const pName = (profile.name ?? '').trim()
+      const pModel = (profile.modelName ?? '').trim()
       const fallbackName = profile.channelName?.trim()
-        || (profile.name && profile.name.trim() !== profile.modelName.trim() ? profile.name.trim() : '')
+        || (pName && pName !== pModel ? pName : '')
         || modelChannelLabel(profile)
       const channelName = explicitChannel || fallbackName
 
@@ -93,7 +95,7 @@ export function groupModelsByChannel(profiles: readonly ModelProfile[]): ModelCh
       }
       groups.set(key, group)
     }
-    const modelName = profile.modelName.trim()
+    const modelName = (profile.modelName ?? '').trim()
     if (!modelName) continue
     if (group.models.some(candidate => candidate.modelName === modelName)) continue
     group.models.push({ profile, modelName })

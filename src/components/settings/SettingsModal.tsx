@@ -276,8 +276,8 @@ function LLMSection({
 
       // 新增模型后，如果该分类还没有默认且保存的模型中有非空模型，则自动设为默认
       const countBefore = filtered.length
-      if (countBefore === 0 && targets.some(t => t.modelName.trim())) {
-        const defaultCandidate = targets.find(t => t.modelName.trim())?.id || firstSavedId
+      if (countBefore === 0 && targets.some(t => (t.modelName ?? '').trim())) {
+        const defaultCandidate = targets.find(t => (t.modelName ?? '').trim())?.id || firstSavedId
         if (isEmbeddingSection) {
           await setDefaultEmbeddingModel(defaultCandidate)
         } else {
@@ -686,7 +686,7 @@ function ModelForm({
   // 查找属于此渠道的所有已保存模型
   const initialChannelProfiles = useMemo(() => {
     const list: ModelProfile[] = []
-    if (model.modelName && model.modelName.trim()) {
+    if (model.modelName && (model.modelName ?? '').trim()) {
       list.push(model)
     }
     const others = existingModels.filter(m => (
@@ -697,7 +697,7 @@ function ModelForm({
       m.apiKey === model.apiKey
     ))
     for (const o of others) {
-      if (o.modelName && o.modelName.trim()) {
+      if (o.modelName && (o.modelName ?? '').trim()) {
         list.push(o)
       }
     }
@@ -716,9 +716,14 @@ function ModelForm({
     : preset?.models.find((candidate) => candidate.name === modelName)?.capabilities
 
   const initialChannelName = useMemo(() => {
-    return model.channelName?.trim()
-      || initialChannelProfiles.find(p => p.channelName?.trim())?.channelName?.trim()
-      || (model.name && model.name.trim() !== model.modelName.trim() ? model.name.trim() : '')
+    const modelChannel = model.channelName?.trim()
+    if (modelChannel) return modelChannel
+    const profileChannel = initialChannelProfiles.find(p => p.channelName?.trim())?.channelName?.trim()
+    if (profileChannel) return profileChannel
+    const modelNameStr = (model.modelName ?? '').trim()
+    const nameStr = (model.name ?? '').trim()
+    if (nameStr && nameStr !== modelNameStr) return nameStr
+    return ''
   }, [initialChannelProfiles, model])
 
   const [channelName, setChannelName] = useState(initialChannelName)
@@ -734,12 +739,15 @@ function ModelForm({
     if (initialChannelProfiles.length > 0) {
       return initialChannelProfiles.map(p => {
         const presetCaps = capabilitiesForPresetModel(p.modelName)
-        const isChannelTitle = p.name && (
-          p.name.trim() === (p.channelName?.trim() || '') ||
-          p.name.trim() === initialChannelName ||
-          p.name.trim() === (model.channelName?.trim() || '')
-        )
-        const customAlias = p.name && p.name.trim() !== p.modelName.trim() && !isChannelTitle ? p.name.trim() : ''
+        const pName = (p.name ?? '').trim()
+        const pModelName = (p.modelName ?? '').trim()
+        const pChannelName = (p.channelName ?? '').trim()
+        const isChannelTitle = Boolean(pName && (
+          pName === pChannelName ||
+          pName === initialChannelName ||
+          pName === (model.channelName?.trim() || '')
+        ))
+        const customAlias = pName && pName !== pModelName && !isChannelTitle ? pName : ''
 
         return {
           id: p.id,
@@ -751,17 +759,20 @@ function ModelForm({
         }
       })
     }
-    if (model.modelName && model.modelName.trim()) {
-      const presetCaps = capabilitiesForPresetModel(model.modelName)
-      const isChannelTitle = model.name && (
-        model.name.trim() === (model.channelName?.trim() || '') ||
-        model.name.trim() === initialChannelName
-      )
-      const customAlias = model.name && model.name.trim() !== model.modelName.trim() && !isChannelTitle ? model.name.trim() : ''
+    const mModelName = (model.modelName ?? '').trim()
+    if (mModelName) {
+      const presetCaps = capabilitiesForPresetModel(mModelName)
+      const mName = (model.name ?? '').trim()
+      const mChannelName = (model.channelName ?? '').trim()
+      const isChannelTitle = Boolean(mName && (
+        mName === mChannelName ||
+        mName === initialChannelName
+      ))
+      const customAlias = mName && mName !== mModelName && !isChannelTitle ? mName : ''
 
       return [{
         id: model.id,
-        modelName: model.modelName.trim(),
+        modelName: mModelName,
         name: customAlias,
         temperature: typeof model.temperature === 'number' ? model.temperature : 0.7,
         contextWindowTokens: model.capabilities?.contextWindowTokens ?? presetCaps?.contextWindowTokens ?? null,
@@ -858,7 +869,8 @@ function ModelForm({
 
   const handleTestSingleModel = async (targetId: string) => {
     const target = channelModels.find(m => m.id === targetId)
-    if (!target || !target.modelName.trim()) {
+    const targetModelName = (target?.modelName ?? '').trim()
+    if (!target || !targetModelName) {
       setModelTestStatuses(prev => ({
         ...prev,
         [targetId]: { status: 'error', error: text('模型 ID 不能为空', 'Model ID cannot be empty') },
@@ -872,10 +884,11 @@ function ModelForm({
     }))
 
     try {
+      const targetName = (target.name ?? '').trim()
       const result = await testConnection({
         ...model,
-        modelName: target.modelName.trim(),
-        name: target.name.trim() || target.modelName.trim(),
+        modelName: targetModelName,
+        name: targetName || targetModelName,
         temperature: target.temperature ?? 0.7,
         maxTokens: target.maxOutputTokens ?? 4096,
         capabilities: {
@@ -909,7 +922,7 @@ function ModelForm({
   }
 
   const handleTestAllModels = async () => {
-    const validModels = channelModels.filter(m => m.modelName.trim() !== '')
+    const validModels = channelModels.filter(m => (m.modelName ?? '').trim() !== '')
     if (validModels.length === 0) {
       toast.warning(text('请先输入至少一个模型 ID', 'Please enter at least one model ID'))
       return
@@ -1186,7 +1199,7 @@ function ModelForm({
                     maxOutputTokens: prev[0]?.maxOutputTokens ?? model.capabilities?.maxOutputTokens ?? model.maxTokens ?? presetCaps?.maxOutputTokens ?? 4096,
                   }]
                 }
-                const emptyIdx = prev.findIndex(m => !m.modelName.trim())
+                const emptyIdx = prev.findIndex(m => !(m.modelName ?? '').trim())
                 if (emptyIdx >= 0) {
                   return prev.map((m, i) => i === emptyIdx ? {
                     ...m,
@@ -1486,7 +1499,7 @@ function ModelForm({
         <Button
           className="flex-1"
           onClick={() => {
-            const validModels = channelModels.filter(m => m.modelName.trim() !== '')
+            const validModels = channelModels.filter(m => (m.modelName ?? '').trim() !== '')
             const isMultiModelChannel = validModels.length > 1 || Boolean(model.channelName)
             const finalChannelName = isMultiModelChannel ? (channelName.trim() || undefined) : (model.channelName ? (channelName.trim() || undefined) : undefined)
 
@@ -1524,19 +1537,21 @@ function ModelForm({
               } : undefined
 
               let modelDisplayName: string
-              if (row.name.trim() !== '') {
-                modelDisplayName = row.name.trim()
+              const rowName = (row.name ?? '').trim()
+              const rowModelName = (row.modelName ?? '').trim()
+              if (rowName !== '') {
+                modelDisplayName = rowName
               } else if (isMultiModelChannel) {
-                modelDisplayName = row.modelName.trim()
+                modelDisplayName = rowModelName
               } else {
-                modelDisplayName = model.name !== undefined ? model.name : row.modelName.trim()
+                modelDisplayName = model.name !== undefined ? model.name : rowModelName
               }
 
               return {
                 ...model,
                 id: row.id,
                 ...(finalChannelName ? { channelName: finalChannelName } : {}),
-                modelName: row.modelName.trim(),
+                modelName: rowModelName,
                 name: modelDisplayName,
                 temperature: typeof row.temperature === 'number' ? row.temperature : (model.temperature ?? 0.7),
                 maxTokens: maxOutputTokens,
@@ -1546,7 +1561,7 @@ function ModelForm({
 
             onSave(profilesToSave, deletedIds)
           }}
-          disabled={saving || !model.baseUrl.trim() || (!model.apiKey.trim() && model.provider !== 'ollama')}
+          disabled={saving || !(model.baseUrl ?? '').trim() || (!(model.apiKey ?? '').trim() && model.provider !== 'ollama')}
         >
           <Save size={13} />
           {saving ? text('保存中...', 'Saving...') : text('保存配置', 'Save configuration')}
