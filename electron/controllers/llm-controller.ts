@@ -21,6 +21,8 @@ import { SingleShotAbortedError, streamSingleShot, type StreamSingleShotOptions 
 import { patchGoogleSamplingPayload, toPiSamplingParams } from '../pi/pi-stream-options'
 import { createSubmitTool, visibleTextFromSubmitArtifact } from '../pi/submit-tools'
 
+import { normalizeModelProfiles } from '../../src/shared/model-profile'
+
 interface ActiveStream {
   controller: AbortController
   recordCancelled: () => void
@@ -29,25 +31,16 @@ interface ActiveStream {
 const activeStreams = new Map<string, ActiveStream>()
 const CONNECTION_TEST_MAX_TOKENS = 1024
 
-function normalizeModelProfile(profile: ModelProfile): ModelProfile {
-  return {
-    ...profile,
-    purposes: Array.isArray(profile.purposes) && profile.purposes.length > 0
-      ? profile.purposes
-      : ['generation', 'refinement', 'summary'],
-  }
-}
-
 function loadModelConfigs(): ModelProfile[] {
-  return readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, []).map(normalizeModelProfile)
+  return normalizeModelProfiles(readJsonFile<unknown[]>(MODELS_CONFIG_PATH, []))
 }
 
 function loadModelConfigsForUpdate(): ModelProfile[] {
-  const result = tryReadJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH)
+  const result = tryReadJsonFile<unknown>(MODELS_CONFIG_PATH)
   if (result.status === 'error') {
     throw new Error('模型配置损坏，已拒绝覆盖', { cause: result.error })
   }
-  return (result.status === 'ok' ? result.value : []).map(normalizeModelProfile)
+  return result.status === 'ok' ? normalizeModelProfiles(result.value) : []
 }
 
 function loadGlobalConfigForUpdate(): GlobalConfig {
@@ -59,7 +52,7 @@ function loadGlobalConfigForUpdate(): GlobalConfig {
 }
 
 function saveModelConfigs(models: ModelProfile[]) {
-  writeJsonFile(MODELS_CONFIG_PATH, models)
+  writeJsonFile(MODELS_CONFIG_PATH, normalizeModelProfiles(models))
 }
 
 function getModelConfig(modelId: string): ModelProfile | null {

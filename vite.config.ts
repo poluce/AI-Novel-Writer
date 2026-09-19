@@ -68,7 +68,7 @@ export default defineConfig({
   },
   test: {
     // Test copy must not follow the operating-system locale of a CI runner.
-    setupFiles: ['test/setup-locale.ts', 'test/setup-better-sqlite3.ts'],
+    setupFiles: ['test/setup-vela-home.ts', 'test/setup-locale.ts', 'test/setup-better-sqlite3.ts'],
     alias: {
       // Node 套件走旁路 .node，不覆盖 Electron 用的 build/Release。
       'better-sqlite3': path.resolve(__dirname, 'scripts/better-sqlite3-node.cjs'),

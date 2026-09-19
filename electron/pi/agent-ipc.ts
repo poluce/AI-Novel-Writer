@@ -30,9 +30,10 @@ import {
   DEFAULT_WRITING_LANGUAGE,
   type WritingLanguage,
 } from '../../src/shared/writing-language'
+import { normalizeModelProfiles } from '../../src/shared/model-profile'
 
 function resolveModel(modelId: string | undefined): ModelProfile | null {
-  const models = readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
+  const models = normalizeModelProfiles(readJsonFile<unknown[]>(MODELS_CONFIG_PATH, []))
   if (models.length === 0) return null
 
   if (modelId) {

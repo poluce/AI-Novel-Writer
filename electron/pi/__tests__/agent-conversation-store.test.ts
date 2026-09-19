@@ -163,7 +163,18 @@ describe('AgentConversationStore.forGlobal', () => {
     const { MODELS_CONFIG_PATH } = await import('../../utils/config-utils')
     fs.mkdirSync(path.dirname(MODELS_CONFIG_PATH), { recursive: true })
     fs.writeFileSync(MODELS_CONFIG_PATH, JSON.stringify([
-      { id: 'prof-gemini-pro', name: 'Gemini 2.5 Pro', provider: 'google', modelName: 'gemini-2.5-pro' },
+      {
+        id: 'prof-gemini-pro',
+        name: 'Gemini 2.5 Pro',
+        provider: 'gemini',
+        protocol: 'gemini',
+        modelName: 'gemini-2.5-pro',
+        apiKey: 'test-key',
+        baseUrl: 'https://example.com',
+        temperature: 0.7,
+        maxTokens: 8192,
+        purposes: ['generation', 'refinement', 'summary'],
+      },
     ]))
 
     await session!.setValue(laneConfig(AGENT_LANE_NAME), {

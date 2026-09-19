@@ -11,8 +11,10 @@ import {
   DEFAULT_GLOBAL_CONFIG,
   MODELS_CONFIG_PATH,
 } from '../utils/config-utils'
-import type { GlobalConfig, ModelProfile } from '../../src/shared/ipc-channels'
+import type { GlobalConfig } from '../../src/shared/ipc-channels'
 import type { EmbeddingOptions } from '../../src/shared/embedding-options'
+
+import { normalizeModelProfiles } from '../../src/shared/model-profile'
 
 export interface EmbeddingConfig {
   protocol: 'openai' | 'gemini'
@@ -29,7 +31,7 @@ export function getEmbeddingConfig(): EmbeddingConfig | null {
   const targetModelId = config.defaultEmbeddingModelId || config.defaultModelId
   if (!targetModelId) return null
 
-  const models = readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
+  const models = normalizeModelProfiles(readJsonFile<unknown[]>(MODELS_CONFIG_PATH, []))
   const model = models.find(candidate => candidate.id === targetModelId)
   if (!model) return null
   return {

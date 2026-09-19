@@ -16,6 +16,7 @@ import type {
 import type { CreativeStrategy, GenerationReasoningStage, ReasoningEffort } from '../shared/reasoning-types'
 import type { SubmitToolName } from '../shared/submit-contract'
 import { readActiveProject, readActiveProjectSession } from '../services/active-project'
+import { normalizeModelProfiles } from '../shared/model-profile'
 
 /** 一次性生成的回调（正文不再流式：主进程只在完成时回一次） */
 interface StreamCallbacks {
@@ -92,16 +93,6 @@ interface LLMState {
   discoverModels: (request: ModelDiscoveryRequest) => Promise<ModelDiscoveryResult>
 }
 
-function normalizeClientModels(models: unknown): ModelProfile[] {
-  if (!Array.isArray(models)) return []
-  return models.map((m: any) => ({
-    ...m,
-    purposes: Array.isArray(m.purposes) && m.purposes.length > 0
-      ? m.purposes
-      : ['generation', 'refinement', 'summary'],
-  }))
-}
-
 let initializationFlight: Promise<void> | null = null
 
 export const useLLMStore = create<LLMState>()((set, get) => ({
@@ -128,7 +119,7 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
         ipc.invoke('llm:get-default-embedding-model'),
         ipc.invoke('config:get').catch(() => null),
       ])
-      const models = normalizeClientModels(rawModels)
+      const models = normalizeModelProfiles(rawModels)
       const resolvedDefaultModelId = defaultModelId
         ?? models.find(m => m.purposes.includes('generation'))?.id
         ?? null
@@ -151,7 +142,7 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
   loadModels: async () => {
     if (!ipc.isElectron) return
     const rawModels = await ipc.invoke('llm:list-models')
-    set({ models: normalizeClientModels(rawModels) })
+    set({ models: normalizeModelProfiles(rawModels) })
   },
 
   saveModel: async (model) => {

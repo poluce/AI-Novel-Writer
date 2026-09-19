@@ -15,7 +15,7 @@ import { logFailure, logInfo } from '../../src/shared/fail-log'
 import { MODELS_CONFIG_PATH, readJsonFile, VELA_HOME } from '../utils/config-utils'
 import { AGENT_LANE_NAME, VELA_SESSION_CONFIG } from './agent-session'
 import { isAssistantThinkingLevel, type AssistantThinkingLevel } from '../../src/shared/agent-runtime'
-import type { ModelProfile } from '../../src/shared/ipc-channels'
+import { normalizeModelProfiles } from '../../src/shared/model-profile'
 import type {
   PersistedAgentConversation,
   PersistedAgentMessage,
@@ -357,7 +357,7 @@ export class AgentConversationStore {
         }
         if (!modelId && typeof val?.model?.modelId === 'string' && val.model.modelId) {
           const rawModelId = val.model.modelId
-          const models = readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
+          const models = normalizeModelProfiles(readJsonFile<unknown[]>(MODELS_CONFIG_PATH, []))
           const matched = models.find(m => m.id === rawModelId)
             ?? models.find(m => m.modelName === rawModelId && (!val?.model?.provider || m.provider === val.model.provider))
             ?? models.find(m => m.modelName === rawModelId)
