@@ -50,16 +50,18 @@ export default function DraftBoxGroup({
       {/* 草稿箱标题行 */}
       <div
         className="tree-item gap-1.5 cursor-pointer select-none"
-        style={{ paddingLeft: 10 }}
+        style={{ paddingLeft: 8 }}
         onClick={() => setOpen(v => !v)}
         title={text('草稿箱：AI 生成后的章节草稿在此管理，定稿后进入正文章节', 'Draft box: manage AI-generated drafts here. Finalized drafts move to the manuscript.')}
       >
-        {open
-          ? <ChevronDown size={12} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-          : <ChevronRight size={12} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-        }
-        <FilePen size={14} style={{ color: 'var(--color-text-muted)' }} />
-        <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{text('草稿箱', 'Draft box')}</span>
+        <FilePen size={14} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+        <span className="text-sm font-medium truncate" style={{ color: 'var(--color-text)' }}>{text('草稿箱', 'Draft box')}</span>
+        <span className="inline-flex items-center p-0.5" style={{ color: 'var(--color-text-muted)' }}>
+          {open
+            ? <ChevronDown size={12} />
+            : <ChevronRight size={12} />
+          }
+        </span>
         {activeChapterCount > 0 && (
           <span className="ml-auto text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>
             {text(`${activeChapterCount} 章`, `${activeChapterCount} chapters`)}
@@ -72,7 +74,7 @@ export default function DraftBoxGroup({
           {chapterNums.length === 0 ? (
             <div
               className="text-xs py-1"
-              style={{ paddingLeft: 34, color: 'var(--color-text-muted)' }}
+              style={{ paddingLeft: 24, color: 'var(--color-text-muted)' }}
             >
               {text('暂无草稿（从章节蓝图点击「写作此章」创作）', 'No drafts. Use “Write chapter” from a chapter blueprint.')}
             </div>
@@ -142,7 +144,7 @@ function DraftChapterGroup({
       {/* 章节行 */}
       <div
         className="tree-item gap-1.5 cursor-pointer select-none"
-        style={{ paddingLeft: 26 }}
+        style={{ paddingLeft: 20 }}
         onClick={() => setOpen(v => !v)}
         title={displayTitle}
       >
@@ -178,7 +180,7 @@ function DraftChapterGroup({
           {archivedDrafts.length > 0 && (
             <div
               className="flex items-center gap-1 cursor-pointer select-none"
-              style={{ paddingLeft: 54 }}
+              style={{ paddingLeft: 42 }}
               onClick={() => setShowArchived(v => !v)}
             >
               <span className="text-[0.7rem]" style={{ color: 'var(--color-text-muted)', opacity: 0.6 }}>
@@ -308,7 +310,7 @@ function DraftItem({
     <div
       className="relative flex items-center gap-1.5 cursor-pointer hover:bg-[var(--color-hover)]"
       style={{
-        paddingLeft: 50,
+        paddingLeft: 40,
         paddingRight: 8,
         paddingTop: 3,
         paddingBottom: 3,

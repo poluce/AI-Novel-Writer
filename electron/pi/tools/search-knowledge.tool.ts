@@ -54,8 +54,8 @@ export function createSearchKnowledgeTool(
       if (results.length === 0) {
         return {
           content: [{ type: 'text', text: text(
-            '未找到相关结果。请尝试使用不同的关键词搜索，或尝试使用 read_architecture、read_characters 等工具直接读取项目数据。',
-            'No relevant results were found. Try different keywords, or use read_architecture or read_characters to read project data directly.',
+            '未找到相关结果。请尝试使用不同的关键词搜索，或尝试使用 read_architecture、manage_characters 等工具直接读取项目数据。',
+            'No relevant results were found. Try different keywords, or use read_architecture or manage_characters to read project data directly.',
           ) }],
           details: { total: 0 },
         }

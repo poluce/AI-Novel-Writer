@@ -927,7 +927,7 @@
 
   .writer-project-tree .tree-item {
     height: 28px;
-    margin: 1px 8px;
+    margin: 1px 4px;
     color: var(--writer-text-primary);
     border-radius: 6px;
   }

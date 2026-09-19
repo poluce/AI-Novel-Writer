@@ -120,8 +120,7 @@ describe('ProjectTree architecture status refresh', () => {
     await act(async () => {
       await vi.waitFor(() => expect(coreReadCount()).toBeGreaterThanOrEqual(2))
     })
-    expect(container.textContent).toContain('Story architecture2/3')
-    expect(container.textContent).toContain('Plot outlinePending')
+    expect(container.textContent).toContain('Story architecture2/4')
     const readsBeforeCommit = coreReadCount()
 
     worldbuilding = 'W'.repeat(60)
@@ -136,8 +135,7 @@ describe('ProjectTree architecture status refresh', () => {
     await act(async () => {
       await vi.waitFor(() => expect(coreReadCount()).toBeGreaterThan(readsBeforeCommit))
     })
-    expect(container.textContent).toContain('Story architecture3/3')
-    expect(container.textContent).toContain('Plot outlineGenerated')
+    expect(container.textContent).toContain('Story architecture4/4')
   })
 
   it('reflects committed blueprint count when the blueprint resource event arrives', async () => {

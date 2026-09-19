@@ -60,6 +60,7 @@ export default function AgentInputBox() {
   // 下拉菜单状态
   const [showContextMenu, setShowContextMenu] = useState(false)
   const [showModelSelectMenu, setShowModelSelectMenu] = useState(false)
+  const [showModeMenu, setShowModeMenu] = useState(false)
   const [selectPane, setSelectPane] = useState<'root' | 'model' | 'effort'>('root')
 
   // / 命令和 @ 提及菜单状态
@@ -128,6 +129,7 @@ export default function AgentInputBox() {
   const contextRef = useRef<HTMLDivElement>(null)
   const modelSelectRef = useRef<HTMLDivElement>(null)
   const modelMenuRef = useRef<HTMLDivElement>(null)
+  const modeMenuRef = useRef<HTMLDivElement>(null)
 
   // 调整文本框高度的通用函数
   const adjustHeight = useCallback(() => {
@@ -166,6 +168,7 @@ export default function AgentInputBox() {
 
   // 点击外部关闭下拉（用 useOutsideClick 统一管理 ref）
   useOutsideClick(contextRef, () => setShowContextMenu(false), showContextMenu)
+  useOutsideClick(modeMenuRef, () => setShowModeMenu(false), showModeMenu)
   useEffect(() => {
     if (!showModelSelectMenu) return
     const listener = (e: MouseEvent) => {
@@ -493,14 +496,15 @@ export default function AgentInputBox() {
       <div className="flex items-center justify-between gap-1 px-1 mt-0.5">
 
         {/* 左侧工具按钮组 */}
-        <div className="flex items-center gap-0.5 min-w-0 flex-1">
+        <div className="flex items-center gap-1 min-w-0 flex-1 overflow-hidden">
 
           {/* + 添加上下文 */}
-          <div ref={contextRef}>
+          <div ref={contextRef} className="shrink-0">
             <ToolbarIconBtn
               title={text('添加上下文', 'Add context')}
               onClick={() => {
                 setShowModelSelectMenu(false)
+                setShowModeMenu(false)
                 setShowContextMenu(v => !v)
               }}
             >
@@ -508,45 +512,94 @@ export default function AgentInputBox() {
             </ToolbarIconBtn>
           </div>
 
-          {/* 执行模式切换：纯文字 计划 / 写作，零图标零 Emoji */}
-          <div
-            className="flex items-center rounded text-[11px] p-0.5 shrink-0"
-            style={{
-              backgroundColor: 'var(--color-bg-secondary)',
-              border: '1px solid var(--color-border)',
-            }}
-          >
+          {/* 执行模式切换：单触发器 + 弹窗菜单 */}
+          <div ref={modeMenuRef} className="relative shrink-0">
             <button
               type="button"
-              className={`px-1.5 py-0.5 rounded transition-colors ${
-                executionMode === 'plan'
-                  ? 'font-medium bg-[var(--color-bg)] text-[var(--color-text)] shadow-xs'
-                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
-              }`}
-              onClick={() => setExecutionMode('plan')}
-              title={text('计划模式：写操作需人工批准', 'Plan mode: writes require approval')}
-            >
-              {text('计划', 'Plan')}
-            </button>
-            <button
-              type="button"
-              className={`px-1.5 py-0.5 rounded transition-colors ${
+              onClick={() => {
+                setShowContextMenu(false)
+                setShowModelSelectMenu(false)
+                setShowModeMenu(v => !v)
+              }}
+              className="flex items-center gap-1 py-1 px-1.5 rounded-md text-xs transition-colors select-none font-medium hover:bg-[var(--color-hover)] cursor-pointer"
+              style={{
+                backgroundColor: 'var(--color-bg-secondary)',
+                border: '1px solid var(--color-border)',
+                color: 'var(--color-text)',
+              }}
+              title={
                 executionMode === 'writing'
-                  ? 'font-medium bg-[var(--color-bg)] text-[var(--color-text)] shadow-xs'
-                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
-              }`}
-              onClick={() => setExecutionMode('writing')}
-              title={text('写作模式：创作读写全自动放行', 'Writing mode: autonomous execution')}
+                  ? text('写作模式：创作读写全自动放行', 'Writing mode: autonomous execution')
+                  : text('计划模式：写操作需人工批准', 'Plan mode: writes require approval')
+              }
             >
-              {text('写作', 'Write')}
+              <span>{executionMode === 'writing' ? text('写作', 'Write') : text('计划', 'Plan')}</span>
+              <ChevronDown size={11} strokeWidth={1.5} className="text-[var(--color-text-muted)] shrink-0" />
             </button>
+
+            {showModeMenu && (
+              <div
+                className="absolute bottom-[calc(100%+8px)] left-0 z-50 py-1 rounded-lg shadow-lg"
+                style={{
+                  width: 170,
+                  backgroundColor: 'var(--color-sidebar)',
+                  border: '1px solid var(--color-border)',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+                }}
+              >
+                <div className="text-[0.7rem] px-3 pb-1 pt-1 font-medium" style={{ color: 'var(--color-text-muted)' }}>
+                  {text('执行模式', 'Execution mode')}
+                </div>
+                <button
+                  type="button"
+                  className="w-full flex items-center justify-between px-3 py-1.5 text-xs transition-colors hover:bg-[var(--color-hover)] text-left cursor-pointer"
+                  onClick={() => {
+                    setExecutionMode('plan')
+                    setShowModeMenu(false)
+                  }}
+                >
+                  <div>
+                    <div className={`font-medium ${executionMode === 'plan' ? 'text-[var(--color-accent)]' : 'text-[var(--color-text)]'}`}>
+                      {text('计划', 'Plan')}
+                    </div>
+                    <div className="text-[0.68rem] text-[var(--color-text-muted)]">
+                      {text('写操作需人工批准', 'Writes require approval')}
+                    </div>
+                  </div>
+                  {executionMode === 'plan' && (
+                    <Check size={13} className="text-[var(--color-accent)] shrink-0 ml-2" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className="w-full flex items-center justify-between px-3 py-1.5 text-xs transition-colors hover:bg-[var(--color-hover)] text-left cursor-pointer"
+                  onClick={() => {
+                    setExecutionMode('writing')
+                    setShowModeMenu(false)
+                  }}
+                >
+                  <div>
+                    <div className={`font-medium ${executionMode === 'writing' ? 'text-[var(--color-accent)]' : 'text-[var(--color-text)]'}`}>
+                      {text('写作', 'Write')}
+                    </div>
+                    <div className="text-[0.68rem] text-[var(--color-text-muted)]">
+                      {text('创作读写全自动放行', 'Autonomous execution')}
+                    </div>
+                  </div>
+                  {executionMode === 'writing' && (
+                    <Check size={13} className="text-[var(--color-accent)] shrink-0 ml-2" />
+                  )}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* DSH 风格模型与思考选择器：单个触发器 + 二级面板联动 */}
-          <div ref={modelSelectRef} className="relative min-w-0">
+          <div ref={modelSelectRef} className="relative min-w-0 flex-1 overflow-hidden">
             <button
               onClick={() => {
                 setShowContextMenu(false)
+                setShowModeMenu(false)
                 if (showModelSelectMenu) {
                   setShowModelSelectMenu(false)
                   setSelectPane('root')
@@ -555,11 +608,11 @@ export default function AgentInputBox() {
                   setSelectPane('root')
                 }
               }}
-              className="flex items-center gap-1 py-1 px-1.5 rounded-md text-xs min-w-0 transition-colors"
+              className="flex items-center gap-1 py-1 px-1.5 rounded-md text-xs min-w-0 transition-colors w-full max-w-full overflow-hidden"
               style={{
                 color: 'var(--color-text-secondary)',
                 opacity: 0.85,
-                maxWidth: 260}}
+              }}
               onMouseEnter={e => {
                 e.currentTarget.style.backgroundColor = 'var(--color-hover)'
                 e.currentTarget.style.opacity = '1'
@@ -570,24 +623,24 @@ export default function AgentInputBox() {
               }}
               title={`${currentModel?.modelName ?? currentModel?.name ?? text('选择模型', 'Select model')} · ${thinkingLevelLabel(text, currentThinkingLevel)}`}
             >
-              <span className="truncate select-none font-medium">
+              <span className="truncate select-none font-medium min-w-0 flex-1 text-left">
                 {currentModel?.modelName
                   ?? currentModel?.name
                   ?? (chatModels.length === 0 ? text('未配置模型', 'No model configured') : text('选择模型', 'Select model'))}
               </span>
               <span
-                className="text-[0.68rem] px-1 rounded flex-shrink-0 select-none font-normal"
+                className="text-[0.68rem] px-1 rounded shrink-0 select-none font-normal"
                 style={{ backgroundColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}
               >
                 {thinkingLevelLabel(text, currentThinkingLevel)}
               </span>
-              <ChevronDown size={13} strokeWidth={1.5} className="flex-shrink-0" />
+              <ChevronDown size={13} strokeWidth={1.5} className="shrink-0" />
             </button>
           </div>
         </div>
 
         {/* 右侧：发送/停止 */}
-        <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="flex items-center gap-1 shrink-0 ml-1">
           <button
             onClick={handleSendOrStop}
             disabled={!generating && !canSend}

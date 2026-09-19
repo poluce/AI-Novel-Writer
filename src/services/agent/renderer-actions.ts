@@ -96,7 +96,9 @@ export async function handleRendererAction(action: RendererAction): Promise<Rend
           ? ['worldbuilding.md']
           : action.section === 'synopsis'
             ? ['synopsis.md']
-            : ['premise.md', 'worldbuilding.md', 'synopsis.md']
+            : action.section === 'characters'
+              ? ['characters.md']
+              : ['premise.md', 'worldbuilding.md', 'synopsis.md', 'characters.md']
       for (const fileName of files) {
         globalEventBus.emit('ARCH_FILE_UPDATED', {
           fileName,
@@ -105,6 +107,22 @@ export async function handleRendererAction(action: RendererAction): Promise<Rend
           runId: `agent-${Date.now()}`,
         })
       }
+      return
+    }
+    case 'refresh_character_roster': {
+      const project = useProjectStore.getState().currentProject
+      if (!project) return
+      const projectSession = projectSessionContextFromProject(project)
+      if (!projectSession) return
+      const { useCharacterStore } = await import('../../stores/character-store')
+      void useCharacterStore.getState().load(project.path, projectSession)
+      globalEventBus.emit('ARCH_FILE_UPDATED', {
+        fileName: 'characters.md',
+        projectPath: project.path,
+        projectSession,
+        runId: `agent-${Date.now()}`,
+      })
+      return
     }
   }
 }

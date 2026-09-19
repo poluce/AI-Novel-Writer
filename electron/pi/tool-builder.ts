@@ -6,7 +6,6 @@ import type { AgentScope } from '../../src/shared/agent-scope'
 import { createReadArchitectureTool } from './tools/read-architecture.tool'
 import { createNovelConfigTool } from './tools/novel-config.tool'
 import { createStoryArchitectureTool } from './tools/story-architecture.tool'
-import { createReadCharactersTool } from './tools/read-characters.tool'
 import { createReadBlueprintTool } from './tools/read-blueprint.tool'
 import { createReadDraftsTool } from './tools/read-drafts.tool'
 import { createReadProjectStateTool } from './tools/read-project-state.tool'
@@ -19,6 +18,7 @@ import { createBindWritingSkillTool } from './tools/bind-writing-skill.tool'
 import { createOpenEditorTool } from './tools/open-editor.tool'
 import { createReplaceDraftExcerptTool } from './tools/replace-draft-excerpt.tool'
 import { createProposeChapterBlueprintTool } from './tools/propose-chapter-blueprint.tool'
+import { createManageCharactersTool } from './tools/manage-characters.tool'
 import { buildMcpAgentTools } from './tools/mcp.tool'
 import type { AnyAgentTool } from './tool-types'
 import type { AgentSkillCatalogEntry } from '../../src/shared/agent-skills'
@@ -51,7 +51,6 @@ export function buildAgentTools(
       createNovelConfigTool(language, rendererAction),
       createStoryArchitectureTool(language, rendererAction),
       createReadArchitectureTool(language),
-      createReadCharactersTool(language),
       createReadBlueprintTool(language),
       createReadDraftsTool(language),
       createReadProjectStateTool(language),
@@ -62,6 +61,7 @@ export function buildAgentTools(
       createOpenEditorTool(language, rendererAction),
       createReplaceDraftExcerptTool(language, rendererAction),
       createProposeChapterBlueprintTool(language),
+      createManageCharactersTool(language, rendererAction),
     ]
     : []
   return [
@@ -89,6 +89,7 @@ export function confirmationToolNames(): ReadonlySet<string> {
     'novel_config',
     'story_architecture',
     'propose_chapter_blueprint',
+    'manage_characters',
     'install_writing_skill',
     'bind_writing_skill',
   ])

@@ -46,10 +46,10 @@ const ARCHITECTURE_STEP_KEYS = ['premise', 'characters', 'worldbuilding'] as con
 
 /** 与 Sidebar / WorldBuildingEditor 保持一致的架构文件元信息 */
 const ARCH_META: Record<ArchStepKey, { iconName: string; label: string; labelEn: string; desc: string; descEn: string }> = {
-  premise: { iconName: 'target', label: '故事前提', labelEn: 'Premise', desc: 'Logline、核心冲突、金手指定位', descEn: 'Logline, central conflict, and story hook' },
-  characters: { iconName: 'users', label: '角色图谱', labelEn: 'Character graph', desc: '角色弧光、关系网、矛盾交织', descEn: 'Character arcs, relationships, and conflicts' },
-  worldbuilding: { iconName: 'globe', label: '世界观', labelEn: 'Worldbuilding', desc: '核心规则、阶层断层、深层危机', descEn: 'Core rules, social divides, and deeper crises' },
-  synopsis: { iconName: 'map', label: '情节大纲', labelEn: 'Synopsis', desc: '三幕式情节骨架', descEn: 'Three-act story structure' }}
+  premise: { iconName: 'target', label: '前提概要', labelEn: 'Premise', desc: 'Logline、核心冲突、金手指定位', descEn: 'Logline, central conflict, and story hook' },
+  characters: { iconName: 'users', label: '人物', labelEn: 'Characters', desc: '角色弧光、关系网、矛盾交织', descEn: 'Character arcs, relationships, and conflicts' },
+  worldbuilding: { iconName: 'globe', label: '环境', labelEn: 'Setting', desc: '核心规则、阶层断层、深层危机', descEn: 'Core rules, social divides, and deeper crises' },
+  synopsis: { iconName: 'map', label: '情节', labelEn: 'Plot', desc: '三幕式情节骨架', descEn: 'Three-act story structure' }}
 
 /** 从文件路径推断出 ArchStepKey */
 function detectStepKey(filePath: string): ArchStepKey | null {
@@ -545,14 +545,14 @@ function ArchFileViewerSession({
               size="sm"
               onClick={() => openBuiltinEditor(
                 'synopsis-editor',
-                text('情节大纲', 'Plot outline'),
+                text('情节', 'Plot'),
                 'synopsis',
               )}
               disabled={!projectMatches}
-              title={text('在「情节大纲」页面生成或续批', 'Generate or continue it on the Plot outline page')}
+              title={text('在「情节」页面生成或续批', 'Generate or continue it on the Plot page')}
             >
               <Sparkles size={12} />
-              {text('生成情节大纲', 'Generate outline')}
+              {text('生成情节', 'Generate plot')}
             </Button>
           )}
         </div>
@@ -586,15 +586,15 @@ function ArchFileViewerSession({
             borderBottom: '1px solid var(--color-border)'}}
         >
           <span>{text(
-            '角色图谱由角色名单自动生成，只读展示。请到「角色管理」修改角色身份、资料和关系。',
-            'The character graph is a read-only projection of the roster. Edit identity, profile, and relationships in Character Management.',
+            '「人物」由角色名单自动生成，只读展示。请到「角色管理」修改角色身份、资料和关系。',
+            'Characters is a read-only projection of the roster. Edit identity, profile, and relationships in Character Management.',
           )}</span>
           {isDirty && (
             <Button
               variant="outline"
               size="sm"
               onClick={discardCharacterProjectionDraft}
-              title={text('旧草稿可先复制；点击后明确放弃并加载当前角色图谱', 'Copy the legacy draft first; this explicitly discards it and loads the current character graph.')}
+              title={text('旧草稿可先复制；点击后明确放弃并加载当前人物', 'Copy the legacy draft first; this explicitly discards it and loads the current character projection.')}
             >
               {text('放弃旧草稿并加载投影', 'Discard draft and load projection')}
             </Button>

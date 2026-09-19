@@ -33,7 +33,7 @@ import type { ProjectSessionContext } from '../../shared/ipc-channels'
 import { sameProjectSessionContext } from '../../shared/project-session-context'
 import { SettingDocument, SettingSection, DocumentBody } from './SettingSections'
 
-/** 故事架构只包含前提 / 角色图谱 / 世界观；情节大纲是同级的独立页面。 */
+/** 故事架构只包含前提 / 人物 / 环境；情节是同级的独立页面。 */
 type ArchStepKey = 'premise' | 'characters' | 'worldbuilding'
 
 const ARCH_FILES: Array<{
@@ -45,9 +45,9 @@ const ARCH_FILES: Array<{
   descZh: string
   descEn: string
 }> = [
-    { key: 'premise', fileName: 'premise.md', labelZh: '故事前提', labelEn: 'Story premise', iconName: 'target', descZh: '故事钩子 · 核心冲突链 · 主角优势 · 悬念骨架', descEn: 'Story hook · core conflict · protagonist edge · suspense structure' },
-    { key: 'characters', fileName: 'characters.md', labelZh: '角色图谱', labelEn: 'Character map', iconName: 'users', descZh: '角色弧光 · 关系网络 · 矛盾交织', descEn: 'Character arcs · relationships · interlocking tensions' },
-    { key: 'worldbuilding', fileName: 'worldbuilding.md', labelZh: '世界观', labelEn: 'Worldbuilding', iconName: 'globe', descZh: '核心规则 · 社会结构 · 深层危机', descEn: 'Core rules · social structure · underlying crisis' },
+    { key: 'premise', fileName: 'premise.md', labelZh: '前提概要', labelEn: 'Story premise', iconName: 'target', descZh: '故事钩子 · 核心冲突链 · 主角优势 · 悬念骨架', descEn: 'Story hook · core conflict · protagonist edge · suspense structure' },
+    { key: 'characters', fileName: 'characters.md', labelZh: '人物', labelEn: 'Characters', iconName: 'users', descZh: '角色弧光 · 关系网络 · 矛盾交织', descEn: 'Character arcs · relationships · interlocking tensions' },
+    { key: 'worldbuilding', fileName: 'worldbuilding.md', labelZh: '环境', labelEn: 'Setting', iconName: 'globe', descZh: '核心规则 · 社会结构 · 深层危机', descEn: 'Core rules · social structure · underlying crisis' },
   ]
 
 /** 可单块 AI 生成、按顺序解锁的三个步骤。 */
@@ -390,14 +390,14 @@ export default function WorldBuildingEditor({ projectKey }: { projectKey: string
                   generateDisabled={s.disabled}
                   generateTitle={!s.disabled ? undefined : text(
                     key === 'characters'
-                      ? '请先完成「故事前提」生成'
+                      ? '请先完成「前提概要」生成'
                       : key === 'worldbuilding'
-                        ? '请先完成「角色图谱」生成'
+                        ? '请先完成「人物」生成'
                         : '正在生成中…',
                     key === 'characters'
-                      ? 'Generate the story premise first'
+                      ? 'Generate the premise summary first'
                       : key === 'worldbuilding'
-                        ? 'Generate the character map first'
+                        ? 'Generate characters first'
                         : 'Generating…',
                   )}
                   onGenerate={s.generating || s.disabled ? undefined : () => void handleGenerateBlock(key)}
@@ -448,7 +448,7 @@ export default function WorldBuildingEditor({ projectKey }: { projectKey: string
                       ? text('（内容已生成，可直接编辑）', '(Generated — edit directly)')
                       : text(
                         key === 'characters'
-                          ? '点击右上角「AI 生成」或先完成故事前提'
+                          ? '点击右上角「AI 生成」或先完成前提概要'
                           : '点击右上角「AI 生成」生成内容',
                         key === 'characters'
                           ? 'Click “AI 生成” above, or generate the premise first'

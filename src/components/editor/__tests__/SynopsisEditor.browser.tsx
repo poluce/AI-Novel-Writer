@@ -135,7 +135,7 @@ describe('SynopsisEditor', () => {
     await expect.element(page.getByRole('spinbutton', { name: '本次生成范围的起始章' })).toHaveValue(1)
     await expect.element(page.getByRole('spinbutton', { name: '本次生成范围的结束章' })).toHaveValue(20)
 
-    await act(async () => page.getByRole('button', { name: /AI 生成大纲/ }).click())
+    await act(async () => page.getByRole('button', { name: /AI 生成情节/ }).click())
 
     await vi.waitFor(() => expect(launchCreativeWorkflow).toHaveBeenCalledTimes(1))
     expect(launchCreativeWorkflow.mock.calls[0]?.[0]).toMatchObject({
@@ -150,7 +150,7 @@ describe('SynopsisEditor', () => {
 
     await act(async () => page.getByRole('spinbutton', { name: '本次生成范围的起始章' }).fill(''))
     await act(async () => page.getByRole('spinbutton', { name: '本次生成范围的结束章' }).fill(''))
-    await act(async () => page.getByRole('button', { name: /AI 生成大纲/ }).click())
+    await act(async () => page.getByRole('button', { name: /AI 生成情节/ }).click())
 
     await vi.waitFor(() => expect(launchCreativeWorkflow).toHaveBeenCalledTimes(1))
     const intent = launchCreativeWorkflow.mock.calls[0]?.[0] as Record<string, unknown>
@@ -189,7 +189,7 @@ describe('SynopsisEditor', () => {
     await renderEditor()
 
     await act(async () => page.getByRole('spinbutton', { name: '本次生成范围的结束章' }).fill('500'))
-    await act(async () => page.getByRole('button', { name: /AI 生成大纲/ }).click())
+    await act(async () => page.getByRole('button', { name: /AI 生成情节/ }).click())
 
     await vi.waitFor(() => expect(launchCreativeWorkflow).not.toHaveBeenCalled())
   })
@@ -205,7 +205,7 @@ describe('SynopsisEditor', () => {
     roster = { status: 'legacy_repair_required' }
     await renderEditor()
 
-    await expect.element(page.getByText(/建议先在「故事架构」完成：故事前提、角色图谱、世界观/)).toBeVisible()
+    await expect.element(page.getByText(/建议先在「故事架构」完成：前提概要、人物、环境/)).toBeVisible()
 
     core = {
       synopsis: '',

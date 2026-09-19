@@ -258,15 +258,17 @@ export default function ManuscriptGroup({ files, projectPath }: { files: Manuscr
     <div>
       <div
         className="tree-item gap-1.5 cursor-pointer select-none"
-        style={{ paddingLeft: 10 }}
+        style={{ paddingLeft: 8 }}
         onClick={() => setOpen(v => !v)}
       >
-        {open
-          ? <ChevronDown size={12} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-          : <ChevronRight size={12} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-        }
-        <PenTool size={14} style={{ color: 'var(--color-text-muted)' }} />
-        <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{text('正文章节', 'Manuscript chapters')}</span>
+        <PenTool size={14} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+        <span className="text-sm font-medium truncate" style={{ color: 'var(--color-text)' }}>{text('正文章节', 'Manuscript chapters')}</span>
+        <span className="inline-flex items-center p-0.5" style={{ color: 'var(--color-text-muted)' }}>
+          {open
+            ? <ChevronDown size={12} />
+            : <ChevronRight size={12} />
+          }
+        </span>
         {chapterFiles.length > 0 && (
           <span className="ml-auto text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>
             {text(`${chapterFiles.length} 章`, `${chapterFiles.length} chapters`)}
@@ -316,7 +318,7 @@ export default function ManuscriptGroup({ files, projectPath }: { files: Manuscr
             )
           })}
           {chapterFiles.length === 0 ? (
-            <div className="text-xs py-1" style={{ paddingLeft: 34, color: 'var(--color-text-muted)' }}>
+            <div className="text-xs py-1" style={{ paddingLeft: 24, color: 'var(--color-text-muted)' }}>
               {text('暂无定稿章节', 'No finalized chapters')}
             </div>
           ) : (
@@ -328,7 +330,7 @@ export default function ManuscriptGroup({ files, projectPath }: { files: Manuscr
                 <div
                   key={f.path}
                   className="tree-item gap-1.5 cursor-pointer"
-                  style={{ paddingLeft: 30 }}
+                  style={{ paddingLeft: 24 }}
                   onClick={() => openChapterFile(f.path, displayName)}
                   onContextMenu={e => showSidebarMenu([
                     {

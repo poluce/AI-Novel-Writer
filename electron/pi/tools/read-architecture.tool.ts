@@ -19,11 +19,14 @@ const SECTION_ALIASES: Record<string, 'all' | 'premise' | 'worldbuilding' | 'syn
   '全部': 'all',
   '所有': 'all',
   '故事前提': 'premise',
+  '前提概要': 'premise',
   '前提': 'premise',
   '世界观': 'worldbuilding',
   '设定': 'worldbuilding',
+  '环境': 'worldbuilding',
   '情节大纲': 'synopsis',
   '大纲': 'synopsis',
+  '情节': 'synopsis',
 }
 
 const Section = Type.Union([
@@ -48,8 +51,8 @@ export function createReadArchitectureTool(
 ): AgentTool<typeof Schema, { sections: string[] }> {
   const text = (zhCN: string, enUS: string) => writingLanguageText(language, zhCN, enUS)
   const description = language === 'en-US'
-    ? 'Read the story premise, worldbuilding, and whole-book plot outline. Character facts live in read_characters. Defaults to every section.'
-    : '读取故事前提、世界观与全书情节大纲。角色资料请用 read_characters。不传 section 时返回全部。'
+    ? 'Read the story premise, worldbuilding, and whole-book plot outline. Character facts live in manage_characters. Defaults to every section.'
+    : '读取故事前提、世界观与全书情节大纲。角色资料请用 manage_characters。不传 section 时返回全部。'
 
   return {
     name: 'read_architecture',

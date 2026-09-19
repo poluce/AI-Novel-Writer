@@ -37,6 +37,7 @@ export type RendererAction =
   | { type: 'refresh_project_config' }
   | { type: 'refresh_blueprint' }
   | { type: 'refresh_architecture'; section?: string }
+  | { type: 'refresh_character_roster' }
 
 /** 工作流启动收据：产物卡片与工具 details 都用它，避免再解析摘要文本。 */
 export interface WorkflowLaunchReceipt {

@@ -468,7 +468,7 @@ Provide at least five distinct directions.`,
 5. **冲突点** — 角色面临的核心矛盾和困境
 6. **独特标识** — 口头禅、习惯动作、标志性特征
 
-请先使用 read_characters 读取角色卡，以及 read_architecture 了解故事结构。`,
+请先使用 manage_characters 读取角色卡，以及 read_architecture 了解故事结构。`,
       localizedContent: {
         'en-US': `# Character Analysis
 
@@ -482,9 +482,9 @@ Analyze the target character in depth.
 5. **Sources of conflict** — central pressures and dilemmas
 6. **Distinctive markers** — speech patterns, habits, and recognizable traits
 
-Use read_characters for the character cards and read_architecture for the story structure before analyzing.`,
+Use manage_characters for the character cards and read_architecture for the story structure before analyzing.`,
       },
-      writingSkill: inspectWritingSkillMarkdown(`---\nname: character-analysis\ndisplay_name: Character Analysis\ndescription: Analyzes a character's personality, motivation, arc, and relationships in depth.\nlanguage: bilingual\nstage: planning\n---\nUse the read_characters and read_architecture tools before analyzing the character.`),
+      writingSkill: inspectWritingSkillMarkdown(`---\nname: character-analysis\ndisplay_name: Character Analysis\ndescription: Analyzes a character's personality, motivation, arc, and relationships in depth.\nlanguage: bilingual\nstage: planning\n---\nUse the manage_characters and read_architecture tools before analyzing the character.`),
     },
     {
       metadata: {

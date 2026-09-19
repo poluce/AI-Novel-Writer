@@ -92,9 +92,9 @@ export function createArchitectureWorkflow(
 
   const allSteps = [
     {
-      name: text('故事前提', 'Story premise'),
+      name: text('前提概要', 'Premise summary'),
       key: 'premise',
-      description: stepDesc('premise', '提炼故事前提与核心卖点', 'Refine the story premise and its core appeal'),
+      description: stepDesc('premise', '提炼前提概要与核心卖点', 'Refine the premise summary and its core appeal'),
       executor: async (step: unknown, context: WorkflowContext, callbacks: StepCallbacks) => {
         context.data.stepGuidance = guidance
         const { GenerateCoreSeedCommand } = await import('./commands/architecture.command')
@@ -102,7 +102,7 @@ export function createArchitectureWorkflow(
       },
     },
     {
-      name: text('角色图谱', 'Character dynamics'),
+      name: text('人物', 'Character dynamics'),
       key: 'characters',
       description: stepDesc('characters', '构建核心角色关系网与角色弧光', 'Build core character relationships and arcs'),
       executor: async (step: unknown, context: WorkflowContext, callbacks: StepCallbacks) => {
@@ -112,7 +112,7 @@ export function createArchitectureWorkflow(
       },
     },
     {
-      name: text('世界观', 'World building'),
+      name: text('环境', 'World building'),
       key: 'worldbuilding',
       description: stepDesc('worldbuilding', '构建自带冲突引擎的世界观矩阵', 'Build a world matrix with its own conflict engine'),
       executor: async (step: unknown, context: WorkflowContext, callbacks: StepCallbacks) => {
@@ -122,11 +122,11 @@ export function createArchitectureWorkflow(
       },
     },
     {
-      name: text('情节大纲', 'Plot outline'),
+      name: text('情节', 'Plot outline'),
       key: 'synopsis',
       description: resumingSynopsis
-        ? text('从上次中断点继续生成情节大纲', 'Resume the plot outline from the interrupted point')
-        : stepDesc('synopsis', '整合所有碎片，按选定结构模式生成情节大纲', 'Integrate all inputs into a plot outline using the selected structure'),
+        ? text('从上次中断点继续生成情节', 'Resume the plot from the interrupted point')
+        : stepDesc('synopsis', '整合所有碎片，按选定结构模式生成情节', 'Integrate all inputs into a plot using the selected structure'),
       executor: async (step: unknown, context: WorkflowContext, callbacks: StepCallbacks) => {
         context.data.stepGuidance = guidance
         const { GeneratePlotArchitectureCommand } = await import('./commands/architecture.command')

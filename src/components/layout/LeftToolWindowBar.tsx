@@ -160,14 +160,14 @@ export default function LeftToolWindowBar() {
         />
         <LeftNavButton
           icon={Map}
-          label={text('大纲', 'Outline')}
+          label={text('情节', 'Plot')}
           active={activeRailItem === 'synopsis'}
           disabled={!hasOpenProject}
-          title={text('情节大纲', 'Plot outline')}
+          title={text('情节', 'Plot')}
           onClick={() => {
             if (!hasOpenProject) return
             setSidebarView('project', 'synopsis')
-            openBuiltinEditor('synopsis-editor', text('情节大纲', 'Plot outline'), 'synopsis')
+            openBuiltinEditor('synopsis-editor', text('情节', 'Plot'), 'synopsis')
           }}
         />
         <LeftNavButton

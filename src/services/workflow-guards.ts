@@ -115,26 +115,26 @@ export async function guardDirectoryGeneration(
 
   const checkHasContent = (text: string | null | undefined) => text && text.length > 50 && !text.includes('> 待生成')
 
-  const premiseLabel = localize(uiLocale, '故事前提', 'Story premise')
+  const premiseLabel = localize(uiLocale, '前提概要', 'Premise summary')
   if (!core || !checkHasContent(core.premise)) missing.push(premiseLabel)
   if (!core || !checkHasContent(core.charactersArch)) {
-    missing.push(localize(uiLocale, '角色图谱', 'Character graph'))
+    missing.push(localize(uiLocale, '人物', 'Characters'))
   }
   if (!core || !checkHasContent(core.worldbuilding)) {
-    missing.push(localize(uiLocale, '世界观', 'Worldbuilding'))
+    missing.push(localize(uiLocale, '环境', 'Setting'))
   }
   if (!core || !checkHasContent(core.synopsis)) {
-    missing.push(localize(uiLocale, '情节大纲', 'Plot outline'))
+    missing.push(localize(uiLocale, '情节', 'Plot'))
   }
 
-  // 故事前提是必须的（第一个大块）
+  // 前提概要是必须的（第一个大块）
   if (missing.includes(premiseLabel)) {
     return {
       ok: false,
       message: localize(
         uiLocale,
-        '「故事前提」尚未生成，它是章节蓝图的基础。\n\n请先在「故事架构」中点击「AI 生成架构」，生成故事前提后再来生成章节蓝图。',
-        'The story premise has not been generated, and chapter blueprints depend on it.\n\nGenerate the story premise in Story Architecture before generating chapter blueprints.',
+        '「前提概要」尚未生成，它是章节蓝图的基础。\n\n请先在「故事架构」中点击「AI 生成架构」，生成前提概要后再来生成章节蓝图。',
+        'The premise summary has not been generated, and chapter blueprints depend on it.\n\nGenerate the premise summary in Story Architecture before generating chapter blueprints.',
       ),
       action: 'open-world-building',
     }

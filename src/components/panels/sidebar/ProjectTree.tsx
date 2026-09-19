@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { ChevronRight, ChevronDown, RefreshCw, CheckCircle2, Circle, FolderOpen, Copy, FolderTree, Trash2 } from 'lucide-react'
+import { ChevronRight, ChevronDown, RefreshCw, CheckCircle2, Circle, FolderOpen, Copy, FolderTree, Trash2, FileText } from 'lucide-react'
 import { useProjectStore } from '../../../stores/project-store'
 import { useWorkflowStore } from '../../../stores/workflow-store'
 import { useDraftStore } from '../../../stores/draft-store'
@@ -44,8 +44,9 @@ import { shouldRefreshBlueprints } from '../../editor/blueprint-refresh'
 
 const ARCH_FILE_EN: Record<string, { label: string; desc: string }> = {
   premise: { label: 'Premise', desc: 'Core premise and conflict' },
-  characters: { label: 'Character map', desc: 'Character arcs and relationships' },
-  worldbuilding: { label: 'World building', desc: 'World rules and systems' },
+  characters: { label: 'Characters', desc: 'Character arcs and relationships' },
+  worldbuilding: { label: 'Setting', desc: 'World rules and systems' },
+  synopsis: { label: 'Plot', desc: 'Three-act structure, pacing, and setup/payoff' },
 }
 
 export default function ProjectTree() {
@@ -233,7 +234,6 @@ export default function ProjectTree() {
 
   // 故事架构进度
   const archDone = ARCH_FILES.filter(f => archStatus[f.key]).length
-  const synopsisDone = !!archStatus.synopsis
   const clearDisabled = activeRuns.length > 0
   const openConfigEditor = () => useEditorStore.getState().openFile({
     id: 'config',
@@ -241,11 +241,6 @@ export default function ProjectTree() {
     type: 'config',
     projectKey: currentProject.path,
   })
-  const openSynopsisEditor = () => openBuiltinEditor(
-    'synopsis-editor',
-    text('情节大纲', 'Plot outline'),
-    'synopsis',
-  )
 
   return (
     <div className="writer-project-tree min-h-full text-sm py-1">
@@ -303,28 +298,10 @@ export default function ProjectTree() {
         ], e)}
       />
 
-      {/* 2. 故事架构 — 点击标题行打开编辑器，子文件仍可单独点开 */}
+      {/* 2. 故事架构 — 点击标题行打开编辑器，子文件（前提概要、人物、环境、情节）均在组内 */}
       <WorldBuildingGroup archStatus={archStatus} archDone={archDone} onCleared={refreshAll} />
 
-      {/* 3. 情节大纲 — 与故事架构并列的一级条目 */}
-      <LeafItem
-        iconName="map"
-        label={text('情节大纲', 'Plot outline')}
-        desc={text('三幕结构、拐点节奏、伏笔闭环', 'Three-act structure, pacing, and setup/payoff')}
-        badge={synopsisDone ? text('已生成', 'Generated') : text('待生成', 'Pending')}
-        badgeDone={synopsisDone}
-        onClick={openSynopsisEditor}
-        onContextMenu={e => showSidebarMenu([
-          {
-            key: 'open',
-            label: text('打开情节大纲', 'Open plot outline'),
-            icon: <FolderOpen size={13} />,
-            onClick: openSynopsisEditor,
-          },
-        ], e)}
-      />
-
-      {/* 4. 章节蓝图 — 点击打开编辑器页 */}
+      {/* 3. 章节蓝图 — 点击打开编辑器页 */}
       <LeafItem
         iconName="layout-list"
         label={text('章节蓝图', 'Chapter blueprints')}
@@ -387,12 +364,14 @@ function WorldBuildingGroup({
       {/* 组标题行 — 点击打开故事架构编辑器，双击展开/折叠子文件 */}
       <div
         className="tree-item gap-1.5 cursor-pointer select-none"
-        style={{ paddingLeft: 10 }}
+        style={{ paddingLeft: 8 }}
         onClick={() => openBuiltinEditor('world-building-editor', text('故事架构', 'Story architecture'), 'world-building')}
         title={text('打开故事架构编辑器（可生成架构文档）', 'Open the story architecture editor')}
       >
+        <FolderTree size={14} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+        <span className="text-sm font-medium truncate" style={{ color: 'var(--color-text)' }}>{text('故事架构', 'Story architecture')}</span>
         <span
-          style={{ width: 12, flexShrink: 0, display: 'flex', alignItems: 'center', cursor: 'pointer' }}
+          className="inline-flex items-center cursor-pointer p-0.5"
           onClick={(e) => { e.stopPropagation(); setOpen(v => !v) }}
         >
           {open
@@ -400,11 +379,9 @@ function WorldBuildingGroup({
             : <ChevronRight size={12} style={{ color: 'var(--color-text-muted)' }} />
           }
         </span>
-        <FolderTree size={14} style={{ color: 'var(--color-text-muted)' }} />
-        <span className="text-sm font-medium flex-1 min-w-0 truncate" style={{ color: 'var(--color-text)' }}>{text('故事架构', 'Story architecture')}</span>
         {/* 进度徽章 */}
         <span
-          className="text-[0.7rem] flex-shrink-0 ml-1"
+          className="text-[0.7rem] flex-shrink-0 ml-auto"
           style={{
             color: allDone
               ? 'var(--color-success-text)'
@@ -485,18 +462,41 @@ function ArchFileRow({
     toast.success(text(`已清空「${f.label}」`, `Cleared “${english.label}”`))
   }
 
+  const openItem = () => {
+    if (f.key === 'synopsis') {
+      openBuiltinEditor('synopsis-editor', text('情节', 'Plot'), 'synopsis')
+    } else {
+      openArchFile(filePath, label)
+    }
+  }
+
   return (
     <div
       className="tree-item gap-1.5 cursor-pointer select-none"
-      style={{ paddingLeft: 26 }}
-      onClick={() => openArchFile(filePath, label)}
+      style={{ paddingLeft: 24 }}
+      onClick={openItem}
       onContextMenu={e => showSidebarMenu([
-        {
-          key: 'open',
-          label: text('打开文件', 'Open file'),
-          icon: <FolderOpen size={13} />,
-          onClick: () => openArchFile(filePath, label),
-        },
+        ...(f.key === 'synopsis' ? [
+          {
+            key: 'open-synopsis',
+            label: text('打开情节', 'Open plot'),
+            icon: <FolderOpen size={13} />,
+            onClick: openItem,
+          },
+          {
+            key: 'open-raw',
+            label: text('打开完整文本', 'Open raw text'),
+            icon: <FileText size={13} />,
+            onClick: () => openArchFile(filePath, label),
+          },
+        ] : [
+          {
+            key: 'open',
+            label: text('打开文件', 'Open file'),
+            icon: <FolderOpen size={13} />,
+            onClick: openItem,
+          },
+        ]),
         { key: 'div1', type: 'divider' as const },
         {
           key: 'copy-path',
@@ -518,10 +518,12 @@ function ArchFileRow({
       ], e)}
       title={text(f.desc, english.desc)}
     >
-      {isGenerated
-        ? <CheckCircle2 size={10} style={{ flexShrink: 0, color: 'var(--color-success)' }} />
-        : <Circle size={6} style={{ flexShrink: 0, fill: 'transparent', stroke: 'var(--color-text-muted)' }} />
-      }
+      <span style={{ width: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        {isGenerated
+          ? <CheckCircle2 size={11} style={{ color: 'var(--color-success)' }} />
+          : <Circle size={6} style={{ fill: 'transparent', stroke: 'var(--color-text-muted)' }} />
+        }
+      </span>
       <span className="flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>{renderIcon(f.iconName, 13)}</span>
       <span
         className="text-sm flex-1 truncate"

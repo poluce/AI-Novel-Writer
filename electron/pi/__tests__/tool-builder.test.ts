@@ -35,7 +35,7 @@ describe('buildAgentTools', () => {
     // 没有项目时项目读写工具只会失败，一律不挂。
     for (const projectTool of [
       'novel_config', 'story_architecture',
-      'read_architecture', 'read_characters', 'read_blueprint', 'read_drafts',
+      'read_architecture', 'manage_characters', 'read_blueprint', 'read_drafts',
       'read_project_state', 'search_knowledge', 'read_file',
       'install_writing_skill', 'bind_writing_skill', 'open_editor',
       'replace_draft_excerpt',
@@ -73,8 +73,8 @@ describe('buildAgentTools', () => {
     expect(names).not.toContain('list_chapters')
     expect(names).toContain('read_project_state')
     expect(names).toContain('read_blueprint')
-    // 角色事实只有 read_characters 一个来源。
-    expect(names).toContain('read_characters')
+    // 角色事实统一通过 manage_characters 进行读取与管理。
+    expect(names).toContain('manage_characters')
   })
 
   it('gives every built-in tool an English description without Chinese fallback', () => {
@@ -94,6 +94,7 @@ describe('buildAgentTools', () => {
       'bind_writing_skill',
       'edit',
       'install_writing_skill',
+      'manage_characters',
       'novel_config',
       'open_editor',
       'propose_chapter_blueprint',

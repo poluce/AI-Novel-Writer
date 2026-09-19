@@ -39,11 +39,14 @@ const SECTION_ALIASES: Record<string, 'all' | 'premise' | 'worldbuilding' | 'syn
   '全部': 'all',
   '所有': 'all',
   '故事前提': 'premise',
+  '前提概要': 'premise',
   '前提': 'premise',
   '世界观': 'worldbuilding',
   '设定': 'worldbuilding',
+  '环境': 'worldbuilding',
   '情节大纲': 'synopsis',
   '大纲': 'synopsis',
+  '情节': 'synopsis',
   '核心架构': 'synopsis',
 }
 
@@ -59,8 +62,8 @@ export function createStoryArchitectureTool(
 ): AgentTool<typeof Schema, { action: string; sections?: string[] }> {
   const text = (zhCN: string, enUS: string) => writingLanguageText(language, zhCN, enUS)
   const description = language === 'en-US'
-    ? 'Read or update the story architecture documents: story premise (premise), worldbuilding (worldbuilding), and whole-book plot outline (synopsis). Directly fills or modifies designated architecture documents without launching workflows. Use read_characters for character cards.'
-    : '读取或修改故事架构三大核心文档：故事前提（premise）、世界观（worldbuilding）、全书情节大纲（synopsis）。与作者讨论确定后，可直接将生成的文档填充到指定架构部分，无需启动工作流。角色资料请用 read_characters。'
+    ? 'Read or update the story architecture documents: story premise (premise), worldbuilding (worldbuilding), and whole-book plot outline (synopsis). Directly fills or modifies designated architecture documents without launching workflows. Use manage_characters for character cards.'
+    : '读取或修改故事架构三大核心文档：故事前提（premise）、世界观（worldbuilding）、全书情节大纲（synopsis）。与作者讨论确定后，可直接将生成的文档填充到指定架构部分，无需启动工作流。角色资料请用 manage_characters。'
 
   return {
     name: 'story_architecture',

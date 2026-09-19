@@ -51,9 +51,9 @@ const SYNOPSIS_FILE_PATH = 'vela://core/synopsis'
 type ArchInputKey = 'premise' | 'characters' | 'worldbuilding'
 
 const ARCH_INPUT_LABELS: Record<ArchInputKey, [string, string]> = {
-  premise: ['故事前提', 'story premise'],
-  characters: ['角色图谱', 'character map'],
-  worldbuilding: ['世界观', 'world building'],
+  premise: ['前提概要', 'premise summary'],
+  characters: ['人物', 'characters'],
+  worldbuilding: ['环境', 'setting'],
 }
 
 const EMPTY_OUTLINE: ParsedSynopsis = { title: '', nodes: [], markerStart: null, hasChapterLabels: false }
@@ -310,7 +310,7 @@ export default function SynopsisEditor({ projectKey }: { projectKey: string }) {
     }
     store.openFile({
       id: tabId,
-      name: text('情节大纲', 'Plot outline'),
+      name: text('情节', 'Plot'),
       type: 'arch-file',
       filePath: SYNOPSIS_FILE_PATH,
       content,
@@ -425,7 +425,7 @@ export default function SynopsisEditor({ projectKey }: { projectKey: string }) {
           { synopsis: nextText },
           projectSession.projectPath,
         ),
-        text('保存情节大纲', 'Save the plot outline'),
+        text('保存情节', 'Save plot'),
       )
       if (!isProjectSessionCurrent(projectSession)) return
       setOutlineText(nextText)
@@ -443,10 +443,10 @@ export default function SynopsisEditor({ projectKey }: { projectKey: string }) {
       }
       toast.success(pendingBatch
         ? text(
-            '已保存；手动修改后需重新生成大纲才能继续续批。',
-            'Saved. After a manual edit, regenerate the outline before continuing the remaining batches.',
+            '已保存；手动修改后需重新生成情节才能继续续批。',
+            'Saved. After a manual edit, regenerate the plot before continuing the remaining batches.',
           )
-        : text('情节大纲已保存', 'Plot outline saved'))
+        : text('情节已保存', 'Plot saved'))
       await loadStatus()
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error)
@@ -466,7 +466,7 @@ export default function SynopsisEditor({ projectKey }: { projectKey: string }) {
         <div className="flex items-center gap-1.5 min-w-0">
           <Map size={14} style={{ color: 'var(--color-text-muted)' }} />
           <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
-            {text('情节大纲', 'Plot outline')}
+            {text('情节', 'Plot')}
           </span>
           {parsed.nodes.length > 0 && (
             <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
@@ -506,7 +506,7 @@ export default function SynopsisEditor({ projectKey }: { projectKey: string }) {
               )}
             >
               <RefreshCw size={12} className={busy ? 'animate-spin' : ''} />
-              {busy ? text('续写中...', 'Resuming...') : text('断点续写大纲', 'Continue outline')}
+              {busy ? text('续写中...', 'Resuming...') : text('断点续写情节', 'Continue plot')}
             </Button>
           )}
           {pendingBatch && (
@@ -531,10 +531,10 @@ export default function SynopsisEditor({ projectKey }: { projectKey: string }) {
             size="sm"
             onClick={() => void handleGenerate()}
             disabled={disabled}
-            title={text('按下方范围生成情节大纲', 'Generate the plot outline for the range below')}
+            title={text('按下方范围生成情节', 'Generate the plot for the range below')}
           >
             <RefreshCw size={12} className={busy ? 'animate-spin' : ''} />
-            {exists ? text('AI 重新生成', 'Regenerate') : text('AI 生成大纲', 'Generate outline')}
+            {exists ? text('AI 重新生成', 'Regenerate') : text('AI 生成情节', 'Generate plot')}
           </Button>
           <Button
             variant="ghost"
@@ -635,7 +635,7 @@ export default function SynopsisEditor({ projectKey }: { projectKey: string }) {
         {missingInputs.length > 0 && (
           <span className="leading-relaxed" style={{ color: 'var(--color-warning-text)' }}>
             {text(
-              `建议先在「故事架构」完成：${missingInputs.map(key => text(...ARCH_INPUT_LABELS[key])).join('、')}，否则大纲缺少权威输入。`,
+              `建议先在「故事架构」完成：${missingInputs.map(key => text(...ARCH_INPUT_LABELS[key])).join('、')}，否则情节缺少权威输入。`,
               `Finish these in Story architecture first: ${missingInputs.map(key => text(...ARCH_INPUT_LABELS[key])).join(', ')}.`,
             )}
           </span>
@@ -766,8 +766,8 @@ export default function SynopsisEditor({ projectKey }: { projectKey: string }) {
               <EmptyState
                 icon={<Map size={36} />}
                 message={text(
-                  '尚未生成情节大纲，点击右上角「AI 生成大纲」开始。',
-                  'No plot outline yet. Use “Generate outline” above to start.',
+                  '尚未生成情节，点击右上角「AI 生成情节」开始。',
+                  'No plot yet. Use “Generate plot” above to start.',
                 )}
                 opacity={0.4}
               />
@@ -775,7 +775,7 @@ export default function SynopsisEditor({ projectKey }: { projectKey: string }) {
           ) : (
             <div className="max-w-3xl mx-auto px-6 py-5">
               <h1 className="text-base font-bold mb-4" style={{ color: 'var(--color-text)' }}>
-                {parsed.title || text('情节大纲', 'Plot outline')}
+                {parsed.title || text('情节', 'Plot')}
               </h1>
 
               <div className="space-y-1">

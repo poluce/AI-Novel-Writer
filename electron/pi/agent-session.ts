@@ -328,6 +328,12 @@ export class AgentSession {
         return false
       }
     }
+    if (toolName === 'manage_characters') {
+      const rawAction = String(args?.action ?? 'read').toLowerCase().trim()
+      if (rawAction === 'read' || rawAction === 'track_appearances' || rawAction === '出场追踪' || rawAction === '出场') {
+        return false
+      }
+    }
     return true
   }
 

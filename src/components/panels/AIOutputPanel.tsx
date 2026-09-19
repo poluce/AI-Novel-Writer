@@ -744,7 +744,7 @@ function WorkflowFailureNotice({
                 : <Sparkles size={12} aria-hidden="true" />}
               {resumingSynopsis
                 ? runText(locale, '正在从断点续写...', 'Resuming from the break point...')
-                : runText(locale, '继续生成情节大纲（断点续写）', 'Continue plot outline (resume)')}
+                : runText(locale, '继续生成情节（断点续写）', 'Continue plot (resume)')}
             </button>
             <p className="m-0 mt-1.5" style={{ color: 'var(--color-text-muted)' }}>
               {runText(
