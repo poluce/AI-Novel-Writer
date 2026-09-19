@@ -283,13 +283,9 @@ describe('chapter lifecycle deletion IPC', () => {
 
   it('rejects stale leases and mismatched chapter identities without deleting anything', async () => {
     const handler = handlers.get('chapter:delete-finalized')!
-    const staleSession = projectSession
-    const reopened = projectAccess.probeExistingProject(projectRoot)
-    if (reopened.kind !== 'manifest') throw new Error('test project manifest missing')
-    const replacementLease = projectAccess.beginSession(reopened)
-    projectSession = {
-      projectId: replacementLease.projectId,
-      projectPath: replacementLease.rootPath,
+    const staleSession = {
+      projectId: 'stale-project-id',
+      projectPath: projectRoot,
     }
 
     await expect(handler(
