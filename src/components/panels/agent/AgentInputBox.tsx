@@ -281,7 +281,7 @@ export default function AgentInputBox() {
       {showModelSelectMenu && (
         <div
           ref={modelMenuRef}
-          className="absolute bottom-[calc(100%+8px)] left-0 z-50 py-1 rounded-lg shadow-lg"
+          className="absolute bottom-[calc(100%+8px)] right-1 z-50 py-1 rounded-lg shadow-lg"
           style={{
             width: 240,
             maxWidth: 'calc(100% - 8px)',
@@ -495,22 +495,22 @@ export default function AgentInputBox() {
       {/* 底部工具栏 */}
       <div className="flex items-center justify-between gap-1 px-1 mt-0.5">
 
-        {/* 左侧工具按钮组 */}
-        <div className="flex items-center gap-1 min-w-0 flex-1 overflow-hidden">
+        {/* 左侧：添加上下文 */}
+        <div ref={contextRef} className="shrink-0">
+          <ToolbarIconBtn
+            title={text('添加上下文', 'Add context')}
+            onClick={() => {
+              setShowModelSelectMenu(false)
+              setShowModeMenu(false)
+              setShowContextMenu(v => !v)
+            }}
+          >
+            <Plus size={14} />
+          </ToolbarIconBtn>
+        </div>
 
-          {/* + 添加上下文 */}
-          <div ref={contextRef} className="shrink-0">
-            <ToolbarIconBtn
-              title={text('添加上下文', 'Add context')}
-              onClick={() => {
-                setShowModelSelectMenu(false)
-                setShowModeMenu(false)
-                setShowContextMenu(v => !v)
-              }}
-            >
-              <Plus size={14} />
-            </ToolbarIconBtn>
-          </div>
+        {/* 右侧：统一靠右对齐（执行模式 + 模型与思考 + 发送按钮） */}
+        <div className="flex items-center gap-1.5 min-w-0 shrink-0 ml-auto">
 
           {/* 执行模式切换：单触发器 + 弹窗菜单 */}
           <div ref={modeMenuRef} className="relative shrink-0">
@@ -539,7 +539,7 @@ export default function AgentInputBox() {
 
             {showModeMenu && (
               <div
-                className="absolute bottom-[calc(100%+8px)] left-0 z-50 py-1 rounded-lg shadow-lg"
+                className="absolute bottom-[calc(100%+8px)] right-0 z-50 py-1 rounded-lg shadow-lg"
                 style={{
                   width: 170,
                   backgroundColor: 'var(--color-sidebar)',
@@ -594,8 +594,8 @@ export default function AgentInputBox() {
             )}
           </div>
 
-          {/* DSH 风格模型与思考选择器：单个触发器 + 二级面板联动 */}
-          <div ref={modelSelectRef} className="relative min-w-0 flex-1 overflow-hidden">
+          {/* DSH 风格模型与思考选择器：紧凑触发器 + 二级面板联动 */}
+          <div ref={modelSelectRef} className="relative min-w-0 max-w-full">
             <button
               onClick={() => {
                 setShowContextMenu(false)
@@ -608,7 +608,7 @@ export default function AgentInputBox() {
                   setSelectPane('root')
                 }
               }}
-              className="flex items-center gap-1 py-1 px-1.5 rounded-md text-xs min-w-0 transition-colors w-full max-w-full overflow-hidden"
+              className="flex items-center gap-1.5 py-1 px-1.5 rounded-md text-xs min-w-0 transition-colors cursor-pointer max-w-full"
               style={{
                 color: 'var(--color-text-secondary)',
                 opacity: 0.85,
@@ -623,7 +623,7 @@ export default function AgentInputBox() {
               }}
               title={`${currentModel?.modelName ?? currentModel?.name ?? text('选择模型', 'Select model')} · ${thinkingLevelLabel(text, currentThinkingLevel)}`}
             >
-              <span className="truncate select-none font-medium min-w-0 flex-1 text-left">
+              <span className="truncate select-none font-medium min-w-0">
                 {currentModel?.modelName
                   ?? currentModel?.name
                   ?? (chatModels.length === 0 ? text('未配置模型', 'No model configured') : text('选择模型', 'Select model'))}
@@ -634,17 +634,15 @@ export default function AgentInputBox() {
               >
                 {thinkingLevelLabel(text, currentThinkingLevel)}
               </span>
-              <ChevronDown size={13} strokeWidth={1.5} className="shrink-0" />
+              <ChevronDown size={13} strokeWidth={1.5} className="shrink-0 text-[var(--color-text-muted)]" />
             </button>
           </div>
-        </div>
 
-        {/* 右侧：发送/停止 */}
-        <div className="flex items-center gap-1 shrink-0 ml-1">
+          {/* 发送/停止按钮 */}
           <button
             onClick={handleSendOrStop}
             disabled={!generating && !canSend}
-            className="flex items-center justify-center w-6 h-6 transition-all duration-150"
+            className="flex items-center justify-center w-6 h-6 transition-all duration-150 shrink-0"
             style={{
               borderRadius: 'var(--radius-md)',
               backgroundColor: generating
