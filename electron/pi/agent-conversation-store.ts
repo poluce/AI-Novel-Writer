@@ -8,10 +8,13 @@ import {
   type Session,
 } from '@earendil-works/pi-agent-core'
 import { NodeExecutionEnv } from '@earendil-works/pi-agent-core/harness/env/nodejs'
+import { laneConfig } from '@earendil-works/pi-agent-core/harness/session'
 
 import { DIR_VELA_INTERNAL } from '../../src/shared/project-paths'
 import { logFailure, logInfo } from '../../src/shared/fail-log'
 import { VELA_HOME } from '../utils/config-utils'
+import { AGENT_LANE_NAME } from './agent-session'
+import { isAssistantThinkingLevel, type AssistantThinkingLevel } from '../../src/shared/agent-runtime'
 import type {
   PersistedAgentConversation,
   PersistedAgentMessage,
@@ -324,6 +327,24 @@ export class AgentConversationStore {
     const lastMsgTime = messages.length > 0 ? messages[messages.length - 1].createdAt : 0
     const updatedAt = Math.max(meta.modifiedAt || 0, meta.createdAt || 0, lastMsgTime)
 
+    let thinkingLevel: AssistantThinkingLevel | null = null
+    let modelId: string | null = null
+    try {
+      const configEntry = await session.getValue(laneConfig(AGENT_LANE_NAME), BACKGROUND_CONTEXT)
+      const val = configEntry?.value as {
+        thinkingLevel?: string
+        model?: { modelId?: string }
+      } | undefined
+      if (val?.thinkingLevel && isAssistantThinkingLevel(val.thinkingLevel)) {
+        thinkingLevel = val.thinkingLevel
+      }
+      if (typeof val?.model?.modelId === 'string' && val.model.modelId) {
+        modelId = val.model.modelId
+      }
+    } catch {
+      // session may not have laneConfig yet
+    }
+
     return {
       id: meta.id,
       title,
@@ -331,8 +352,8 @@ export class AgentConversationStore {
       createdAt: meta.createdAt || Date.now(),
       updatedAt,
       mode: 'planning',
-      modelId: null,
-      thinkingLevel: null,
+      modelId,
+      thinkingLevel,
     }
   }
 

@@ -393,7 +393,7 @@ export default function AgentInputBox() {
               </div>
               <div className="py-0.5">
                 {[
-                  { value: null, label: text('关（默认）', 'Off (default)'), desc: text('不指定等级，使用模型默认行为', 'Use model default behavior') },
+                  { value: null, label: text('关', 'Off'), desc: text('不启用思考推演', 'Do not enable thinking reasoning') },
                   { value: 'low' as const, label: text('低', 'Low'), desc: text('最快，适合简单改写与问答', 'Fastest; simple rewrites and questions') },
                   { value: 'medium' as const, label: text('中', 'Medium'), desc: text('平衡，适合常规创作与改稿', 'Balanced; everyday drafting and revision') },
                   { value: 'high' as const, label: text('高', 'High'), desc: text('最慢，适合大纲与复杂推理', 'Slowest; outlines and complex reasoning') },
@@ -746,6 +746,7 @@ function thinkingLevelLabel(
       return text('中', 'Medium')
     case 'high':
       return text('高', 'High')
+    case 'off':
     default:
       return text('关', 'Off')
   }

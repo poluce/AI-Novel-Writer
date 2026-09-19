@@ -348,6 +348,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     const scope = get().activeScope
     const previous = get().getActiveConversation()
     const inheritFromPrevious = previous?.scope === scope ? previous : null
+
     const newConv: AgentConversation = {
       id: genId(),
       title: useLocaleStore.getState().locale === 'en-US' ? 'New conversation' : '新对话',

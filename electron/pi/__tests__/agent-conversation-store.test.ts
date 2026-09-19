@@ -152,6 +152,29 @@ describe('AgentConversationStore.forGlobal', () => {
     await store.close()
   })
 
+  it('restores persisted thinkingLevel and modelId from session lane configuration', async () => {
+    const projectPath = temporaryProject()
+    const store = AgentConversationStore.forProject(projectPath)
+    const session = await store.open('conv-lane-config-test', { create: true })
+    expect(session).not.toBeNull()
+
+    const { laneConfig } = await import('@earendil-works/pi-agent-core/harness/session')
+    const { AGENT_LANE_NAME } = await import('../agent-session')
+
+    await session!.setValue(laneConfig(AGENT_LANE_NAME), {
+      model: { provider: 'google', modelId: 'gemini-2.5-pro' },
+      thinkingLevel: 'high',
+      activeToolNames: [],
+    }, BACKGROUND_CONTEXT)
+
+    const list = await store.listConversations()
+    expect(list).toHaveLength(1)
+    expect(list[0].thinkingLevel).toBe('high')
+    expect(list[0].modelId).toBe('gemini-2.5-pro')
+
+    await store.close()
+  })
+
   it('folds raw entries into UI messages with toolCalls', () => {
     const entries: Entry[] = [
       {

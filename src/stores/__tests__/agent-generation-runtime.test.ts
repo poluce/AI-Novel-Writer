@@ -20,6 +20,7 @@ vi.mock('../../services/ipc-client', () => ({
 describe('Agent IPC bridge', () => {
   beforeEach(() => {
     useAgentStore.setState({
+      activeScope: 'project',
       conversations: [],
       activeConversationId: null,
       activeRequestId: null,
@@ -58,6 +59,7 @@ describe('Agent IPC bridge', () => {
       'project',
       // 没选思考等级就不传，主进程按 Pi 默认的 off 处理。
       undefined,
+      'plan',
     )
   })
 
@@ -124,6 +126,7 @@ describe('Agent IPC bridge', () => {
       expect.any(Array),
       'project',
       undefined,
+      'plan',
     )
   })
 
