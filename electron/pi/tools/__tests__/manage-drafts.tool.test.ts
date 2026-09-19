@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createManageDraftsTool } from '../manage-drafts.tool'
 import { DraftRepository } from '../../../repositories/draft-repository'
+import { DraftAnnotationRepository } from '../../../repositories/draft-annotation-repository'
 import * as databaseModule from '../../../database'
 
 vi.mock('../../../repositories/draft-repository', () => ({
@@ -13,6 +14,13 @@ vi.mock('../../../repositories/draft-repository', () => ({
     create: vi.fn(),
     updateContent: vi.fn(),
     delete: vi.fn(),
+  },
+}))
+
+vi.mock('../../../repositories/draft-annotation-repository', () => ({
+  DraftAnnotationRepository: {
+    list: vi.fn(),
+    replace: vi.fn(),
   },
 }))
 
@@ -46,6 +54,7 @@ describe('manage_drafts tool', () => {
 
     vi.mocked(databaseModule.getCurrentProjectPath).mockReturnValue('/workspace/novel')
     vi.mocked(databaseModule.getProjectDb).mockReturnValue({} as never)
+    vi.mocked(DraftAnnotationRepository.list).mockReturnValue([])
   })
 
   // =========================================================================
@@ -123,10 +132,86 @@ describe('manage_drafts tool', () => {
       await expect(tool.execute('c4', { action: 'read', chapter_number: 99 }))
         .rejects.toThrow('第 99 章暂无任何草稿')
     })
+
+    it('automatically includes author annotations when annotations exist', async () => {
+      vi.mocked(DraftRepository.listByChapter).mockReturnValue([
+        { id: 3, chapterNumber: 1, version: 1, status: 'draft', source: 'write', contentId: 3, wordCount: 1800, sourceDependencies: [], dependenciesStale: false, createdAt: '2026-09-18', updatedAt: '2026-09-18' },
+      ])
+      vi.mocked(DraftRepository.getLatestByChapter).mockReturnValue({
+        id: 3, chapterNumber: 1, version: 1, status: 'draft', source: 'write', contentId: 3, wordCount: 1800, sourceDependencies: [], dependenciesStale: false, createdAt: '2026-09-18', updatedAt: '2026-09-18',
+      })
+      vi.mocked(DraftRepository.getFull).mockReturnValue({
+        id: 3, chapterNumber: 1, version: 1, status: 'draft', source: 'write', contentId: 3, wordCount: 1800, sourceDependencies: [], dependenciesStale: false, createdAt: '2026-09-18', updatedAt: '2026-09-18',
+        content: '这是正文段落。顾岩拔剑刺来。陆舟身形一晃避开。',
+      })
+      vi.mocked(DraftAnnotationRepository.list).mockReturnValue([
+        { id: 'ann-1', from: 7, to: 13, quote: '顾岩拔剑刺来', note: '这里动作太死板，改为暗器突袭', createdAt: 1700000000000 },
+      ])
+
+      const tool = createManageDraftsTool('zh-CN', rendererAction)
+      const res = await tool.execute('c1-ann', { action: 'read', chapter_number: 1 })
+
+      expect(res.details.annotationsCount).toBe(1)
+      const text = textOf(res)
+      expect(text).toContain('本章作者划词标注')
+      expect(text).toContain('顾岩拔剑刺来')
+      expect(text).toContain('这里动作太死板，改为暗器突袭')
+    })
   })
 
   // =========================================================================
-  // 2. 版本清单 (list_versions)
+  // 2. 划词标注清单 (list_annotations)
+  // =========================================================================
+  describe('list_annotations operation', () => {
+    it('returns author annotations for the specified chapter draft', async () => {
+      vi.mocked(DraftRepository.listByChapter).mockReturnValue([
+        { id: 4, chapterNumber: 2, version: 1, status: 'draft', source: 'write', contentId: 4, wordCount: 2000, sourceDependencies: [], dependenciesStale: false, createdAt: '2026-09-18', updatedAt: '2026-09-18' },
+      ])
+      vi.mocked(DraftRepository.getLatestByChapter).mockReturnValue({
+        id: 4, chapterNumber: 2, version: 1, status: 'draft', source: 'write', contentId: 4, wordCount: 2000, sourceDependencies: [], dependenciesStale: false, createdAt: '2026-09-18', updatedAt: '2026-09-18',
+      })
+      vi.mocked(DraftAnnotationRepository.list).mockReturnValue([
+        { id: 'ann-2', from: 10, to: 20, quote: '林间微风吹拂', note: '环境描写不够凝重，加一点肃杀感', createdAt: 1700000001000 },
+      ])
+
+      const tool = createManageDraftsTool('zh-CN', rendererAction)
+      const res = await tool.execute('c-ann-list', { action: 'list_annotations', chapter_number: 2 })
+
+      expect(res.details.totalAnnotations).toBe(1)
+      const text = textOf(res)
+      expect(text).toContain('林间微风吹拂')
+      expect(text).toContain('环境描写不够凝重，加一点肃杀感')
+    })
+
+    it('reports friendly notice when draft has no annotations', async () => {
+      vi.mocked(DraftRepository.listByChapter).mockReturnValue([
+        { id: 5, chapterNumber: 2, version: 1, status: 'draft', source: 'write', contentId: 5, wordCount: 2000, sourceDependencies: [], dependenciesStale: false, createdAt: '2026-09-18', updatedAt: '2026-09-18' },
+      ])
+      vi.mocked(DraftRepository.getLatestByChapter).mockReturnValue({
+        id: 5, chapterNumber: 2, version: 1, status: 'draft', source: 'write', contentId: 5, wordCount: 2000, sourceDependencies: [], dependenciesStale: false, createdAt: '2026-09-18', updatedAt: '2026-09-18',
+      })
+      vi.mocked(DraftAnnotationRepository.list).mockReturnValue([])
+
+      const tool = createManageDraftsTool('zh-CN', rendererAction)
+      const res = await tool.execute('c-ann-empty', { action: 'list_annotations', chapter_number: 2 })
+
+      expect(res.details.totalAnnotations).toBe(0)
+      expect(textOf(res)).toContain('目前暂无作者划词标注意见')
+    })
+
+    it('reports friendly notice when chapter has no drafts', async () => {
+      vi.mocked(DraftRepository.listByChapter).mockReturnValue([])
+
+      const tool = createManageDraftsTool('zh-CN', rendererAction)
+      const res = await tool.execute('c-ann-nodraft', { action: 'list_annotations', chapter_number: 99 })
+
+      expect(res.details.totalAnnotations).toBe(0)
+      expect(textOf(res)).toContain('暂无任何草稿记录')
+    })
+  })
+
+  // =========================================================================
+  // 3. 版本清单 (list_versions)
   // =========================================================================
   describe('list_versions operation', () => {
     it('lists all versions of a chapter', async () => {

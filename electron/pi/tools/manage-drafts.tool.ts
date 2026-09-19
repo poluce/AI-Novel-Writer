@@ -2,6 +2,7 @@ import type { AgentTool } from '@earendil-works/pi-agent-core'
 import { Type } from '@earendil-works/pi-ai'
 
 import { DraftRepository } from '../../repositories/draft-repository'
+import { DraftAnnotationRepository } from '../../repositories/draft-annotation-repository'
 import { countDraftUnits } from '../../../src/shared/draft-units'
 import { MAX_DRAFT_EXCERPT_CHARS } from '../../../src/shared/draft-excerpt'
 import { getCurrentProjectPath, getProjectDb } from '../../database'
@@ -12,10 +13,11 @@ import {
 } from '../../../src/shared/writing-language'
 
 const DraftAction = Type.Union([
-  Type.Literal('read', { description: '读取草稿正文内容（默认）' }),
+  Type.Literal('read', { description: '读取草稿正文内容，自动附带作者划词标注列表（默认）' }),
   Type.Literal('write', { description: '整篇写草稿：为章节新建首版草稿、整章推倒重写（追加新版本）或覆盖未定稿草稿' }),
   Type.Literal('replace_excerpt', { description: '指定位置局部替换：精确替换章节草稿中的一段原文（润色、扩写、微调）' }),
   Type.Literal('list_versions', { description: '查看章节拥有的所有草稿版本清单（版本号、字数、状态、创建时间）' }),
+  Type.Literal('list_annotations', { description: '专项查询：仅查看本章当前草稿中作者留下的所有划词批注与修改意见' }),
   Type.Literal('delete', { description: '删除未定稿的草稿版本' }),
 ], { description: '操作类型' })
 
@@ -122,7 +124,84 @@ export function createManageDraftsTool(
       }
 
       // =========================================================================
-      // 2. 指定位置局部精准替换 (replace_excerpt)
+      // 2. 查看草稿划词标注列表 (list_annotations)
+      // =========================================================================
+      if (rawAction === 'list_annotations' || rawAction === '查看标注' || rawAction === '标注列表' || rawAction === '批注') {
+        const allDrafts = DraftRepository.listByChapter(chapterNumber)
+        if (allDrafts.length === 0) {
+          return {
+            content: [{
+              type: 'text',
+              text: text(
+                `第 ${chapterNumber} 章暂无任何草稿记录。`,
+                `Chapter ${chapterNumber} currently has no drafts.`,
+              ),
+            }],
+            details: { chapterNumber, totalAnnotations: 0, annotations: [] },
+          }
+        }
+
+        const targetMeta = params.draft_id
+          ? DraftRepository.getMeta(params.draft_id)
+          : (params.version !== undefined
+            ? allDrafts.find(d => d.version === params.version)
+            : DraftRepository.getLatestByChapter(chapterNumber))
+
+        if (!targetMeta) {
+          throw new Error(text(`未找到第 ${chapterNumber} 章对应的草稿版本`, `Could not find draft for chapter ${chapterNumber}`))
+        }
+
+        const annotations = DraftAnnotationRepository.list(targetMeta.id)
+        if (annotations.length === 0) {
+          return {
+            content: [{
+              type: 'text',
+              text: text(
+                `第 ${chapterNumber} 章（Draft v${targetMeta.version}）目前暂无作者划词标注意见。`,
+                `Chapter ${chapterNumber} (Draft v${targetMeta.version}) currently has no author annotations.`,
+              ),
+            }],
+            details: { chapterNumber, draftId: targetMeta.id, version: targetMeta.version, totalAnnotations: 0, annotations: [] },
+          }
+        }
+
+        const lines: string[] = [
+          text(
+            `### 第 ${chapterNumber} 章作者划词标注清单（Draft v${targetMeta.version} · 共 ${annotations.length} 处修改意见）：\n`,
+            `### Author Passage Notes for Chapter ${chapterNumber} (Draft v${targetMeta.version} · ${annotations.length} notes):\n`,
+          ),
+        ]
+
+        annotations.forEach((item, index) => {
+          lines.push(
+            text(
+              `${index + 1}. 原文选区：「${item.quote.trim()}」\n   作者意见：${item.note.trim()}`,
+              `${index + 1}. Original: "${item.quote.trim()}"\n   Author Note: ${item.note.trim()}`,
+            ),
+          )
+        })
+
+        lines.push(
+          text(
+            `\n（修改提示：可直接调用 action: "replace_excerpt"，将上述「原文选区」作为 old_text，输入修改后的 new_text 完成针对性润色替换）`,
+            `\n(Tip: Call action: "replace_excerpt" using the original quote as old_text to apply targeted changes)`,
+          ),
+        )
+
+        return {
+          content: [{ type: 'text', text: lines.join('\n') }],
+          details: {
+            chapterNumber,
+            draftId: targetMeta.id,
+            version: targetMeta.version,
+            totalAnnotations: annotations.length,
+            annotations: annotations.map(a => ({ id: a.id, quote: a.quote, note: a.note })),
+          },
+        }
+      }
+
+      // =========================================================================
+      // 3. 指定位置局部精准替换 (replace_excerpt)
       // =========================================================================
       if (rawAction === 'replace_excerpt' || rawAction === '局部替换' || rawAction === '修改段落' || rawAction === '润色') {
         const oldText = params.old_text ?? ''
@@ -345,8 +424,23 @@ export function createManageDraftsTool(
         `### Chapter ${chapterNumber} Draft (v${targetMeta.version} · Status: ${statusLabel} · ${targetMeta.wordCount} words · Lines ${startIdx + 1}–${endIdx} of ${totalLines}):\n\n`,
       )
 
+      const annotations = DraftAnnotationRepository.list(targetMeta.id)
+      let annotationsSection = ''
+      if (annotations.length > 0) {
+        const annotationLines = annotations.map((item, idx) =>
+          text(
+            `${idx + 1}. 原文选区：「${item.quote.trim()}」\n   作者意见：${item.note.trim()}`,
+            `${idx + 1}. Original: "${item.quote.trim()}"\n   Author Note: ${item.note.trim()}`,
+          ),
+        )
+        annotationsSection = text(
+          `### 本章作者划词标注（修改意见 · 共 ${annotations.length} 处）：\n${annotationLines.join('\n')}\n（提示：可直接调用 action: "replace_excerpt" 传入上述原文进行定向修改）\n\n---\n\n`,
+          `### Author Passage Notes (${annotations.length} notes):\n${annotationLines.join('\n')}\n(Tip: Call action: "replace_excerpt" with the original quote to apply changes)\n\n---\n\n`,
+        )
+      }
+
       return {
-        content: [{ type: 'text', text: header + formatted }],
+        content: [{ type: 'text', text: header + annotationsSection + formatted }],
         details: {
           chapterNumber,
           draftId: targetMeta.id,
@@ -356,6 +450,8 @@ export function createManageDraftsTool(
           totalLines,
           offset: startIdx + 1,
           limit: visibleLines.length,
+          annotationsCount: annotations.length,
+          annotations: annotations.map(a => ({ id: a.id, quote: a.quote, note: a.note })),
         },
       }
     },
