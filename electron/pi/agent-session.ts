@@ -30,7 +30,6 @@ import type { AgentEditorSnapshot, PiAgentEvent, PiToolCallInfo } from '../../sr
 import type { FileWriteCommitState } from '../../src/shared/ipc-channels'
 import type { AgentPromptHistoryTurn } from '../../src/shared/agent-conversation-archive'
 import type { WritingLanguage } from '../../src/shared/writing-language'
-import type { AgentScope } from '../../src/shared/agent-scope'
 import type { AssistantThinkingLevel } from '../../src/shared/agent-runtime'
 import type { PiModelRuntime } from './pi-models'
 
@@ -78,8 +77,6 @@ export interface AgentSessionOptions {
   /** Durable harness session for this conversation. */
   session: Session<SessionMetadata>
   conversationId?: string
-  /** 项目助手 / 界面助手；只影响日志与后续扩展。 */
-  scope?: AgentScope
   /** Pi 的压缩阈值；默认与库一致。 */
   compactionSettings?: CompactionSettings
   /**
@@ -115,7 +112,6 @@ export class AgentSession {
   private readonly lane: Awaited<ReturnType<AgentHarness<undefined>['lane']>>
   private readonly emit: (event: PiAgentEvent) => void
   private readonly language: WritingLanguage
-  private readonly scope: AgentScope
   private readonly conversationId: string | null
   private readonly confirmationNames: ReadonlySet<string>
   private readonly modelIdentity: { modelId: string; modelName: string }
@@ -157,7 +153,6 @@ export class AgentSession {
     this.lane = lane
     this.emit = options.emit
     this.language = options.language
-    this.scope = options.scope ?? 'project'
     this.conversationId = options.conversationId ?? null
     this.confirmationNames = options.confirmationToolNames ?? new Set<string>()
     this.systemPrompt = options.systemPrompt
@@ -176,7 +171,7 @@ export class AgentSession {
 
   /**
    * 建 harness、挂钩子、取 lane。会话存档由调用方准备好：
-   * 项目助手/界面助手各自一个 store，缺失时用内存会话。
+   * 助手只存在于打开的项目里，缺失存档时这一轮会被上层拒绝。
    */
   static async create(options: AgentSessionOptions): Promise<AgentSession> {
     const executionEnv = options.executionEnv ?? null
@@ -226,7 +221,7 @@ export class AgentSession {
     } catch (error) {
       logFailure('Agent', 'failed to reconcile lane configuration', error, {
         conversationId: this.conversationId,
-        scope: this.scope,
+
       })
     }
   }
@@ -423,7 +418,7 @@ export class AgentSession {
       if (update.type === 'error') {
         logFailure('Agent', 'stream error event', undefined, {
           conversationId: this.conversationId,
-          scope: this.scope,
+
           errorMessage: update.error.errorMessage,
           stopReason: update.error.stopReason,
         })
@@ -481,7 +476,7 @@ export class AgentSession {
         recordAgentFailure(this.modelIdentity, message)
         logFailure('Agent', 'run failed', undefined, {
           conversationId: this.conversationId,
-          scope: this.scope,
+
           error: message,
         })
         this.emit({ type: 'error', message })
@@ -494,7 +489,7 @@ export class AgentSession {
       }
       logInfo('Agent', 'run completed', {
         conversationId: this.conversationId,
-        scope: this.scope,
+
         fullTextChars: this.fullText.length,
       })
       this.emit({ type: 'done', fullText: this.fullText })
@@ -541,13 +536,13 @@ export class AgentSession {
       }
       logInfo('Agent', 'seeded conversation from renderer history', {
         conversationId: this.conversationId,
-        scope: this.scope,
+
         turns: history.length,
       })
     } catch (error) {
       logFailure('Agent', 'failed to seed conversation session', error, {
         conversationId: this.conversationId,
-        scope: this.scope,
+
       })
     }
   }
@@ -582,7 +577,7 @@ export class AgentSession {
         recordAgentFailure(this.modelIdentity, message)
         logFailure('Agent', 'prompt rejected', undefined, {
           conversationId: this.conversationId,
-          scope: this.scope,
+
           error: message,
         })
         this.emit({ type: 'error', message })
@@ -611,7 +606,7 @@ export class AgentSession {
     void this.lane.abort(BACKGROUND_CONTEXT).catch((error) => {
       logFailure('Agent', 'failed to abort agent run', error, {
         conversationId: this.conversationId,
-        scope: this.scope,
+
       })
     })
   }
@@ -634,7 +629,7 @@ export class AgentSession {
     } catch (error) {
       logFailure('Agent', 'failed to close agent harness', error, {
         conversationId: this.conversationId,
-        scope: this.scope,
+
       })
       return false
     }

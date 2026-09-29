@@ -1,9 +1,5 @@
 import {
-  BACKGROUND_CONTEXT,
-  MemorySessionRepo,
   type ExecutionEnv,
-  type Session,
-  type SessionMetadata,
 } from '@earendil-works/pi-agent-core'
 
 import { AgentSession } from './agent-session'
@@ -17,7 +13,6 @@ import type { AgentConversationStore } from './agent-conversation-store'
 import type { CreativeStrategy } from '../../src/shared/reasoning-types'
 import type { AgentEditorSnapshot, PiAgentEvent, RendererActionSink } from '../../src/shared/agent-events'
 import type { AgentSkillCatalogEntry } from '../../src/shared/agent-skills'
-import type { AgentScope } from '../../src/shared/agent-scope'
 import type { AssistantThinkingLevel } from '../../src/shared/agent-runtime'
 import type { AgentTurnRefusalCode } from '../../src/shared/agent-turn-refusal'
 import type { AgentPromptHistoryTurn, PersistedAgentConversation } from '../../src/shared/agent-conversation-archive'
@@ -56,24 +51,23 @@ export interface AgentSessionManagerOptions {
   resolveModel: (modelId: string | undefined) => ModelProfile | null
   resolveSystemPrompt: (
     conversationId: string,
-    scope: AgentScope,
     skills?: readonly AgentSkillCatalogEntry[],
   ) => string
   resolveLanguage: (conversationId: string) => WritingLanguage
   /** Forward a normalized agent event toward the renderer. */
   emit: (conversationId: string, event: PiAgentEvent) => void
   rendererAction: RendererActionSink
-  /** Durable Pi session for one scope; absent means memory-only. */
-  resolveConversationStore?: (scope: AgentScope) => AgentConversationStore | null
+  /** Durable Pi session of the open project; absent means the turn must be refused. */
+  resolveConversationStore?: () => AgentConversationStore | null
   /** Pi harness 执行工具的沙箱环境；不返回就不挂这些工具。 */
-  resolveToolEnvironment?: (scope: AgentScope) => ExecutionEnv | null
+  resolveToolEnvironment?: () => ExecutionEnv | null
   /** 允许直读正文的技能根（用户级 + 项目级）；不返回就只用目录快照。 */
   resolveSkillRoots?: () => readonly string[]
   /**
    * 助手对话的创作策略；工作流路径按各自的阶段解析，助手固定用 `general`。
    * 不返回就按 `auto` 处理。
    */
-  resolveCreativeStrategy?: (scope: AgentScope) => CreativeStrategy | undefined
+  resolveCreativeStrategy?: () => CreativeStrategy | undefined
 }
 
 /**
@@ -87,7 +81,6 @@ export class AgentSessionManager {
   private readonly stores = new Map<string, AgentConversationStore | null>()
   /** 会话当前的运行时身份（模型 + 思考等级），用来判断要不要重建。 */
   private readonly runtimeKeys = new Map<string, string>()
-  private memoryRepo: MemorySessionRepo | null = null
 
   constructor(private readonly options: AgentSessionManagerOptions) {}
 
@@ -98,7 +91,6 @@ export class AgentSessionManager {
     editorSnapshot?: AgentEditorSnapshot,
     history?: readonly AgentPromptHistoryTurn[],
     skills?: readonly AgentSkillCatalogEntry[],
-    scope: AgentScope = 'project',
     thinkingLevel?: AssistantThinkingLevel,
     executionMode?: 'plan' | 'writing',
   ): Promise<{ success: boolean; error?: string; code?: AgentTurnRefusalCode }> {
@@ -114,15 +106,14 @@ export class AgentSessionManager {
         executionMode: executionMode ?? 'plan',
         chars: input.length,
       })
-      const session = await this.getOrCreate(conversationId, modelId, history, skills, scope, thinkingLevel)
+      const session = await this.getOrCreate(conversationId, modelId, history, skills, thinkingLevel)
       const language = this.options.resolveLanguage(conversationId)
       session.setEditorSnapshot(editorSnapshot)
       session.setExecutionMode(executionMode)
-      session.setSystemPrompt(this.options.resolveSystemPrompt(conversationId, scope, skills))
+      session.setSystemPrompt(this.options.resolveSystemPrompt(conversationId, skills))
       await session.setTools(buildAgentTools(
         language,
         this.options.rendererAction,
-        scope,
         skills,
         this.options.resolveSkillRoots?.() ?? [],
       ))
@@ -157,9 +148,9 @@ export class AgentSessionManager {
    * 丢弃一个对话：内存会话与 Pi 会话存档一起删。用户删除会话时才调用，
    * 切书走 `abortAll`（保留存档，下次打开还在）。
    */
-  async discard(conversationId: string, scope: AgentScope = 'project'): Promise<{ success: boolean }> {
+  async discard(conversationId: string): Promise<{ success: boolean }> {
     await this.closeSession(conversationId)
-    const store = this.options.resolveConversationStore?.(scope) ?? null
+    const store = this.options.resolveConversationStore?.() ?? null
     if (store) {
       try {
         await store.delete(conversationId)
@@ -170,30 +161,30 @@ export class AgentSessionManager {
     return { success: true }
   }
 
-  async listConversations(scope: AgentScope = 'project'): Promise<{
+  async listConversations(): Promise<{
     conversations: PersistedAgentConversation[]
     activeConversationId: string | null
   }> {
-    const store = this.options.resolveConversationStore?.(scope) ?? null
+    const store = this.options.resolveConversationStore?.() ?? null
     if (!store) return { conversations: [], activeConversationId: null }
     try {
       const conversations = await store.listConversations()
       const activeConversationId = conversations[0]?.id ?? null
       return { conversations, activeConversationId }
     } catch (error) {
-      logFailure('Agent', 'failed to list conversations from store', error, { scope })
+      logFailure('Agent', 'failed to list conversations from store', error)
       return { conversations: [], activeConversationId: null }
     }
   }
 
-  async renameConversation(conversationId: string, title: string, scope: AgentScope = 'project'): Promise<{ success: boolean }> {
-    const store = this.options.resolveConversationStore?.(scope) ?? null
+  async renameConversation(conversationId: string, title: string): Promise<{ success: boolean }> {
+    const store = this.options.resolveConversationStore?.() ?? null
     if (!store) return { success: false }
     try {
       const success = await store.renameConversation(conversationId, title)
       return { success }
     } catch (error) {
-      logFailure('Agent', 'failed to rename conversation in store', error, { conversationId, scope })
+      logFailure('Agent', 'failed to rename conversation in store', error, { conversationId })
       return { success: false }
     }
   }
@@ -225,7 +216,6 @@ export class AgentSessionManager {
     modelId?: string,
     history?: readonly AgentPromptHistoryTurn[],
     skills?: readonly AgentSkillCatalogEntry[],
-    scope: AgentScope = 'project',
     requestedThinkingLevel?: AssistantThinkingLevel,
   ): Promise<AgentSession> {
     const existing = this.sessions.get(conversationId)
@@ -243,24 +233,27 @@ export class AgentSessionManager {
       await this.rebuildSession(conversationId, existing)
     }
 
+    // 助手只在项目内工作：没有项目就没有存档，这一轮直接拒绝，不做内存兜底。
+    const store = this.options.resolveConversationStore?.() ?? null
+    if (!store) {
+      throw new AgentTurnRefusal('no-project', '打开项目后助手才可用')
+    }
+
     // 与工作流同一条生成参数策略：助手对话固定走 general 阶段。
     const sampling = resolveGenerationParameters(profile, {
-      creativeStrategy: this.options.resolveCreativeStrategy?.(scope),
+      creativeStrategy: this.options.resolveCreativeStrategy?.(),
       reasoningStage: 'general',
     })
     const { models, model } = createPiModels(profile, {
       modelSamplingParams: toPiModelSamplingParams(sampling),
     })
     const language = this.options.resolveLanguage(conversationId)
-    const store = this.options.resolveConversationStore?.(scope) ?? null
-    const harnessSession = store
-      ? await store.open(conversationId, { create: true })
-      : await this.openMemorySession(conversationId)
+    const harnessSession = await store.open(conversationId, { create: true })
     if (!harnessSession) {
       throw new AgentTurnRefusal('session-store-unavailable', '会话存档不可用')
     }
 
-    const executionEnv = this.options.resolveToolEnvironment?.(scope) ?? null
+    const executionEnv = this.options.resolveToolEnvironment?.() ?? null
     const session = await AgentSession.create({
       models,
       model,
@@ -268,11 +261,10 @@ export class AgentSessionManager {
         modelId: profile.id,
         modelName: profile.modelName,
       },
-      systemPrompt: this.options.resolveSystemPrompt(conversationId, scope, skills),
+      systemPrompt: this.options.resolveSystemPrompt(conversationId, skills),
       tools: buildAgentTools(
         language,
         this.options.rendererAction,
-        scope,
         skills,
         this.options.resolveSkillRoots?.() ?? [],
       ),
@@ -286,12 +278,10 @@ export class AgentSessionManager {
       emit: (event) => this.options.emit(conversationId, event),
       session: harnessSession,
       conversationId,
-      scope,
     })
     logInfo('Agent', 'agent session opened', {
       conversationId,
-      scope,
-      durable: !!store,
+      durable: true,
       modelName: profile.modelName,
       thinkingLevel,
     })
@@ -325,17 +315,5 @@ export class AgentSessionManager {
     })
     const closed = await this.closeSession(conversationId)
     if (!closed) throw new AgentTurnRefusal('switch-failed', '会话未能安全关闭，稍后再试')
-  }
-
-  /** 没有可用 store（理论上只有异常路径）时退回内存会话，保持可用而不是报错。 */
-  private async openMemorySession(conversationId: string): Promise<Session<SessionMetadata>> {
-    this.memoryRepo ??= new MemorySessionRepo()
-    try {
-      return await this.memoryRepo.create({ id: conversationId }, BACKGROUND_CONTEXT)
-    } catch {
-      // 内存仓库把 id 留给了已关闭的旧会话，换一个仓库重新开始。
-      this.memoryRepo = new MemorySessionRepo()
-      return this.memoryRepo.create({ id: conversationId }, BACKGROUND_CONTEXT)
-    }
   }
 }

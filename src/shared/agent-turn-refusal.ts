@@ -10,6 +10,7 @@ import type { Locale } from '../i18n/types'
  */
 export const AGENT_TURN_REFUSAL_CODES = [
   'model-missing',
+  'no-project',
   'session-store-unavailable',
   'session-busy',
   'switch-failed',
@@ -32,6 +33,11 @@ export function describeAgentTurnRefusal(code: AgentTurnRefusalCode, locale: Loc
       return pick(
         '没有找到可用的模型。请在设置里添加或选择一个模型。',
         'No usable model was found. Add or pick one in Settings.',
+      )
+    case 'no-project':
+      return pick(
+        '请先打开一个项目。助手只在项目内工作。',
+        'Open a project first. The assistant only works inside a project.',
       )
     case 'session-store-unavailable':
       return pick(

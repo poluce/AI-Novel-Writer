@@ -105,29 +105,7 @@ describe('AgentConversationStore', () => {
   })
 })
 
-describe('AgentConversationStore.forGlobal', () => {
-  it('keeps the app assistant sessions under the app data root, outside any project', async () => {
-    const appDataRoot = temporaryProject()
-    const store = AgentConversationStore.forGlobal(appDataRoot)
-    const session = await store.open('conv-global', { create: true })
-    await appendToSession(session!, userMessage('没打开项目时的提问'))
-    await store.close()
-
-    const reopened = AgentConversationStore.forGlobal(appDataRoot)
-    expect((await entriesOf((await reopened.open('conv-global'))!)).length).toBe(1)
-    let sessionFile = ''
-    const walk = (dir: string): void => {
-      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-        const full = path.join(dir, entry.name)
-        if (entry.isDirectory()) walk(full)
-        else if (entry.name.endsWith('.jsonl')) sessionFile = full
-      }
-    }
-    walk(path.join(appDataRoot, 'agent-sessions'))
-    expect(sessionFile).toContain(path.join('agent-sessions'))
-    await reopened.close()
-  })
-
+describe('AgentConversationStore.forProject', () => {
   it('lists conversations and supports renaming natively via Session.setName', async () => {
     const projectPath = temporaryProject()
     const store = AgentConversationStore.forProject(projectPath)

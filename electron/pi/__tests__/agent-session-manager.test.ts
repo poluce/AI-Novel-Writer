@@ -57,24 +57,20 @@ function buildManager(
 ) {
   const events: Array<{ conversationId: string; event: unknown }> = []
   const systemPromptSkills: Array<unknown> = []
-  const resolvedScopes: string[] = []
   const manager = new AgentSessionManager({
     resolveModel: resolveModel
       ? (modelId => resolveModel(modelId) as never)
       : () => ({ id: 'm1', name: 'M', provider: 'gemini', protocol: 'gemini', modelName: 'g', apiKey: 'k', baseUrl: 'https://x', temperature: 0.7, maxTokens: 100, purposes: ['generation'] }),
-    resolveSystemPrompt: (_conversationId, _scope, skills) => {
+    resolveSystemPrompt: (_conversationId, skills) => {
       systemPromptSkills.push(skills)
       return 'sys'
     },
     resolveLanguage: () => 'zh-CN',
     emit: (conversationId, event) => events.push({ conversationId, event }),
     rendererAction: () => {},
-    resolveConversationStore: (scope) => {
-      resolvedScopes.push(scope)
-      return store
-    },
+    resolveConversationStore: () => store,
   })
-  return { manager, events, systemPromptSkills, resolvedScopes }
+  return { manager, events, systemPromptSkills }
 }
 
 function fakeStore(overrides: Partial<Record<keyof AgentConversationStore, unknown>> = {}) {
@@ -103,7 +99,7 @@ afterEach(() => {
 
 describe('AgentSessionManager', () => {
   it('creates one session per conversation and reuses it', async () => {
-    const { manager } = buildManager()
+    const { manager } = buildManager(fakeStore())
     await manager.prompt('conv-1', 'hi')
     await manager.prompt('conv-1', 'again')
 
@@ -112,7 +108,7 @@ describe('AgentSessionManager', () => {
   })
 
   it('rebuilds the system prompt with the renderer skill catalog on every turn', async () => {
-    const { manager, systemPromptSkills } = buildManager()
+    const { manager, systemPromptSkills } = buildManager(fakeStore())
     const skills = [{ name: 'scene-craft', description: '场景塑造', location: 'managed://skills/scene-craft/SKILL.md', source: 'user' as const }]
 
     await manager.prompt('conv-1', 'hi')
@@ -122,7 +118,7 @@ describe('AgentSessionManager', () => {
     expect(systemPromptSkills).toEqual([undefined, undefined, skills])
   })
 
-  it('opens the scope session and seeds renderer history only for an empty session', async () => {
+  it('opens the project session and seeds renderer history only for an empty session', async () => {
     const store = fakeStore()
     const { manager } = buildManager(store)
 
@@ -164,27 +160,17 @@ describe('AgentSessionManager', () => {
     expect(manager.abort('conv-1')).toEqual({ success: false })
   })
 
-  it('resolves the app assistant store and tools for a global conversation', async () => {
-    const store = fakeStore()
-    const { manager, resolvedScopes } = buildManager(store)
+  it('refuses the turn with a no-project code when no project store is open', async () => {
+    const { manager } = buildManager(null)
 
-    await manager.prompt('conv-global', 'hi', undefined, undefined, undefined, undefined, 'global')
-
-    expect(resolvedScopes).toContain('global')
-    expect(store.open).toHaveBeenCalledWith('conv-global', { create: true })
-    expect(buildToolsMock).toHaveBeenCalledWith('zh-CN', expect.anything(), 'global', undefined, [])
-  })
-
-  it('discards a conversation from the scope it belongs to', async () => {
-    const store = fakeStore()
-    const { manager } = buildManager(store)
-
-    await manager.discard('conv-global', 'global')
-    expect(store.delete).toHaveBeenCalledWith('conv-global')
+    const result = await manager.prompt('conv-1', 'hi')
+    expect(result.success).toBe(false)
+    expect(result.code).toBe('no-project')
+    expect(createPiModelsMock).not.toHaveBeenCalled()
   })
 
   it('delegates confirm and abort to the session', async () => {
-    const { manager } = buildManager()
+    const { manager } = buildManager(fakeStore())
     await manager.prompt('conv-1', 'hi')
 
     expect(manager.confirm('conv-1', 'call-1', true)).toEqual({ success: true })
@@ -198,14 +184,14 @@ describe('AgentSessionManager', () => {
   })
 
   it('registers the session on the shared in-flight table', async () => {
-    const { manager } = buildManager()
+    const { manager } = buildManager(fakeStore())
     await manager.prompt('conv-1', 'hi')
 
     expect(abortPiInFlight('agent:conv-1')).toBe(true)
   })
 
   it('aborts and closes every session from abortAll', async () => {
-    const { manager } = buildManager()
+    const { manager } = buildManager(fakeStore())
     await manager.prompt('conv-1', 'hi')
     await manager.prompt('conv-2', 'hi')
 
@@ -216,10 +202,10 @@ describe('AgentSessionManager', () => {
   })
 
   it('creates a new Agent after abortAll instead of keeping the old session', async () => {
-    const { manager } = buildManager()
+    const { manager } = buildManager(fakeStore())
     await manager.prompt('conv-1', 'hi')
     manager.abortAll()
-    // 没有 store 时走内存会话：关掉之后必须还能重新开一个，而不是撞上旧 id。
+    // 关掉之后必须还能重新开一个，而不是撞上旧 id。
     expect(await manager.prompt('conv-1', 'again')).toEqual({ success: true })
 
     expect(createPiModelsMock).toHaveBeenCalledTimes(2)
@@ -227,9 +213,9 @@ describe('AgentSessionManager', () => {
   })
 
   it('passes the requested thinking level to the session and defaults to off', async () => {
-    const { manager } = buildManager()
+    const { manager } = buildManager(fakeStore())
     await manager.prompt('conv-1', 'hi')
-    await manager.prompt('conv-2', 'hi', undefined, undefined, undefined, undefined, 'project', 'high')
+    await manager.prompt('conv-2', 'hi', undefined, undefined, undefined, undefined, 'high')
 
     expect(h.createdOptions[0].thinkingLevel).toBe('off')
     expect(h.createdOptions[0].applySamplingThinking).toBe(true)
@@ -260,13 +246,13 @@ describe('AgentSessionManager', () => {
   })
 
   it('rebuilds the session when the thinking level changes and reuses it when it does not', async () => {
-    const { manager } = buildManager()
+    const { manager } = buildManager(fakeStore())
 
-    await manager.prompt('conv-1', 'hi', undefined, undefined, undefined, undefined, 'project', 'low')
-    await manager.prompt('conv-1', 'again', undefined, undefined, undefined, undefined, 'project', 'low')
+    await manager.prompt('conv-1', 'hi', undefined, undefined, undefined, undefined, 'low')
+    await manager.prompt('conv-1', 'again', undefined, undefined, undefined, undefined, 'low')
     expect(h.sessions).toHaveLength(1)
 
-    await manager.prompt('conv-1', 'third', undefined, undefined, undefined, undefined, 'project', 'high')
+    await manager.prompt('conv-1', 'third', undefined, undefined, undefined, undefined, 'high')
     expect(h.sessions).toHaveLength(2)
     expect(h.sessions[0].close).toHaveBeenCalled()
   })
@@ -285,7 +271,7 @@ describe('AgentSessionManager', () => {
       maxTokens: 100,
       purposes: ['generation'],
     }
-    const { manager } = buildManager(null, () => profile as never)
+    const { manager } = buildManager(fakeStore(), () => profile as never)
 
     await manager.prompt('conv-1', 'first')
     expect(h.sessions).toHaveLength(1)
@@ -299,7 +285,7 @@ describe('AgentSessionManager', () => {
 
   it('keeps the session when the runtime is unchanged but the profile disappears', async () => {
     let missing = false
-    const { manager } = buildManager(null, () => (missing
+    const { manager } = buildManager(fakeStore(), () => (missing
       ? null
       : { id: 'm1', name: 'M', provider: 'gemini', protocol: 'gemini', modelName: 'g', apiKey: 'k', baseUrl: 'https://x', temperature: 0.7, maxTokens: 100, purposes: ['generation'] }))
 
@@ -311,11 +297,11 @@ describe('AgentSessionManager', () => {
   })
 
   it('refuses to switch runtime while a turn is still running', async () => {
-    const { manager } = buildManager()
+    const { manager } = buildManager(fakeStore())
     await manager.prompt('conv-1', 'hi')
 
     h.busy = true
-    const result = await manager.prompt('conv-1', 'again', undefined, undefined, undefined, undefined, 'project', 'high')
+    const result = await manager.prompt('conv-1', 'again', undefined, undefined, undefined, undefined, 'high')
 
     expect(result.success).toBe(false)
     expect(result.error).toContain('还在生成')

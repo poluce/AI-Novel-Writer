@@ -12,7 +12,7 @@ import { laneConfig } from '@earendil-works/pi-agent-core/harness/session'
 
 import { DIR_VELA_INTERNAL } from '../../src/shared/project-paths'
 import { logFailure, logInfo } from '../../src/shared/fail-log'
-import { MODELS_CONFIG_PATH, readJsonFile, VELA_HOME } from '../utils/config-utils'
+import { MODELS_CONFIG_PATH, readJsonFile } from '../utils/config-utils'
 import { AGENT_LANE_NAME, VELA_SESSION_CONFIG } from './agent-session'
 import { isAssistantThinkingLevel, type AssistantThinkingLevel } from '../../src/shared/agent-runtime'
 import { normalizeModelProfiles } from '../../src/shared/model-profile'
@@ -21,7 +21,7 @@ import type {
   PersistedAgentMessage,
 } from '../../src/shared/agent-conversation-archive'
 
-/** 会话文件所在的一级目录名（项目内与 `~/.vela` 下同名）。 */
+/** 会话文件所在的一级目录名（项目内 `.vela` 下）。 */
 export const SESSIONS_DIR = 'agent-sessions'
 
 export interface AgentConversationStoreRoot {
@@ -161,7 +161,7 @@ export function foldEntriesToMessages(entries: readonly Entry[]): PersistedAgent
 }
 
 /**
- * 一个作用域的 Pi 会话仓储服务（单一真实数据源）。
+ * 助手会话仓储服务（单一真实数据源）：跟着打开的项目走。
  *
  * 负责会话的创建、打开、扫描还原、重命名与删除。
  */
@@ -173,19 +173,11 @@ export class AgentConversationStore {
   private scanned = false
   private closed = false
 
-  /** 项目助手：会话存档落在项目内，跟随书一起备份/删除。 */
+  /** 助手会话存档落在当前项目内，跟随书一起备份/删除。 */
   static forProject(projectPath: string): AgentConversationStore {
     return new AgentConversationStore({
       sessionsRoot: path.join(projectPath, DIR_VELA_INTERNAL, SESSIONS_DIR),
       cwd: projectPath,
-    })
-  }
-
-  /** 界面助手：会话存档落在应用数据目录，与项目无关。 */
-  static forGlobal(appDataRoot: string = VELA_HOME): AgentConversationStore {
-    return new AgentConversationStore({
-      sessionsRoot: path.join(appDataRoot, SESSIONS_DIR),
-      cwd: appDataRoot,
     })
   }
 

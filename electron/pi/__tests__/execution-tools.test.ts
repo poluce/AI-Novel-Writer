@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { BACKGROUND_CONTEXT, ok } from '@earendil-works/pi-agent-core'
 import type { ExecutionEnv } from '@earendil-works/pi-agent-core'
 
-import { buildExecutionTools, DEFAULT_COMMAND_TIMEOUT_SECONDS, globalExecutionEnv, projectExecutionEnv } from '../execution-tools'
+import { buildExecutionTools, DEFAULT_COMMAND_TIMEOUT_SECONDS, projectExecutionEnv } from '../execution-tools'
 import type { HarnessToolContext } from '../tool-types'
 
 const roots: string[] = []
@@ -82,16 +82,9 @@ describe('buildExecutionTools', () => {
 })
 
 describe('execution environments', () => {
-  it('pins the project assistant to the project root', () => {
+  it('pins the assistant execution environment to the project root', () => {
     const projectPath = temporaryDir()
     const env = projectExecutionEnv(projectPath)
     expect(env.cwd).toBe(projectPath)
-  })
-
-  it('gives the app assistant its own workspace and creates it on demand', () => {
-    const appDataRoot = temporaryDir()
-    const env = globalExecutionEnv(appDataRoot)
-    expect(env.cwd).toBe(path.join(appDataRoot, 'workspace'))
-    expect(fs.existsSync(env.cwd)).toBe(true)
   })
 })

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAgentStore, type AgentConversation } from '../../../../stores/agent-store'
 import { useLLMStore } from '../../../../stores/llm-store'
 import { useLocaleStore } from '../../../../stores/locale-store'
+import { useProjectStore } from '../../../../stores/project-store'
 import type { ModelProfile } from '../../../../shared/ipc-channels'
 import AgentInputBox from '../AgentInputBox'
 
@@ -13,6 +14,7 @@ let root: Root
 const originalAgentState = useAgentStore.getState()
 const originalLLMState = useLLMStore.getState()
 const originalLocaleState = useLocaleStore.getState()
+const originalProjectState = useProjectStore.getState()
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -39,8 +41,7 @@ function conversation(): AgentConversation {
     updatedAt: 1,
     mode: 'planning',
     modelId: null,
-    thinkingLevel: null,
-    scope: 'project'}
+    thinkingLevel: null}
 }
 
 function buttonWithText(fragment: string): HTMLButtonElement | undefined {
@@ -71,6 +72,15 @@ beforeEach(() => {
       profile({ id: 'p3', modelName: 'gpt-5', provider: 'openai', protocol: 'openai', baseUrl: 'https://api.openai.com/v1' }),
     ],
     defaultModelId: 'p1'})
+  // 助手只在项目内工作：输入框需要打开的项目才可用。
+  useProjectStore.setState({
+    currentProject: {
+      id: 'test-project',
+      name: '测试项目',
+      path: 'C:\\novels\\test-project',
+      novelConfig: {},
+    } as never,
+  })
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
@@ -82,6 +92,7 @@ afterEach(async () => {
   useAgentStore.setState(originalAgentState, true)
   useLLMStore.setState(originalLLMState, true)
   useLocaleStore.setState(originalLocaleState, true)
+  useProjectStore.setState(originalProjectState, true)
   vi.unstubAllGlobals()
 })
 

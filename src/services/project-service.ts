@@ -24,9 +24,7 @@ import { useAgentStore } from '../stores/agent-store'
 import { skillRegistry } from './agent/skill-registry'
 import {
   flushAgentConversations,
-  loadGlobalAgentConversations,
   loadProjectAgentConversations,
-  rememberHydratedArchive,
   subscribeAgentConversationPersistence,
 } from './agent/conversation-archive'
 import {
@@ -225,7 +223,6 @@ export function initProjectService(): void {
   )
 
   subscribeAgentConversationPersistence()
-  void hydrateGlobalAgentConversations()
   console.log('[ProjectService] 已初始化，事件监听已注册')
 }
 
@@ -263,7 +260,7 @@ export async function onProjectOpened(
   if (!isProjectSessionCurrent(projectSession)) return { warnings: [] }
 
   // 技能目录按项目变（`<项目>/.vela/skills` 只在这个项目下有），开项目必须重扫：
-  // 注册表只在会话第一次用到时加载一次，否则先跟界面助手聊过的会话会一直用着
+  // 注册表只在会话第一次用到时加载一次，否则先加载过的会话会一直用着
   // 没有项目技能的旧目录。这里已经在 currentProject 发布之后。
   void reloadSkills()
 
@@ -273,7 +270,6 @@ export async function onProjectOpened(
     useDraftStore.getState().loadAllDrafts(projectSession.projectPath, projectSession),
     loadProjectAgentConversations(projectSession).then((archive) => {
       if (!isProjectSessionCurrent(projectSession)) return
-      rememberHydratedArchive('project', archive)
       useAgentStore.getState().hydrateFromArchive(projectSession, archive)
     }),
   ])
@@ -319,9 +315,7 @@ export async function onProjectOpened(
  */
 export async function onProjectClosed(projectPath: string | null): Promise<void> {
   useAgentStore.getState().beginProjectLoad()
-  // 项目关掉之后没有项目助手可聊，自动回到界面助手。
-  useAgentStore.getState().setScope('global')
-  // 项目技能随项目一起消失，界面助手不该再看到它们。
+  // 项目技能随项目一起消失。
   void reloadSkills()
   const { useEditorStore } = await import('../stores/editor-store')
   if (projectPath) {
@@ -375,17 +369,6 @@ function syncFinalizedDraftTab(payload: EventPayloadMap['FINALIZE_COMPLETE']): v
   useEditorStore.setState(state => ({
     tabs: state.tabs.map(tab => reconcileFinalizationCompletion(tab, snapshot, completion)),
   }))
-}
-
-/** 界面助手的会话与项目无关：应用启动时就灌一次，之后由存档服务维护。 */
-export async function hydrateGlobalAgentConversations(): Promise<void> {
-  try {
-    const archive = await loadGlobalAgentConversations()
-    rememberHydratedArchive('global', archive)
-    useAgentStore.getState().replaceConversations('global', archive)
-  } catch (error) {
-    console.error('[ProjectService] 界面助手会话读取失败:', error)
-  }
 }
 
 /**

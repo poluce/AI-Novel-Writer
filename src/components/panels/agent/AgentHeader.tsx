@@ -1,7 +1,6 @@
 import { Plus, MoreHorizontal, X, Server, Sparkles, ChevronRight, History } from 'lucide-react'
 import { useAgentStore } from '../../../stores/agent-store'
 import { useLayoutStore } from '../../../stores/layout-store'
-import { useProjectStore } from '../../../stores/project-store'
 import { useMCPStore } from '../../../stores/mcp-store'
 import { skillRegistry, type LoadedSkill } from '../../../services/agent/skill-registry'
 import { skillDescription, skillDisplayName } from '../../../services/agent/skill-catalog'
@@ -12,37 +11,6 @@ import { MenuItem } from '../../ui/MenuItem'
 import { useOutsideClick } from '../../../hooks/useOutsideClick'
 import { useLocaleStore } from '../../../stores/locale-store'
 
-/** 助手切换的一枚标签 */
-function ScopeTab({
-  active,
-  disabled,
-  title,
-  label,
-  onClick}: {
-  active: boolean
-  disabled?: boolean
-  title: string
-  label: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      title={title}
-      disabled={disabled}
-      onClick={onClick}
-      className="px-2 py-0.5 rounded text-[0.7rem] font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-      style={{
-        backgroundColor: active ? 'var(--color-accent)' : 'transparent',
-        color: active ? '#fff' : 'var(--color-text-secondary)'}}
-    >
-      {label}
-    </button>
-  )
-}
-
 /**
  * Agent 面板顶部工具栏
  */
@@ -52,10 +20,7 @@ export default function AgentHeader() {
     createConversation,
     toggleHistory,
     showHistory,
-    getActiveConversation,
-    activeScope,
-    setScope} = useAgentStore()
-  const hasProject = useProjectStore(s => s.currentProject !== null)
+    getActiveConversation} = useAgentStore()
   const toggleAIPanel = useLayoutStore(s => s.toggleAIPanel)
   const [showMore, setShowMore] = useState(false)
   const [subView, setSubView] = useState<'main' | 'mcp' | 'skills'>('main')
@@ -92,30 +57,6 @@ export default function AgentHeader() {
         height: 'var(--height-panel-header)',
         borderBottom: '1px solid var(--color-border)'}}
     >
-      {/* 助手切换：项目助手（跟着书）/ 界面助手（跟着应用） */}
-      <div
-        className="flex min-w-0 items-center gap-0.5 rounded-md p-0.5"
-        style={{ backgroundColor: 'var(--color-hover)' }}
-        role="tablist"
-        aria-label={text('助手切换', 'Assistant switch')}
-      >
-        <ScopeTab
-          active={hasProject && activeScope === 'project'}
-          disabled={!hasProject}
-          title={hasProject
-            ? text('项目助手：读写当前项目资料', 'Project assistant: works on this project')
-            : text('打开项目后可用', 'Available once a project is open')}
-          label={text('项目助手', 'Project')}
-          onClick={() => setScope('project')}
-        />
-        <ScopeTab
-          active={!hasProject || activeScope === 'global'}
-          title={text('界面助手：不依赖项目，随时可用', 'App assistant: always available, no project needed')}
-          label={text('界面助手', 'App')}
-          onClick={() => setScope('global')}
-        />
-      </div>
-
       {/* 右侧工具按钮组 */}
       <div className="flex items-center gap-1.5 px-0.5 flex-shrink-0">
 

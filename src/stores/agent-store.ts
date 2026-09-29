@@ -41,7 +41,6 @@ import type {
 import { handleRendererAction } from '../services/agent/renderer-actions'
 import { useLocaleStore } from './locale-store'
 import type { Locale } from '../i18n/types'
-import { DEFAULT_AGENT_SCOPE, type AgentScope } from '../shared/agent-scope'
 
 export { handleRendererAction }
 
@@ -78,20 +77,14 @@ export interface AgentConversation {
   modelId: string | null
   /** 会话级思考等级；null 表示不指定（Pi 默认的 off）。 */
   thinkingLevel: AssistantThinkingLevel | null
-  /** 属于哪个助手：项目助手（跟着书）/ 界面助手（跟着应用） */
-  scope: AgentScope
 }
 
 // ===== Store 状态接口 =====
 
 export interface AgentState {
-  /** 所有会话列表（最新的排在前面，两个助手共用一份，用 scope 区分） */
+  /** 所有会话列表（最新的排在前面） */
   conversations: AgentConversation[]
-  /** 当前展示的助手作用域 */
-  activeScope: AgentScope
-  /** 每个作用域各自记住的活跃会话（切回来时还原） */
-  scopeActiveConversationIds: Record<AgentScope, string | null>
-  /** 当前活跃会话 ID（属于 activeScope） */
+  /** 当前活跃会话 ID */
   activeConversationId: string | null
   /** 是否显示历史面板 */
   showHistory: boolean
@@ -125,10 +118,8 @@ export interface AgentState {
   deleteConversation: (id: string) => void
   /** 重命名会话 */
   renameConversation: (id: string, title: string) => void
-  /** 清空当前助手的会话（不会动另一个助手） */
+  /** 清空当前项目的全部会话 */
   clearAll: () => void
-  /** 切换助手作用域（项目助手 / 界面助手） */
-  setScope: (scope: AgentScope) => void
   /** 切换历史面板 */
   toggleHistory: () => void
   /** 设置历史面板可见性 */
@@ -145,12 +136,10 @@ export interface AgentState {
   cancelGeneration: () => Promise<void>
   /** 响应 Tool 确认（用于 ConfirmCard） */
   resolveToolConfirmation: (toolCallId: string, confirmed: boolean, options?: unknown) => void
-  /** 切书/开书前清空界面会话，避免短暂显示上一本的对话 */
+  /** 切书/开书前清空会话，避免短暂显示上一本的对话 */
   beginProjectLoad: () => void
   /** 用当前项目存档替换内存中的会话 */
   hydrateFromArchive: (projectSession: ProjectSessionContext, archive: AgentConversationArchive) => void
-  /** 用某个助手的存档替换该作用域的会话（项目/界面共用） */
-  replaceConversations: (scope: AgentScope, archive: AgentConversationArchive) => void
   addComposerCitation: (citation: DraftPassageCitation) => void
   removeComposerCitation: (id: string) => void
 }
@@ -162,12 +151,10 @@ const genId = () => crypto.randomUUID()
 
 function fromPersistedConversation(
   conversation: PersistedAgentConversation,
-  scope: AgentScope,
 ): AgentConversation {
   return {
     id: conversation.id,
     title: conversation.title,
-    scope,
     createdAt: conversation.createdAt,
     updatedAt: conversation.updatedAt,
     mode: conversation.mode,
@@ -310,8 +297,6 @@ function getSavedExecutionMode(): 'plan' | 'writing' {
 
 export const useAgentStore = create<AgentState>()((set, get) => ({
   conversations: [],
-  activeScope: DEFAULT_AGENT_SCOPE,
-  scopeActiveConversationIds: { project: null, global: null },
   activeConversationId: null,
   showHistory: false,
   defaultMode: 'planning',
@@ -346,9 +331,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     // 确保 Tool 已初始化
     get().initializeTools()
 
-    const scope = get().activeScope
     const previous = get().getActiveConversation()
-    const inheritFromPrevious = previous?.scope === scope ? previous : null
 
     const newConv: AgentConversation = {
       id: genId(),
@@ -357,58 +340,30 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       createdAt: Date.now(),
       updatedAt: Date.now(),
       mode: get().defaultMode,
-      // 新会话抄当前这条同作用域对话的模型和思考档；没有上一条才留空，
+      // 新会话抄上一条对话的模型和思考档；没有上一条才留空，
       // 运行时自动跟随项目助手预设模型 / 默认思考。
-      modelId: inheritFromPrevious?.modelId ?? null,
-      thinkingLevel: inheritFromPrevious?.thinkingLevel ?? null,
-      scope,
+      modelId: previous?.modelId ?? null,
+      thinkingLevel: previous?.thinkingLevel ?? null,
     }
     set(state => ({
       conversations: [newConv, ...state.conversations],
       activeConversationId: newConv.id,
-      scopeActiveConversationIds: {
-        ...state.scopeActiveConversationIds,
-        [newConv.scope]: newConv.id,
-      },
       showHistory: false,
     }))
     return newConv
   },
 
   selectConversation: (id) => {
-    set(state => ({
-      activeConversationId: id,
-      scopeActiveConversationIds: { ...state.scopeActiveConversationIds, [state.activeScope]: id },
-      showHistory: false,
-    }))
-  },
-
-  setScope: (scope) => {
-    const state = get()
-    if (state.activeScope === scope) return
-    const remembered = state.scopeActiveConversationIds[scope] ?? null
-    const inScope = state.conversations.filter(conversation => conversation.scope === scope)
-    const nextActive = remembered && inScope.some(conversation => conversation.id === remembered)
-      ? remembered
-      : inScope[0]?.id ?? null
     set({
-      activeScope: scope,
-      activeConversationId: nextActive,
-      scopeActiveConversationIds: {
-        ...state.scopeActiveConversationIds,
-        [state.activeScope]: state.activeConversationId,
-        [scope]: nextActive,
-      },
+      activeConversationId: id,
       showHistory: false,
     })
   },
 
   deleteConversation: (id) => {
-    // Pi 会话存档跟着一起删；存档在哪个作用域，就删哪一份。
-    const scope = get().conversations.find(conversation => conversation.id === id)?.scope
-      ?? get().activeScope
-    void ipc.invoke('agent:discard-session', id, scope).catch((error) => {
-      logFailure('Agent', 'discard conversation session failed', error, { conversationId: id, scope })
+    // Pi 会话存档跟着一起删。
+    void ipc.invoke('agent:discard-session', id).catch((error) => {
+      logFailure('Agent', 'discard conversation session failed', error, { conversationId: id })
     })
     set(state => {
       const filtered = state.conversations.filter(c => c.id !== id)
@@ -421,8 +376,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   },
 
   renameConversation: (id, title) => {
-    const scope = get().conversations.find(c => c.id === id)?.scope ?? get().activeScope
-    void ipc.invoke('agent:rename-conversation', id, title, scope).catch(() => {})
+    void ipc.invoke('agent:rename-conversation', id, title).catch(() => {})
     set(state => ({
       conversations: state.conversations.map(c => c.id === id ? { ...c, title, updatedAt: Date.now() } : c),
     }))
@@ -430,34 +384,28 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
 
   clearAll: () => {
     const state = get()
-    // 只清当前助手：在项目里点「清空」不能把界面助手的全局会话一起删掉。
-    const doomed = state.conversations.filter(conversation => conversation.scope === state.activeScope)
-    for (const conversation of doomed) {
-      void ipc.invoke('agent:discard-session', conversation.id, conversation.scope).catch((error) => {
+    for (const conversation of state.conversations) {
+      void ipc.invoke('agent:discard-session', conversation.id).catch((error) => {
         logFailure('Agent', 'discard conversation session failed', error, {
           conversationId: conversation.id,
-          scope: conversation.scope,
         })
       })
     }
-    set(current => ({
-      conversations: current.conversations.filter(c => c.scope !== current.activeScope),
+    set({
+      conversations: [],
       activeConversationId: null,
-      scopeActiveConversationIds: { ...current.scopeActiveConversationIds, [current.activeScope]: null },
-    }))
+    })
   },
 
   beginProjectLoad: () => {
-    set(state => ({
-      conversations: state.conversations.filter(c => c.scope !== 'project'),
-      activeScope: 'project',
+    set({
+      conversations: [],
       activeConversationId: null,
-      scopeActiveConversationIds: { ...state.scopeActiveConversationIds, project: null },
       showHistory: false,
       activeRequestId: null,
       dataProjectSession: null,
       composerCitations: [],
-    }))
+    })
   },
 
   addComposerCitation: (citation) => {
@@ -476,41 +424,17 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   },
 
   hydrateFromArchive: (projectSession, archive) => {
-    const conversations = archive.conversations.map(item => fromPersistedConversation(item, 'project'))
+    const conversations = archive.conversations.map(fromPersistedConversation)
     const activeConversationId = archive.activeConversationId
       && conversations.some(conversation => conversation.id === archive.activeConversationId)
       ? archive.activeConversationId
       : conversations[0]?.id ?? null
-    set(state => ({
-      // 界面助手的会话与当前项目无关，保留它们。
-      conversations: [...conversations, ...state.conversations.filter(c => c.scope !== 'project')],
-      activeScope: 'project',
+    set({
+      conversations,
       activeConversationId,
-      scopeActiveConversationIds: { ...state.scopeActiveConversationIds, project: activeConversationId },
       showHistory: false,
       activeRequestId: null,
       dataProjectSession: projectSession,
-    }))
-  },
-
-  replaceConversations: (scope, archive) => {
-    const conversations = archive.conversations.map(item => fromPersistedConversation(item, scope))
-    const activeConversationId = archive.activeConversationId
-      && conversations.some(conversation => conversation.id === archive.activeConversationId)
-      ? archive.activeConversationId
-      : conversations[0]?.id ?? null
-    set(state => {
-      const others = state.conversations.filter(c => c.scope !== scope)
-      const keepCurrent = state.activeScope !== scope
-      return {
-        conversations: [...conversations, ...others],
-        activeConversationId: keepCurrent ? state.activeConversationId : activeConversationId,
-        scopeActiveConversationIds: {
-          ...state.scopeActiveConversationIds,
-          [scope]: activeConversationId,
-          ...(keepCurrent ? { [state.activeScope]: state.activeConversationId } : {}),
-        },
-      }
     })
   },
 
@@ -543,8 +467,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         c.id === conv.id ? { ...c, modelId } : c
       ),
     }))
-    // 仅项目助手自动将用户选择的模型持久化保存到全局 taskModelRouting['assistant']
-    if (conv.scope === 'project' && modelId) {
+    // 助手选择的模型自动持久化保存到全局 taskModelRouting['assistant']
+    if (modelId) {
       const currentRouting = useLLMStore.getState().taskModelRouting['assistant']
       void useLLMStore.getState().setTaskConfig('assistant', {
         ...currentRouting,
@@ -560,8 +484,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         c.id === conv.id ? { ...c, thinkingLevel } : c
       ),
     }))
-    // 仅项目助手自动将用户选择的思考档位持久化保存到全局 taskModelRouting['assistant']
-    if (conv.scope === 'project' && thinkingLevel) {
+    // 助手选择的思考档位自动持久化保存到全局 taskModelRouting['assistant']
+    if (thinkingLevel) {
       const currentRouting = useLLMStore.getState().taskModelRouting['assistant']
       void useLLMStore.getState().setTaskConfig('assistant', {
         ...currentRouting,
@@ -592,8 +516,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
           case 'clear': {
             const activeConv = get().getActiveConversation()
             if (activeConv) {
-              void ipc.invoke('agent:discard-session', activeConv.id, activeConv.scope).catch((error) => {
-                logFailure('Agent', 'discard conversation session on clear failed', error, { conversationId: activeConv.id, scope: activeConv.scope })
+              void ipc.invoke('agent:discard-session', activeConv.id).catch((error) => {
+                logFailure('Agent', 'discard conversation session on clear failed', error, { conversationId: activeConv.id })
               })
               set(state => ({
                 conversations: state.conversations.map(c =>
@@ -711,7 +635,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       ),
     }))
     if (isFirstMsg) {
-      void ipc.invoke('agent:rename-conversation', convId, newTitle, conv.scope).catch(() => {})
+      void ipc.invoke('agent:rename-conversation', convId, newTitle).catch(() => {})
     }
     // 辅助函数：更新助手消息
     const updateAssistantMsg = (updater: (msg: AgentMessage) => AgentMessage) => {
@@ -751,7 +675,6 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         captureAgentEditorSnapshot(),
         toAgentPromptHistory(conv.messages),
         buildAgentSkillCatalog(executionContext.writingLanguage),
-        conv.scope,
         thinkingLevel,
         get().executionMode,
       )

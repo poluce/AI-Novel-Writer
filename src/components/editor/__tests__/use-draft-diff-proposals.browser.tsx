@@ -54,7 +54,6 @@ describe('useDraftDiffProposals hook', () => {
       mode: 'planning',
       modelId: null,
       thinkingLevel: null,
-      scope: 'project',
       messages: [
         {
           id: 'msg-1',

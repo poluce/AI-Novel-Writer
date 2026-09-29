@@ -1,7 +1,6 @@
 
 import type { WritingLanguage } from '../../src/shared/writing-language'
 import type { RendererActionSink } from '../../src/shared/agent-events'
-import type { AgentScope } from '../../src/shared/agent-scope'
 
 import { createReadArchitectureTool } from './tools/read-architecture.tool'
 import { createNovelConfigTool } from './tools/novel-config.tool'
@@ -35,37 +34,31 @@ function withExecutionMode(tool: AnyAgentTool): AnyAgentTool {
 /**
  * Build the tools one agent session may use.
  *
- * 项目助手挂全部项目工具；界面助手（没有项目时也在用）只挂不依赖项目的
- * 技能检查与 MCP——项目读写类工具在没有项目时只会失败。
+ * 助手只存在于项目内，因此始终挂完整的项目工具集；技能检查与 MCP
+ * 不依赖项目，与项目工具一起装配。
  */
 export function buildAgentTools(
   language: WritingLanguage,
   rendererAction: RendererActionSink,
-  scope: AgentScope = 'project',
   skills: readonly AgentSkillCatalogEntry[] = [],
   skillRoots: readonly string[] = [],
 ): AnyAgentTool[] {
-  const projectTools: AnyAgentTool[] = scope === 'project'
-    ? [
-      createNovelConfigTool(language, rendererAction),
-      createStoryArchitectureTool(language, rendererAction),
-      createReadArchitectureTool(language),
-      createReadBlueprintTool(language),
-      createManageDraftsTool(language, rendererAction),
-      createReadProjectStateTool(language),
-      createSearchKnowledgeTool(language),
-      createReadFileTool(language),
-      createInstallWritingSkillTool(language),
-      createBindWritingSkillTool(language),
-      createOpenEditorTool(language, rendererAction),
-      createProposeChapterBlueprintTool(language),
-      createManageCharactersTool(language, rendererAction),
-    ]
-    : []
   return [
-    ...projectTools,
+    createNovelConfigTool(language, rendererAction),
+    createStoryArchitectureTool(language, rendererAction),
+    createReadArchitectureTool(language),
+    createReadBlueprintTool(language),
+    createManageDraftsTool(language, rendererAction),
+    createReadProjectStateTool(language),
+    createSearchKnowledgeTool(language),
+    createReadFileTool(language),
+    createInstallWritingSkillTool(language),
+    createBindWritingSkillTool(language),
+    createOpenEditorTool(language, rendererAction),
+    createProposeChapterBlueprintTool(language),
+    createManageCharactersTool(language, rendererAction),
     createInspectWritingSkillTool(language),
-    // 渐进式披露：目录进提示词，正文由模型按需取（两个作用域都有）。
+    // 渐进式披露：目录进提示词，正文由模型按需取。
     createLoadWritingSkillTool(language, skills, skillRoots),
     ...buildMcpAgentTools(language),
   ].map(withExecutionMode)

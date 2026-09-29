@@ -17,11 +17,6 @@ import {
   type SecureFileCapability,
 } from '../security/windows-safe-file-system'
 import type { AnyHarnessTool } from './tool-types'
-import { VELA_HOME } from '../utils/config-utils'
-import { logFailure } from '../../src/shared/fail-log'
-
-/** 界面助手的工作目录：没有项目时它有自己的一块地，不碰别处。 */
-export const AGENT_WORKSPACE_DIR = 'workspace'
 
 /** 没写 timeout 的命令按这个上限跑，避免一条命令把会话挂死。 */
 export const DEFAULT_COMMAND_TIMEOUT_SECONDS = 120
@@ -30,8 +25,8 @@ export const DEFAULT_COMMAND_TIMEOUT_SECONDS = 120
  * Pi harness 自带的执行工具：读、写、改文件与执行命令。
  *
  * 它们只认 `ExecutionEnv`，所以真正决定"助手能碰哪里"的是调用方传进来的
- * env（见 `projectExecutionEnv` / `globalExecutionEnv`）。写与执行类工具都
- * 进了确认白名单，每一次改动都要用户在确认卡上点头。
+ * env（见 `projectExecutionEnv`）。写与执行类工具都进了确认白名单，
+ * 每一次改动都要用户在确认卡上点头。
  *
  * 写文件与领域工具 `write_file` 共用同一条原子写路径和提交态语义
  * （见 `ConfinedExecutionEnv` 的 `writeTextAtomically`）；`bash` 天然无法
@@ -118,30 +113,11 @@ async function plainAtomicTextWrite(fullPath: string, content: string): Promise<
   }
 }
 
-/** 项目助手：cwd 与可访问范围都钉在项目根。 */
+/** 助手执行环境：cwd 与可访问范围都钉在项目根。 */
 export function projectExecutionEnv(projectPath: string): ConfinedExecutionEnv {
   return new ConfinedExecutionEnv(
     new NodeExecutionEnv({ cwd: projectPath }),
     [projectPath],
     { writeTextAtomically: agentAtomicTextWrite([projectPath]) },
-  )
-}
-
-/**
- * 界面助手：工作目录是 `~/.vela/workspace`，另外放行用户级技能目录，
- * 好让它读得到技能文件正文。
- */
-export function globalExecutionEnv(appDataRoot: string = VELA_HOME): ConfinedExecutionEnv {
-  const workspace = path.join(appDataRoot, AGENT_WORKSPACE_DIR)
-  const skillsRoot = path.join(appDataRoot, 'skills')
-  try {
-    fs.mkdirSync(workspace, { recursive: true })
-  } catch (error) {
-    logFailure('Agent', 'failed to create agent workspace', error, { workspace })
-  }
-  return new ConfinedExecutionEnv(
-    new NodeExecutionEnv({ cwd: workspace }),
-    [workspace, skillsRoot],
-    { writeTextAtomically: agentAtomicTextWrite([workspace, skillsRoot]) },
   )
 }

@@ -206,7 +206,7 @@ export function registerAppDataController(): void {
    * 技能目录：用户级 + 当前项目级。
    *
    * 带项目时必须先以当前租约认证项目身份，并把技能根钉在项目内；不带项目
-   * （界面助手/启动早期）只读应用数据目录下的用户技能。扫描本身交给 Pi 的
+   * （设置页/启动早期）只读应用数据目录下的用户技能。扫描本身交给 Pi 的
    * 加载器，规范诊断随目录一起返回，渲染层据此提示而不是静默跳过。
    */
   ipcMain.handle('skills:load-user-catalog', async () => {

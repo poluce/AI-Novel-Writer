@@ -14,7 +14,6 @@ import type { ModelCapabilities } from './provider-presets'
 import type { ModelProviderResourceId } from './model-provider-resources'
 import type { WritingLanguage } from './writing-language'
 import type { AgentSkillCatalogEntry } from './agent-skills'
-import type { AgentScope } from './agent-scope'
 import type { AgentEditorSnapshot, PiAgentEvent, RendererAction, RendererActionResult } from './agent-events'
 import type { AgentPromptHistoryTurn } from './agent-conversation-archive'
 import type { AssistantThinkingLevel } from './agent-runtime'
@@ -1167,7 +1166,6 @@ export interface AgentChannels {
       editorSnapshot?: AgentEditorSnapshot,
       history?: AgentPromptHistoryTurn[],
       skills?: AgentSkillCatalogEntry[],
-      scope?: AgentScope,
       /** 会话级思考等级；缺省表示不指定（Pi 默认的 off）。 */
       thinkingLevel?: AssistantThinkingLevel,
       /** 执行模式：'plan'（审查/计划）| 'writing'（全自动写作） */
@@ -1185,12 +1183,12 @@ export interface AgentChannels {
     return: { success: boolean }
   }
   'agent:discard-session': {
-    args: [conversationId: string, scope?: AgentScope]
+    args: [conversationId: string]
     return: { success: boolean }
   }
   /** 原生会话列表：由主进程直接从底层 .jsonl 扫描还原 */
   'agent:list-conversations': {
-    args: [scope?: AgentScope]
+    args: []
     return: {
       success: boolean
       conversations: import('./agent-conversation-archive').PersistedAgentConversation[]
@@ -1200,11 +1198,11 @@ export interface AgentChannels {
   }
   /** 原生会话重命名：直接固化到 session.setName */
   'agent:rename-conversation': {
-    args: [conversationId: string, title: string, scope?: AgentScope]
+    args: [conversationId: string, title: string]
     return: { success: boolean; error?: string }
   }
   'agent:system-prompt': {
-    args: [skills?: AgentSkillCatalogEntry[], scope?: AgentScope]
+    args: [skills?: AgentSkillCatalogEntry[]]
     return: { success: boolean; prompt?: string; error?: string }
   }
   'agent:renderer-action-result': {

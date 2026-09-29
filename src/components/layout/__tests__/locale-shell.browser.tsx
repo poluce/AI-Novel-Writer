@@ -119,20 +119,16 @@ describe('locale shell browser regression', () => {
     await act(async () => root.render(<LocaleShell />))
 
     await expect.element(page.getByText('新建项目', { exact: true })).toBeVisible()
-    await expect.element(page.getByRole('tab', { name: '项目助手' })).toBeVisible()
     await expect.element(page.getByText('模型调用', { exact: true })).toBeVisible()
     await expect.element(page.getByText('应用更新', { exact: true })).toBeVisible()
 
     await act(async () => page.getByTestId('switch-to-english').click())
 
     await expect.element(page.getByText('New project', { exact: true })).toBeVisible()
-    await expect.element(page.getByRole('tab', { name: 'Project' })).toBeVisible()
-    await expect.element(page.getByRole('tab', { name: 'App' })).toBeVisible()
     await expect.element(page.getByText('Model calls', { exact: true })).toBeVisible()
     await expect.element(page.getByText('App updates', { exact: true })).toBeVisible()
     expect(page.getByText('新建项目', { exact: true }).query()).toBeNull()
     expect(page.getByText('应用更新', { exact: true }).query()).toBeNull()
-    expect(page.getByRole('tab', { name: '项目助手' }).query()).toBeNull()
 
     const card = page.getByRole('region', { name: 'App updates' }).element()
       .querySelector(':scope > div') as HTMLElement

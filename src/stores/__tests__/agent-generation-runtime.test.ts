@@ -20,7 +20,6 @@ vi.mock('../../services/ipc-client', () => ({
 describe('Agent IPC bridge', () => {
   beforeEach(() => {
     useAgentStore.setState({
-      activeScope: 'project',
       conversations: [],
       activeConversationId: null,
       activeRequestId: null,
@@ -55,8 +54,6 @@ describe('Agent IPC bridge', () => {
       [],
       // 技能目录随每一轮发给主进程，供系统提示词列出可用技能。
       expect.any(Array),
-      // 会话属于哪个助手：项目助手 / 界面助手。
-      'project',
       // 没选思考等级就不传，主进程按 Pi 默认的 off 处理。
       undefined,
       'plan',
@@ -74,7 +71,7 @@ describe('Agent IPC bridge', () => {
     const sent = ipcInvoke.mock.calls.find(call => call[0] === 'agent:prompt')
     expect(sent?.[3]).toBe('model-b')
     // 换渠道不该丢掉用户选的思考等级。
-    expect(sent?.[8]).toBe('high')
+    expect(sent?.[7]).toBe('high')
   })
 
   it('prepends composer draft citations to the outgoing user message', async () => {
@@ -124,7 +121,6 @@ describe('Agent IPC bridge', () => {
       expect.any(Object),
       [],
       expect.any(Array),
-      'project',
       undefined,
       'plan',
     )

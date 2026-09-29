@@ -3,7 +3,7 @@ import { ipcMain, BrowserWindow } from 'electron'
 import { AgentSessionManager } from './agent-session-manager'
 import { AgentConversationStore } from './agent-conversation-store'
 import { setPiProjectCloseHook } from './in-flight'
-import { globalExecutionEnv, projectExecutionEnv } from './execution-tools'
+import { projectExecutionEnv } from './execution-tools'
 import { projectSkillsRoot, userSkillsRoot } from '../services/writing-skill-catalog'
 import { createRendererActionDispatcher } from './renderer-action-dispatch'
 import type { AgentEditorSnapshot, RendererActionResult } from '../../src/shared/agent-events'
@@ -11,7 +11,6 @@ import {
   acceptedAssistantThinkingLevel,
 } from '../../src/shared/agent-runtime'
 import { isAgentSkillCatalog, type AgentSkillCatalogEntry } from '../../src/shared/agent-skills'
-import { isAgentScope, type AgentScope } from '../../src/shared/agent-scope'
 import type { AgentPromptHistoryTurn } from '../../src/shared/agent-conversation-archive'
 
 import {
@@ -62,31 +61,17 @@ function resolveLanguage(): WritingLanguage {
 }
 
 function resolveSystemPrompt(
-  scope: AgentScope,
   skills?: readonly AgentSkillCatalogEntry[],
 ): string {
-  // 界面助手没有项目事实：core 传 null，身份提示词也只读全局覆盖文件。
-  const core = scope === 'project' ? ProjectCoreRepository.get() : null
-  const projectPath = scope === 'project' ? getCurrentProjectPath() : undefined
+  // 助手只在项目内工作：L0 项目事实与项目级身份覆盖都以当前书为准。
+  const core = ProjectCoreRepository.get()
+  const projectPath = getCurrentProjectPath()
   const language = core?.writingLanguage ?? DEFAULT_WRITING_LANGUAGE
   return buildMainProcessAgentSystemPrompt(
     core,
     loadAssistantWritingIdentity(language, { projectPath }),
     skills,
-    scope,
   )
-}
-
-/** 作用域由渲染层给出；缺失或非法时按项目助手处理（保持旧行为）。 */
-function acceptedScope(value: unknown): AgentScope {
-  if (value === undefined) return 'project'
-  if (!isAgentScope(value)) {
-    logFailure('Agent', 'rejected malformed agent scope', undefined, {
-      received: typeof value,
-    })
-    return 'project'
-  }
-  return value
 }
 
 /**
@@ -106,19 +91,13 @@ function acceptedSkillCatalog(value: unknown): AgentSkillCatalogEntry[] | undefi
 }
 
 /**
- * 助手会话存档按项目隔离：换书必须换存档，且旧存档要关掉文件句柄。
- * 只在有项目时创建；项目路径变了就重建。
+ * 助手会话存档跟着当前项目走：换书必须换存档，且旧存档要关掉文件句柄。
+ * 没有打开项目时不创建存档（此时助手不可用，由会话管理器拒绝这一轮）。
  */
 let conversationStore: AgentConversationStore | null = null
 let conversationStorePath: string | null = null
-// 界面助手与项目无关，整个应用生命周期共用一份存档。
-let globalConversationStore: AgentConversationStore | null = null
 
-function resolveConversationStore(scope: AgentScope): AgentConversationStore | null {
-  if (scope === 'global') {
-    globalConversationStore ??= AgentConversationStore.forGlobal()
-    return globalConversationStore
-  }
+function resolveConversationStore(): AgentConversationStore | null {
   const projectPath = getCurrentProjectPath()
   if (!projectPath) {
     closeConversationStore()
@@ -185,16 +164,15 @@ export function registerAgentController(): void {
   })
   const manager = new AgentSessionManager({
     resolveModel,
-    resolveSystemPrompt: (_conversationId, scope, skills) => resolveSystemPrompt(scope, skills),
+    resolveSystemPrompt: (_conversationId, skills) => resolveSystemPrompt(skills),
     resolveLanguage: () => resolveLanguage(),
     emit: (conversationId, event) => {
       mainWindow()?.webContents.send('agent:event', { conversationId, event })
     },
     rendererAction: (action) => dispatcher.rendererAction(action),
-    resolveConversationStore: (scope) => resolveConversationStore(scope),
-    // 执行工具的沙箱：项目助手钉在项目根，界面助手用自己的 workspace。
-    resolveToolEnvironment: (scope) => {
-      if (scope === 'global') return globalExecutionEnv()
+    resolveConversationStore: () => resolveConversationStore(),
+    // 执行工具的沙箱钉在项目根；没有项目时助手整体不可用。
+    resolveToolEnvironment: () => {
       const projectPath = getCurrentProjectPath()
       return projectPath ? projectExecutionEnv(projectPath) : null
     },
@@ -208,14 +186,12 @@ export function registerAgentController(): void {
       return roots
     },
     // 助手对话与工作流共用同一条采样参数策略：策略取自项目创作策略。
-    resolveCreativeStrategy: (scope) => (
-      scope === 'project' ? ProjectCoreRepository.get()?.creativeStrategy : undefined
-    ),
+    resolveCreativeStrategy: () => ProjectCoreRepository.get()?.creativeStrategy,
   })
   setPiProjectCloseHook(() => {
     dispatcher.abortAll()
     manager.abortAll()
-    // 项目存档随项目关闭一起收起；界面助手的存档与应用同生命周期。
+    // 助手存档跟着项目走，随项目关闭一起收起。
     closeConversationStore()
   })
 
@@ -227,7 +203,6 @@ export function registerAgentController(): void {
     editorSnapshot?: AgentEditorSnapshot,
     history?: AgentPromptHistoryTurn[],
     skills?: unknown,
-    scope?: unknown,
     thinkingLevel?: unknown,
     executionMode?: unknown,
   ) => {
@@ -239,7 +214,6 @@ export function registerAgentController(): void {
       editorSnapshot,
       history,
       acceptedSkillCatalog(skills),
-      acceptedScope(scope),
       acceptedAssistantThinkingLevel(thinkingLevel),
       resolvedExecutionMode,
     )
@@ -249,9 +223,9 @@ export function registerAgentController(): void {
     return manager.confirm(conversationId, toolCallId, confirmed)
   })
 
-  ipcMain.handle('agent:discard-session', async (_event, conversationId: string, scope?: unknown) => {
+  ipcMain.handle('agent:discard-session', async (_event, conversationId: string) => {
     if (!conversationId || typeof conversationId !== 'string') return { success: false }
-    return manager.discard(conversationId, acceptedScope(scope))
+    return manager.discard(conversationId)
   })
 
   ipcMain.handle('agent:abort', async (_event, conversationId: string) => {
@@ -266,11 +240,11 @@ export function registerAgentController(): void {
     return { success: dispatcher.complete(requestId, result) }
   })
 
-  ipcMain.handle('agent:system-prompt', async (_event, skills?: unknown, scope?: unknown) => {
+  ipcMain.handle('agent:system-prompt', async (_event, skills?: unknown) => {
     try {
       return {
         success: true,
-        prompt: resolveSystemPrompt(acceptedScope(scope), acceptedSkillCatalog(skills)),
+        prompt: resolveSystemPrompt(acceptedSkillCatalog(skills)),
       }
     } catch (error) {
       return {
@@ -280,25 +254,25 @@ export function registerAgentController(): void {
     }
   })
 
-  ipcMain.handle('agent:list-conversations', async (_event, scope?: unknown) => {
+  ipcMain.handle('agent:list-conversations', async () => {
     try {
-      const result = await manager.listConversations(acceptedScope(scope))
+      const result = await manager.listConversations()
       return { success: true, conversations: result.conversations, activeConversationId: result.activeConversationId }
     } catch (error) {
-      logFailure('Agent', 'failed to list conversations', error, { scope })
+      logFailure('Agent', 'failed to list conversations', error)
       return { success: false, conversations: [], activeConversationId: null, error: String(error) }
     }
   })
 
-  ipcMain.handle('agent:rename-conversation', async (_event, conversationId: string, title: string, scope?: unknown) => {
+  ipcMain.handle('agent:rename-conversation', async (_event, conversationId: string, title: string) => {
     if (!conversationId || typeof conversationId !== 'string' || typeof title !== 'string') {
       return { success: false, error: '参数无效' }
     }
     try {
-      const success = await manager.renameConversation(conversationId, title.trim(), acceptedScope(scope))
+      const success = await manager.renameConversation(conversationId, title.trim())
       return { success }
     } catch (error) {
-      logFailure('Agent', 'failed to rename conversation', error, { conversationId, scope })
+      logFailure('Agent', 'failed to rename conversation', error, { conversationId })
       return { success: false, error: String(error) }
     }
   })

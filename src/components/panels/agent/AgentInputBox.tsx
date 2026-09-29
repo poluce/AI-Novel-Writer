@@ -13,6 +13,7 @@ import {
   Check} from 'lucide-react'
 import { selectIsGenerating, useAgentStore } from '../../../stores/agent-store'
 import { useLLMStore } from '../../../stores/llm-store'
+import { useProjectStore } from '../../../stores/project-store'
 import {
   groupModelsByChannel,
   type AssistantThinkingLevel} from '../../../shared/agent-runtime'
@@ -35,6 +36,8 @@ export default function AgentInputBox() {
   const [inputText, setInputText] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const { sendMessage, cancelGeneration, setModelId, setThinkingLevel, removeComposerCitation, setExecutionMode } = useAgentStore()
+  // 助手只在项目内工作：没有打开项目时输入框整体不可用。
+  const hasProject = useProjectStore(s => s.currentProject !== null)
   const composerCitations = useAgentStore(s => s.composerCitations)
   const executionMode = useAgentStore(s => s.executionMode)
   const generating = useAgentStore(selectIsGenerating)
@@ -192,11 +195,12 @@ export default function AgentInputBox() {
       await cancelGeneration()
       return
     }
+    if (!hasProject) return
     if (!inputText.trim() && composerCitations.length === 0) return
     const text = inputText
     setInputText('')
     await sendMessage(text)
-  }, [composerCitations.length, generating, inputText, sendMessage, cancelGeneration])
+  }, [hasProject, composerCitations.length, generating, inputText, sendMessage, cancelGeneration])
 
   /** 键盘事件：Enter 发送，Shift+Enter 换行 */
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -217,7 +221,7 @@ export default function AgentInputBox() {
     }
   }
 
-  const canSend = !generating && (inputText.trim().length > 0 || composerCitations.length > 0)
+  const canSend = hasProject && !generating && (inputText.trim().length > 0 || composerCitations.length > 0)
 
   return (
     <div
@@ -480,9 +484,15 @@ export default function AgentInputBox() {
             value={inputText}
             onChange={e => handleInputChange(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={text('输入消息，@ 提及，/ 使用工作流...', 'Type a message, @ mention, or / use a workflow...')}
+            disabled={!hasProject}
+            placeholder={
+              hasProject
+                ? text('输入消息，@ 提及，/ 使用工作流...', 'Type a message, @ mention, or / use a workflow...')
+                : text('打开项目后可用', 'Open a project to chat')
+            }
+            title={hasProject ? undefined : text('打开项目后可用', 'Open a project to chat')}
             rows={1}
-            className="w-full resize-none outline-none bg-transparent text-xs leading-relaxed px-2 py-2"
+            className="w-full resize-none outline-none bg-transparent text-xs leading-relaxed px-2 py-2 disabled:cursor-not-allowed"
             style={{
               color: 'var(--color-text)',
               minHeight: 36,
@@ -656,7 +666,13 @@ export default function AgentInputBox() {
               color: '#ffffff',
               cursor: !generating && !canSend ? 'not-allowed' : 'pointer',
               opacity: !generating && !canSend ? 0.5 : 1}}
-            title={generating ? text('停止生成', 'Stop generation') : text('发送消息', 'Send message')}
+            title={
+              generating
+                ? text('停止生成', 'Stop generation')
+                : !hasProject
+                  ? text('打开项目后可用', 'Open a project to chat')
+                  : text('发送消息', 'Send message')
+            }
           >
             {generating ? (
               <Square size={10} fill="currentColor" />
