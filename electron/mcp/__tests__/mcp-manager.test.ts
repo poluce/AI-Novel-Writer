@@ -276,3 +276,167 @@ describe('MCP trusted configuration boundary', () => {
     ])
   })
 })
+
+describe('MCP server management (settings page)', () => {
+  function readConfigFile(): Record<string, unknown> {
+    return JSON.parse(fs.readFileSync(path.join(velaHome, 'mcp_config.json'), 'utf8'))
+  }
+
+  it('creates a new server into a missing config file and reloads the trusted list', async () => {
+    await expect(mcpManager.saveServer({ id: 'new_stdio', command: 'node', args: ['server.js'] }))
+      .resolves.toEqual({ success: true })
+
+    expect(readConfigFile()).toEqual({
+      mcpServers: { new_stdio: { command: 'node', args: ['server.js'] } },
+    })
+    await expect(mcpManager.loadConfig()).resolves.toMatchObject({
+      status: 'loaded',
+      servers: [{ id: 'new_stdio', name: 'new_stdio', transport: 'stdio' }],
+    })
+  })
+
+  it('creates an SSE server with its URL and nothing else', async () => {
+    await mcpManager.saveServer({ id: 'remote', url: 'https://example.invalid/sse' })
+
+    expect(readConfigFile()).toEqual({
+      mcpServers: { remote: { url: 'https://example.invalid/sse' } },
+    })
+  })
+
+  it('updates an existing server without touching the other entries', async () => {
+    writeConfig({
+      mcpServers: {
+        keep: { command: 'node', args: ['keep.js'] },
+        update_me: { command: 'node', args: ['old.js'] },
+      },
+    })
+    await mcpManager.loadConfig()
+
+    await expect(mcpManager.saveServer({
+      id: 'update_me',
+      command: 'npx',
+      args: ['new.js', '--flag'],
+      env: { API_KEY: 'VALUE' },
+    })).resolves.toEqual({ success: true })
+
+    expect(readConfigFile()).toEqual({
+      mcpServers: {
+        keep: { command: 'node', args: ['keep.js'] },
+        update_me: { command: 'npx', args: ['new.js', '--flag'], env: { API_KEY: 'VALUE' } },
+      },
+    })
+  })
+
+  it('returns one full configuration on demand for editing', async () => {
+    writeConfig({
+      mcpServers: {
+        secret_stdio: { command: 'node', args: ['a.js'], env: { K: 'V' } },
+        secret_sse: { url: 'https://user:pass@example.invalid/sse' },
+      },
+    })
+    await mcpManager.loadConfig()
+
+    await expect(mcpManager.getServerConfig('secret_stdio')).resolves.toEqual({
+      success: true,
+      config: {
+        id: 'secret_stdio',
+        transport: 'stdio',
+        command: 'node',
+        args: ['a.js'],
+        env: { K: 'V' },
+      },
+    })
+    await expect(mcpManager.getServerConfig('secret_sse')).resolves.toMatchObject({
+      success: true,
+      config: { transport: 'sse', url: 'https://user:pass@example.invalid/sse' },
+    })
+    await expect(mcpManager.getServerConfig('missing')).resolves.toMatchObject({ success: false })
+    await expect(mcpManager.getServerConfig('')).resolves.toMatchObject({ success: false })
+  })
+
+  it('rejects invalid saves without touching the file', async () => {
+    writeConfig({ mcpServers: { keep: { command: 'node' } } })
+    await mcpManager.loadConfig()
+    const before = fs.readFileSync(path.join(velaHome, 'mcp_config.json'), 'utf8')
+
+    await expect(mcpManager.saveServer({ id: 'bad id', command: 'node' }))
+      .resolves.toMatchObject({ success: false })
+    await expect(mcpManager.saveServer({ id: 'both', command: 'node', url: 'https://example.invalid/sse' }))
+      .resolves.toMatchObject({ success: false })
+    await expect(mcpManager.saveServer({ id: 'neither' }))
+      .resolves.toMatchObject({ success: false })
+    await expect(mcpManager.saveServer({ id: 'blank-command', command: '   ' }))
+      .resolves.toMatchObject({ success: false })
+    await expect(mcpManager.saveServer({ id: 'bad-args', command: 'node', args: ['ok', 3] as never }))
+      .resolves.toMatchObject({ success: false })
+
+    expect(fs.readFileSync(path.join(velaHome, 'mcp_config.json'), 'utf8')).toBe(before)
+  })
+
+  it('deletes a server, closes its connection, and removes it from disk', async () => {
+    writeConfig({ mcpServers: { doomed: { command: 'node' }, stays: { command: 'node' } } })
+    const session = fakeSession()
+    openSessionMock.mockResolvedValue(session)
+    await mcpManager.loadConfig()
+    await mcpManager.connect('doomed')
+
+    await expect(mcpManager.deleteServer('doomed')).resolves.toEqual({ success: true })
+
+    expect(session.close).toHaveBeenCalledOnce()
+    expect(mcpManager.getServersStatus()).toEqual([])
+    expect(readConfigFile()).toEqual({ mcpServers: { stays: { command: 'node' } } })
+    await expect(mcpManager.deleteServer('doomed')).resolves.toMatchObject({ success: false })
+  })
+
+  it('refuses to delete from a missing or corrupt config', async () => {
+    await expect(mcpManager.deleteServer('x')).resolves.toMatchObject({ success: false })
+    writeConfig('{BROKEN_MCP_CONFIG')
+    await expect(mcpManager.deleteServer('x')).resolves.toMatchObject({ success: false })
+  })
+
+  it('partially updates a server and keeps the fields it did not touch', async () => {
+    writeConfig({
+      mcpServers: {
+        docs: { command: 'node', args: ['old.js'], env: { K: 'V' } },
+      },
+    })
+    await mcpManager.loadConfig()
+
+    await expect(mcpManager.updateServer('docs', { command: 'npx' })).resolves.toEqual({ success: true })
+
+    expect(readConfigFile()).toEqual({
+      mcpServers: { docs: { command: 'npx', args: ['old.js'], env: { K: 'V' } } },
+    })
+  })
+
+  it('switches transport when the other side is explicitly cleared', async () => {
+    writeConfig({ mcpServers: { remote: { url: 'https://example.invalid/sse' } } })
+    await mcpManager.loadConfig()
+
+    await expect(mcpManager.updateServer('remote', { url: '', command: 'node', args: ['s.js'] }))
+      .resolves.toEqual({ success: true })
+
+    expect(readConfigFile()).toEqual({
+      mcpServers: { remote: { command: 'node', args: ['s.js'] } },
+    })
+  })
+
+  it('rejects a partial update that would leave both transports configured', async () => {
+    writeConfig({ mcpServers: { docs: { command: 'node' } } })
+    await mcpManager.loadConfig()
+
+    await expect(mcpManager.updateServer('docs', { url: 'https://example.invalid/sse' }))
+      .resolves.toMatchObject({ success: false })
+
+    // 合并失败不得触碰磁盘。
+    expect(readConfigFile()).toEqual({ mcpServers: { docs: { command: 'node' } } })
+  })
+
+  it('rejects a partial update for an unknown server', async () => {
+    writeConfig({ mcpServers: { docs: { command: 'node' } } })
+    await mcpManager.loadConfig()
+
+    await expect(mcpManager.updateServer('missing', { command: 'npx' }))
+      .resolves.toMatchObject({ success: false })
+  })
+})

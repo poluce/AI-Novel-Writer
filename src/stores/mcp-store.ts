@@ -10,7 +10,10 @@ import { ipc } from '../services/ipc-client'
 import { logFailure } from '../shared/fail-log'
 import type {
   MCPResourceDescription,
+  MCPServerConfigView,
+  MCPServerSaveRequest,
   MCPServerStatus,
+  MCPServerSummary,
   MCPToolDescription,
 } from '../shared/ipc-channels'
 
@@ -22,6 +25,8 @@ type MCPResourceData = MCPResourceDescription
 interface MCPState {
   /** 服务器状态列表 */
   servers: MCPServerStatus[]
+  /** 已配置的服务器清单（来自 mcp:load-config，不含凭据） */
+  configs: MCPServerSummary[]
   /** 所有 MCP Tool */
   tools: MCPToolData[]
   /** 所有 MCP 资源 */
@@ -36,6 +41,8 @@ interface MCPState {
   // ===== Actions =====
   /** 初始化（加载配置 + 自动连接） */
   init: () => Promise<void>
+  /** 重新加载配置清单（不自动连接） */
+  reloadConfig: () => Promise<void>
   /** 刷新服务器状态 */
   refreshStatus: () => Promise<void>
   /** 连接单个服务器 */
@@ -48,16 +55,22 @@ interface MCPState {
   refreshTools: () => Promise<void>
   /** 将 MCP Tool 注册到 ToolRegistry */
   registerMCPToolsToRegistry: () => void
+  /** 按需读取单个服务器的完整配置（设置页编辑用） */
+  getServerConfig: (serverId: string) => Promise<{ success: boolean; config?: MCPServerConfigView; error?: string }>
+  /** 新增或覆盖一个服务器，成功后刷新配置清单与状态 */
+  saveServer: (request: MCPServerSaveRequest) => Promise<{ success: boolean; error?: string }>
+  /** 删除一个服务器，成功后刷新配置清单与状态 */
+  deleteServer: (serverId: string) => Promise<{ success: boolean; error?: string }>
 }
 
 export const useMCPStore = create<MCPState>()((set, get) => ({
   servers: [],
+  configs: [],
   tools: [],
   resources: [],
   configPath: null,
   loading: false,
   error: null,
-
   init: async () => {
     set({ loading: true, error: null })
     try {
@@ -68,12 +81,13 @@ export const useMCPStore = create<MCPState>()((set, get) => ({
       // 加载配置
       const result = await ipc.invoke('mcp:load-config')
       if (!result.success) {
-        set({ loading: false, error: result.error ?? 'MCP 配置加载失败' })
+        set({ loading: false, configs: [], error: result.error ?? 'MCP 配置加载失败' })
         return
       }
+      set({ configs: result.servers ?? [] })
 
       // 自动连接所有配置的服务器
-      for (const server of result.servers) {
+      for (const server of result.servers ?? []) {
         try {
           const connection = await ipc.invoke('mcp:connect', server.id)
           if (!connection.success) {
@@ -96,6 +110,15 @@ export const useMCPStore = create<MCPState>()((set, get) => ({
     } catch (error) {
       set({ loading: false, error: String(error) })
     }
+  },
+
+  reloadConfig: async () => {
+    const result = await ipc.invoke('mcp:load-config')
+    if (!result.success) {
+      set({ configs: [], error: result.error ?? 'MCP 配置加载失败' })
+      return
+    }
+    set({ configs: result.servers ?? [], error: null })
   },
 
   refreshStatus: async () => {
@@ -144,4 +167,70 @@ export const useMCPStore = create<MCPState>()((set, get) => ({
     // MCP 工具由主进程 Pi Agent 以 `mcp__server__name` 提供并执行；
     // 渲染层只展示清单，不再维护任何工具注册表。
   },
+
+  getServerConfig: async (serverId) => {
+    try {
+      const result = await ipc.invoke('mcp:get-server-config', serverId) as {
+        success: boolean
+        config?: MCPServerConfigView
+        error?: string
+      }
+      return result
+    } catch (error) {
+      logFailure('MCP', 'get server config failed', error, { serverId })
+      return { success: false, error: String(error) }
+    }
+  },
+
+  saveServer: async (request) => {
+    try {
+      const result = await ipc.invoke('mcp:save-server', request) as {
+        success: boolean
+        error?: string
+      }
+      if (!result.success) {
+        set({ error: result.error ?? 'MCP 服务器保存失败' })
+        return result
+      }
+      // 保存成功：刷新配置清单与状态，并尝试连接刚保存的服务器。
+      await get().reloadConfig()
+      await get().connectServer(request.id).catch(() => {})
+      await get().refreshStatus()
+      await get().refreshTools()
+      return { success: true }
+    } catch (error) {
+      logFailure('MCP', 'save server failed', error, { serverId: request.id })
+      return { success: false, error: String(error) }
+    }
+  },
+
+  deleteServer: async (serverId) => {
+    try {
+      const result = await ipc.invoke('mcp:delete-server', serverId) as {
+        success: boolean
+        error?: string
+      }
+      if (!result.success) {
+        set({ error: result.error ?? 'MCP 服务器删除失败' })
+        return result
+      }
+      await get().reloadConfig()
+      await get().refreshStatus()
+      await get().refreshTools()
+      return { success: true }
+    } catch (error) {
+      logFailure('MCP', 'delete server failed', error, { serverId })
+      return { success: false, error: String(error) }
+    }
+  },
 }))
+
+// 主进程任一写入方（设置页或项目助手的 manage_mcp）改了配置，都实时同步到界面。
+if (typeof window !== 'undefined') {
+  ipc.on('mcp:config-changed', () => {
+    const state = useMCPStore.getState()
+    void state.reloadConfig()
+    void state.refreshStatus()
+    void state.refreshTools()
+  })
+}

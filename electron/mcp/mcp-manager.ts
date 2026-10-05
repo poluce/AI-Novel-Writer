@@ -13,13 +13,15 @@
 import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { isDeepStrictEqual } from 'node:util'
-import { VELA_HOME } from '../utils/config-utils'
+import { VELA_HOME, writeJsonFile } from '../utils/config-utils'
 import { openMcpSdkSession, type McpSdkSession } from './mcp-sdk-session'
 import { logFailure } from '../../src/shared/fail-log'
 import type {
   MCPConfigLoadResult,
   MCPConnectionStatus,
   MCPResourceDescription,
+  MCPServerConfigView,
+  MCPServerSaveRequest,
   MCPServerStatus,
   MCPServerSummary,
   MCPToolDescription,
@@ -98,6 +100,69 @@ export interface MCPCallToolResult {
   error?: string
 }
 
+/**
+ * 校验单个服务器条目的唯一权威 Seam：加载、读取与保存都走这里。
+ *
+ * - stdio 与 SSE 二选一：command 非空 = stdio，url 非空 = SSE；
+ * - args/env/url/command 的类型逐一校验，未知字段一律忽略。
+ */
+function parseServerEntry(
+  id: string,
+  value: unknown,
+): { ok: true; config: MCPServerConfig } | { ok: false } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { ok: false }
+  const cfg = value as MCPConfig['mcpServers'][string]
+  if (
+    (cfg.command !== undefined && typeof cfg.command !== 'string')
+    || (cfg.args !== undefined && (!Array.isArray(cfg.args) || cfg.args.some(arg => typeof arg !== 'string')))
+    || (cfg.env !== undefined && (
+      !cfg.env
+      || typeof cfg.env !== 'object'
+      || Array.isArray(cfg.env)
+      || Object.values(cfg.env).some(entry => typeof entry !== 'string')
+    ))
+    || (cfg.url !== undefined && typeof cfg.url !== 'string')
+  ) {
+    return { ok: false }
+  }
+  const hasCommand = typeof cfg.command === 'string' && cfg.command.trim().length > 0
+  const hasUrl = typeof cfg.url === 'string' && cfg.url.trim().length > 0
+  if (hasCommand === hasUrl) return { ok: false }
+  return {
+    ok: true,
+    config: {
+      id,
+      name: id,
+      transport: hasUrl ? 'sse' : 'stdio',
+      command: hasCommand ? cfg.command : undefined,
+      args: cfg.args,
+      env: cfg.env,
+      url: hasUrl ? cfg.url : undefined,
+    },
+  }
+}
+
+/** 受信配置 → 磁盘条目（Claude Desktop 兼容，只写该传输方式相关字段）。 */
+function serializeServerEntry(config: MCPServerConfig): MCPConfig['mcpServers'][string] {
+  if (config.transport === 'sse') return { url: config.url ?? '' }
+  return {
+    command: config.command ?? '',
+    ...(config.args && config.args.length > 0 ? { args: config.args } : {}),
+    ...(config.env && Object.keys(config.env).length > 0 ? { env: config.env } : {}),
+  }
+}
+
+function toConfigView(config: MCPServerConfig): MCPServerConfigView {
+  return {
+    id: config.id,
+    transport: config.transport,
+    command: config.command,
+    args: config.args,
+    env: config.env,
+    url: config.url,
+  }
+}
+
 // ===== MCP Manager 实现 =====
 
 class MCPManagerImpl {
@@ -152,37 +217,11 @@ class MCPManagerImpl {
       const servers: MCPServerSummary[] = []
       const trustedConfigs = new Map<string, MCPServerConfig>()
       for (const [id, value] of Object.entries(parsed.mcpServers)) {
-        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        const parsedEntry = parseServerEntry(id, value)
+        if (!parsedEntry.ok) {
           return revoke({ status: 'error', servers: [], error: 'MCP 配置损坏，未加载任何服务器' })
         }
-        const cfg = value as MCPConfig['mcpServers'][string]
-        if (
-          (cfg.command !== undefined && typeof cfg.command !== 'string')
-          || (cfg.args !== undefined && (!Array.isArray(cfg.args) || cfg.args.some(arg => typeof arg !== 'string')))
-          || (cfg.env !== undefined && (
-            !cfg.env
-            || typeof cfg.env !== 'object'
-            || Array.isArray(cfg.env)
-            || Object.values(cfg.env).some(entry => typeof entry !== 'string')
-          ))
-          || (cfg.url !== undefined && typeof cfg.url !== 'string')
-        ) {
-          return revoke({ status: 'error', servers: [], error: 'MCP 配置损坏，未加载任何服务器' })
-        }
-        const hasCommand = typeof cfg.command === 'string' && cfg.command.trim().length > 0
-        const hasUrl = typeof cfg.url === 'string' && cfg.url.trim().length > 0
-        if (hasCommand === hasUrl) {
-          return revoke({ status: 'error', servers: [], error: 'MCP 配置损坏，未加载任何服务器' })
-        }
-        const trustedConfig: MCPServerConfig = {
-          id,
-          name: id,
-          transport: hasUrl ? 'sse' : 'stdio',
-          command: cfg.command,
-          args: cfg.args,
-          env: cfg.env,
-          url: cfg.url,
-        }
+        const trustedConfig = parsedEntry.config
         trustedConfigs.set(id, trustedConfig)
         servers.push({ id, name: id, transport: trustedConfig.transport })
       }
@@ -200,6 +239,169 @@ class MCPManagerImpl {
       }
       return revoke({ status: 'error', servers: [], error: 'MCP 配置损坏或无法读取，未加载任何服务器' })
     }
+  }
+
+  /**
+   * 读取磁盘配置文件对象；文件不存在返回 null，内容损坏则抛出。
+   */
+  private async readConfigObject(): Promise<MCPConfig | null> {
+    let raw: string
+    try {
+      raw = await readFile(this.getDefaultConfigPath(), 'utf-8')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
+      throw error
+    }
+    const parsed: unknown = JSON.parse(raw)
+    if (
+      !parsed
+      || typeof parsed !== 'object'
+      || Array.isArray(parsed)
+      || !('mcpServers' in parsed)
+      || !parsed.mcpServers
+      || typeof parsed.mcpServers !== 'object'
+      || Array.isArray(parsed.mcpServers)
+    ) {
+      throw new Error('MCP 配置损坏或无法读取')
+    }
+    return parsed as MCPConfig
+  }
+
+  /**
+   * 按需读取单个服务器的完整配置（设置页编辑用）。
+   * 与 loadConfig 的摘要下发不同：这里只返回用户明确点开的那一条。
+   */
+  async getServerConfig(serverId: string): Promise<
+    | { success: true; config: MCPServerConfigView }
+    | { success: false; error: string }
+  > {
+    if (!serverId || typeof serverId !== 'string') return { success: false, error: '服务器 ID 无效' }
+    try {
+      const config = await this.readConfigObject()
+      if (!config) return { success: false, error: 'MCP 配置文件不存在' }
+      const parsedEntry = parseServerEntry(serverId, config.mcpServers[serverId])
+      if (!parsedEntry.ok) return { success: false, error: '该服务器的配置无效' }
+      return { success: true, config: toConfigView(parsedEntry.config) }
+    } catch {
+      return { success: false, error: 'MCP 配置损坏或无法读取' }
+    }
+  }
+
+  /**
+   * 新增或覆盖一个服务器：校验 → 原子写盘 → 重新加载（会断开配置已变化的连接）。
+   */
+  async saveServer(request: MCPServerSaveRequest): Promise<{ success: boolean; error?: string }> {
+    if (!request || typeof request.id !== 'string' || !request.id.trim()) {
+      return { success: false, error: '服务器 ID 不能为空' }
+    }
+    const id = request.id.trim()
+    if (!/^[A-Za-z0-9._-]+$/.test(id)) {
+      return { success: false, error: '服务器 ID 只能包含字母、数字、点、下划线与短横线' }
+    }
+    const parsedEntry = parseServerEntry(id, {
+      command: request.command,
+      args: request.args,
+      env: request.env,
+      url: request.url,
+    })
+    if (!parsedEntry.ok) {
+      return { success: false, error: '配置无效：stdio 需要非空命令，SSE 需要非空 URL，二者只能填一个' }
+    }
+
+    let config: MCPConfig
+    try {
+      config = await this.readConfigObject() ?? { mcpServers: {} }
+    } catch {
+      return { success: false, error: 'MCP 配置损坏，无法保存。请先修复或删除该文件' }
+    }
+    config.mcpServers[id] = serializeServerEntry(parsedEntry.config)
+    try {
+      writeJsonFile(this.getDefaultConfigPath(), config)
+    } catch (error) {
+      logFailure('MCP', 'save server config failed', error, { serverId: id })
+      return { success: false, error: '写入配置文件失败' }
+    }
+    const reload = await this.loadConfig()
+    if (reload.status === 'error') {
+      return { success: false, error: '配置已写入，但重新加载失败' }
+    }
+    return { success: true }
+  }
+
+  /**
+   * 删除一个服务器：原子写盘 → 断开其连接 → 重新加载。
+   */
+  async deleteServer(serverId: string): Promise<{ success: boolean; error?: string }> {
+    if (!serverId || typeof serverId !== 'string') return { success: false, error: '服务器 ID 无效' }
+    let config: MCPConfig | null
+    try {
+      config = await this.readConfigObject()
+    } catch {
+      return { success: false, error: 'MCP 配置损坏或无法读取' }
+    }
+    if (!config || !Object.hasOwn(config.mcpServers, serverId)) {
+      return { success: false, error: '未找到该服务器' }
+    }
+    delete config.mcpServers[serverId]
+    try {
+      writeJsonFile(this.getDefaultConfigPath(), config)
+    } catch (error) {
+      logFailure('MCP', 'delete server config failed', error, { serverId })
+      return { success: false, error: '写入配置文件失败' }
+    }
+    await this.disconnect(serverId)
+    await this.loadConfig()
+    return { success: true }
+  }
+
+  /**
+   * 局部更新一个服务器：未提供的字段保留原值，提供的字段整体替换。
+   *
+   * 切换传输方式时把另一侧字段显式传空字符串清掉（如 url: '' 切回 stdio）。
+   * 校验、写盘与重新加载仍走同一条 Seam。
+   */
+  async updateServer(
+    serverId: string,
+    patch: { command?: string; args?: string[]; env?: Record<string, string>; url?: string },
+  ): Promise<{ success: boolean; error?: string }> {
+    if (!serverId || typeof serverId !== 'string') return { success: false, error: '服务器 ID 无效' }
+    let config: MCPConfig | null
+    try {
+      config = await this.readConfigObject()
+    } catch {
+      return { success: false, error: 'MCP 配置损坏或无法读取' }
+    }
+    if (!config || !Object.hasOwn(config.mcpServers, serverId)) {
+      return { success: false, error: '未找到该服务器' }
+    }
+    const existing = parseServerEntry(serverId, config.mcpServers[serverId])
+    if (!existing.ok) return { success: false, error: '该服务器的现有配置无效，请先修复' }
+
+    const merged: MCPConfig['mcpServers'][string] = {
+      command: patch.command !== undefined ? patch.command : existing.config.command,
+      args: patch.args !== undefined ? patch.args : existing.config.args,
+      env: patch.env !== undefined ? patch.env : existing.config.env,
+      url: patch.url !== undefined ? patch.url : existing.config.url,
+    }
+    const validated = parseServerEntry(serverId, merged)
+    if (!validated.ok) {
+      return {
+        success: false,
+        error: '合并后的配置无效：stdio 需要非空命令，SSE 需要非空 URL，二者只能填一个。切换传输方式时请把另一侧字段显式传空字符串',
+      }
+    }
+    config.mcpServers[serverId] = serializeServerEntry(validated.config)
+    try {
+      writeJsonFile(this.getDefaultConfigPath(), config)
+    } catch (error) {
+      logFailure('MCP', 'update server config failed', error, { serverId })
+      return { success: false, error: '写入配置文件失败' }
+    }
+    const reload = await this.loadConfig()
+    if (reload.status === 'error') {
+      return { success: false, error: '配置已写入，但重新加载失败' }
+    }
+    return { success: true }
   }
 
   /**

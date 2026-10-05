@@ -13,6 +13,9 @@ const mocks = vi.hoisted(() => ({
   callTool: vi.fn(),
   getServersStatus: vi.fn((): unknown[] => []),
   getDefaultConfigPath: vi.fn(() => 'C:/isolated/.vela/mcp_config.json'),
+  saveServer: vi.fn(),
+  deleteServer: vi.fn(),
+  send: vi.fn(),
 }))
 
 vi.mock('electron', () => ({
@@ -20,6 +23,9 @@ vi.mock('electron', () => ({
     handle: vi.fn((channel: string, handler: IpcHandler) => {
       mocks.handlers.set(channel, handler)
     }),
+  },
+  BrowserWindow: {
+    getAllWindows: vi.fn(() => [{ webContents: { send: mocks.send } }]),
   },
 }))
 
@@ -87,5 +93,44 @@ describe('MCP IPC trust boundary', () => {
       status: 'missing',
       servers: [],
     })
+  })
+
+  it('forwards a save request to the manager and pushes a config-changed event on success', async () => {
+    mocks.saveServer.mockResolvedValue({ success: true })
+
+    const result = await handler('mcp:save-server')({}, {
+      id: 'docs',
+      command: 'npx',
+      args: ['-y', 'pkg'],
+    })
+
+    expect(mocks.saveServer).toHaveBeenCalledWith({
+      id: 'docs',
+      command: 'npx',
+      args: ['-y', 'pkg'],
+      env: undefined,
+      url: undefined,
+    })
+    expect(result).toEqual({ success: true })
+    expect(mocks.send).toHaveBeenCalledWith('mcp:config-changed')
+  })
+
+  it('forwards a delete request and pushes a config-changed event on success', async () => {
+    mocks.deleteServer.mockResolvedValue({ success: true })
+
+    const result = await handler('mcp:delete-server')({}, 'docs')
+
+    expect(mocks.deleteServer).toHaveBeenCalledWith('docs')
+    expect(result).toEqual({ success: true })
+    expect(mocks.send).toHaveBeenCalledWith('mcp:config-changed')
+  })
+
+  it('does not push a config-changed event when a save fails', async () => {
+    mocks.saveServer.mockResolvedValue({ success: false, error: '服务器 ID 不能为空' })
+
+    const result = await handler('mcp:save-server')({}, { id: '' })
+
+    expect(result).toEqual({ success: false, error: '服务器 ID 不能为空' })
+    expect(mocks.send).not.toHaveBeenCalled()
   })
 })

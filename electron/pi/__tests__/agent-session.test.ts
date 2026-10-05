@@ -437,4 +437,63 @@ describe('AgentSession', () => {
 
     expect(bashRun.events.some(e => e.type === 'tool_call_confirm')).toBe(true)
   })
+
+  it('keeps confirmation for manage_mcp writes even in writing mode, but bypasses for reads', async () => {
+    const McpManageSchema = Type.Object({ action: Type.Optional(Type.String()) })
+    const manageMcpTool: AgentTool<typeof McpManageSchema, unknown> = {
+      name: 'manage_mcp',
+      label: 'Manage MCP',
+      description: 'Manage MCP servers.',
+      parameters: McpManageSchema,
+      execute: async () => ({ content: [{ type: 'text', text: 'ok' }], details: {} }),
+    }
+
+    // 1. 写作模式下：增删改仍必须确认
+    const addRun = await buildSession({
+      tools: [manageMcpTool] as never,
+      confirmationToolNames: new Set(['manage_mcp']),
+      decision: () => true,
+      responses: [
+        fauxAssistantMessage([fauxToolCall('manage_mcp', { action: 'add', server_id: 's' })]),
+        fauxAssistantMessage('已添加'),
+      ],
+    })
+    addRun.session.setExecutionMode('writing')
+    await addRun.session.prompt('添加一个 MCP 服务器')
+    await addRun.session.close()
+
+    expect(addRun.events.some(e => e.type === 'tool_call_confirm')).toBe(true)
+
+    // 2. 任意模式下：查看自动放行
+    const listRun = await buildSession({
+      tools: [manageMcpTool] as never,
+      confirmationToolNames: new Set(['manage_mcp']),
+      responses: [
+        fauxAssistantMessage([fauxToolCall('manage_mcp', { action: 'list' })]),
+        fauxAssistantMessage('列表如下'),
+      ],
+    })
+    listRun.session.setExecutionMode('writing')
+    await listRun.session.prompt('列出 MCP 服务器')
+    await listRun.session.close()
+
+    expect(listRun.events.some(e => e.type === 'tool_call_confirm')).toBe(false)
+    expect(listRun.events.some(e => e.type === 'tool_call_complete')).toBe(true)
+
+    // 3. 连接/断开只影响运行时连接，不写配置：同样自动放行
+    const disconnectRun = await buildSession({
+      tools: [manageMcpTool] as never,
+      confirmationToolNames: new Set(['manage_mcp']),
+      responses: [
+        fauxAssistantMessage([fauxToolCall('manage_mcp', { action: 'disconnect', server_id: 's' })]),
+        fauxAssistantMessage('已断开'),
+      ],
+    })
+    disconnectRun.session.setExecutionMode('writing')
+    await disconnectRun.session.prompt('断开 MCP 服务器')
+    await disconnectRun.session.close()
+
+    expect(disconnectRun.events.some(e => e.type === 'tool_call_confirm')).toBe(false)
+    expect(disconnectRun.events.some(e => e.type === 'tool_call_complete')).toBe(true)
+  })
 })

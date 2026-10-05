@@ -13,7 +13,7 @@ export type RightView = 'agent' | 'ai-output'
 export type LeftRailItem = SidebarView | 'blueprint' | 'world' | 'synopsis' | 'plot-tree' | BottomTab
 
 /** 设置弹窗分类 */
-export type SettingsSection = 'appearance' | 'llm' | 'embedding' | 'presets' | 'proxy' | 'editor' | 'prompts' | 'skills' | 'about'
+export type SettingsSection = 'appearance' | 'llm' | 'embedding' | 'presets' | 'proxy' | 'editor' | 'prompts' | 'skills' | 'mcp' | 'about'
 
 /** 章节创建对话框的预填参数 */
 export type ChapterCreationPrefill = Record<string, unknown> | null
@@ -156,6 +156,7 @@ export const useLayoutStore = create<LayoutState>()((set) => ({
       'editor',
       'prompts',
       'skills',
+      'mcp',
       'about',
     ]
     const resolvedSection: SettingsSection =

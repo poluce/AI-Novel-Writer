@@ -94,3 +94,79 @@ describe('renderer MCP trust boundary', () => {
     expect(source).toContain('主进程 Pi Agent')
   })
 })
+
+describe('renderer MCP server management', () => {
+  beforeEach(() => {
+    useMCPStore.setState({ configs: [] })
+  })
+
+  it('saves a new server, reloads the config list, and attempts a connection', async () => {
+    mocks.invoke.mockImplementation(async (channel: string) => {
+      switch (channel) {
+        case 'mcp:save-server': return { success: true }
+        case 'mcp:load-config': return {
+          success: true,
+          status: 'loaded',
+          servers: [{ id: 'saved', name: 'saved', transport: 'stdio' }],
+        }
+        case 'mcp:connect': return { success: true }
+        case 'mcp:get-servers-status': return []
+        case 'mcp:list-tools': case 'mcp:list-resources': return []
+        default: throw new Error(`unexpected IPC: ${channel}`)
+      }
+    })
+
+    const result = await useMCPStore.getState().saveServer({ id: 'saved', command: 'node' })
+
+    expect(result).toEqual({ success: true })
+    expect(mocks.invoke).toHaveBeenCalledWith('mcp:save-server', { id: 'saved', command: 'node' })
+    expect(mocks.invoke).toHaveBeenCalledWith('mcp:connect', 'saved')
+    expect(useMCPStore.getState().configs).toEqual([
+      { id: 'saved', name: 'saved', transport: 'stdio' },
+    ])
+  })
+
+  it('surfaces a save failure and does not attempt a connection', async () => {
+    mocks.invoke.mockImplementation(async (channel: string) => {
+      if (channel === 'mcp:save-server') return { success: false, error: '服务器 ID 不能为空' }
+      throw new Error(`unexpected IPC: ${channel}`)
+    })
+
+    const result = await useMCPStore.getState().saveServer({ id: '', command: 'node' })
+
+    expect(result).toEqual({ success: false, error: '服务器 ID 不能为空' })
+    expect(useMCPStore.getState().error).toBe('服务器 ID 不能为空')
+    expect(mocks.invoke).not.toHaveBeenCalledWith('mcp:connect', expect.anything())
+  })
+
+  it('deletes a server and refreshes the config list', async () => {
+    mocks.invoke.mockImplementation(async (channel: string) => {
+      switch (channel) {
+        case 'mcp:delete-server': return { success: true }
+        case 'mcp:load-config': return { success: true, status: 'loaded', servers: [] }
+        case 'mcp:get-servers-status': return []
+        case 'mcp:list-tools': case 'mcp:list-resources': return []
+        default: throw new Error(`unexpected IPC: ${channel}`)
+      }
+    })
+
+    const result = await useMCPStore.getState().deleteServer('doomed')
+
+    expect(result).toEqual({ success: true })
+    expect(mocks.invoke).toHaveBeenCalledWith('mcp:delete-server', 'doomed')
+    expect(useMCPStore.getState().configs).toEqual([])
+  })
+
+  it('reads one server configuration on demand', async () => {
+    mocks.invoke.mockResolvedValue({
+      success: true,
+      config: { id: 'edit-me', transport: 'sse', url: 'https://example.invalid/sse' },
+    })
+
+    await expect(useMCPStore.getState().getServerConfig('edit-me')).resolves.toMatchObject({
+      success: true,
+      config: { id: 'edit-me', transport: 'sse' },
+    })
+    expect(mocks.invoke).toHaveBeenCalledWith('mcp:get-server-config', 'edit-me')
+  })
+})

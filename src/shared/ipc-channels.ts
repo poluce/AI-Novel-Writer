@@ -1145,6 +1145,25 @@ export type MCPConfigLoadResponse =
   | ({ status: 'loaded'; servers: MCPServerSummary[] } & { success: true })
   | ({ status: 'error'; servers: []; error: string } & { success: false })
 
+/** 设置页可编辑的服务器配置（含凭据，仅按需单条下发）。 */
+export interface MCPServerConfigView {
+  id: string
+  transport: 'stdio' | 'sse'
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+  url?: string
+}
+
+/** 设置页提交的服务器保存请求：id 已存在则覆盖，否则新建。传输方式由 command/url 推导。 */
+export interface MCPServerSaveRequest {
+  id: string
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+  url?: string
+}
+
 export interface MCPChannels {
   'mcp:load-config': { args: []; return: MCPConfigLoadResponse }
   'mcp:connect': { args: [serverId: string]; return: { success: boolean; error?: string } }
@@ -1154,6 +1173,12 @@ export interface MCPChannels {
   'mcp:list-resources': { args: []; return: MCPResourceDescription[] }
   'mcp:get-servers-status': { args: []; return: MCPServerStatus[] }
   'mcp:get-config-path': { args: []; return: string }
+  /** 按需读取单个服务器的完整配置（设置页编辑用）。 */
+  'mcp:get-server-config': { args: [serverId: string]; return: { success: boolean; config?: MCPServerConfigView; error?: string } }
+  /** 新增或覆盖一个服务器（原子写盘并重新加载）。 */
+  'mcp:save-server': { args: [request: MCPServerSaveRequest]; return: { success: boolean; error?: string } }
+  /** 删除一个服务器（原子写盘、断开连接并重新加载）。 */
+  'mcp:delete-server': { args: [serverId: string]; return: { success: boolean; error?: string } }
 }
 
 // ===== 合并所有频道 =====
@@ -1216,8 +1241,13 @@ export interface AgentStreamEvents {
   'agent:renderer-action': { action: RendererAction; requestId?: string }
 }
 
+export interface MCPStreamEvents {
+  /** MCP 服务器配置发生增删改（设置页或项目助手工具写入）后推送。 */
+  'mcp:config-changed': Record<string, never>
+}
+
 export type AllInvokeChannels = WindowChannels & OfficialHomepageChannels & ModelProviderResourceChannels & ConfigChannels & UpdateChannels & SkinChannels & ProjectChannels & FileChannels & AppDataChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & ChapterLifecycleChannels & ImportChannels & MCPChannels & AgentChannels
-export type AllEventChannels = LLMStreamEvents & UpdateStateEvents & WindowEvents & AgentStreamEvents
+export type AllEventChannels = LLMStreamEvents & UpdateStateEvents & WindowEvents & AgentStreamEvents & MCPStreamEvents
 
 /** 提取 invoke 频道名 */
 export type InvokeChannel = keyof AllInvokeChannels

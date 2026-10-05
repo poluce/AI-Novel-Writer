@@ -284,6 +284,24 @@ export class AgentSession {
   private isConfirmationRequired(toolName: string, args?: Record<string, unknown>): boolean {
     if (toolName.startsWith('mcp__')) return true
 
+    // MCP 服务器管理：查看与连接/断开自动放行，增删改无论哪种执行模式都要用户点头。
+    if (toolName === 'manage_mcp') {
+      const rawAction = String(args?.action ?? '').toLowerCase().trim()
+      if (
+        rawAction === 'list'
+        || rawAction === 'get'
+        || rawAction === 'connect'
+        || rawAction === 'disconnect'
+        || rawAction === '查看'
+        || rawAction === '列表'
+        || rawAction === '连接'
+        || rawAction === '断开'
+      ) {
+        return false
+      }
+      return true
+    }
+
     // 写作模式（writing）：创作类工具全部自动放行，零弹窗直接落盘；操作系统级 bash 命令保留底线确认
     if (this.executionMode === 'writing') {
       if (toolName === 'bash') return true

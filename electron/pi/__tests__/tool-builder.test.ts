@@ -34,7 +34,7 @@ describe('buildAgentTools', () => {
       'read_architecture', 'manage_characters', 'read_blueprint', 'manage_drafts',
       'read_project_state', 'search_knowledge', 'read_file',
       'install_writing_skill', 'bind_writing_skill', 'open_editor',
-      'propose_chapter_blueprint',
+      'propose_chapter_blueprint', 'manage_mcp',
     ]) {
       expect(names).toContain(projectTool)
     }
@@ -87,6 +87,7 @@ describe('buildAgentTools', () => {
       'install_writing_skill',
       'manage_characters',
       'manage_drafts',
+      'manage_mcp',
       'novel_config',
       'open_editor',
       'propose_chapter_blueprint',

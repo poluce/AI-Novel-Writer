@@ -17,6 +17,7 @@ import { createBindWritingSkillTool } from './tools/bind-writing-skill.tool'
 import { createOpenEditorTool } from './tools/open-editor.tool'
 import { createProposeChapterBlueprintTool } from './tools/propose-chapter-blueprint.tool'
 import { createManageCharactersTool } from './tools/manage-characters.tool'
+import { createManageMcpTool } from './tools/manage-mcp.tool'
 import { buildMcpAgentTools } from './tools/mcp.tool'
 import type { AnyAgentTool } from './tool-types'
 import type { AgentSkillCatalogEntry } from '../../src/shared/agent-skills'
@@ -57,6 +58,7 @@ export function buildAgentTools(
     createOpenEditorTool(language, rendererAction),
     createProposeChapterBlueprintTool(language),
     createManageCharactersTool(language, rendererAction),
+    createManageMcpTool(language),
     createInspectWritingSkillTool(language),
     // 渐进式披露：目录进提示词，正文由模型按需取。
     createLoadWritingSkillTool(language, skills, skillRoots),
@@ -81,6 +83,7 @@ export function confirmationToolNames(): ReadonlySet<string> {
     'story_architecture',
     'propose_chapter_blueprint',
     'manage_characters',
+    'manage_mcp',
     'install_writing_skill',
     'bind_writing_skill',
   ])
