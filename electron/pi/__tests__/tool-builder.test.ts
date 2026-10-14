@@ -87,6 +87,7 @@ describe('buildAgentTools', () => {
       'install_writing_skill',
       'manage_characters',
       'manage_drafts',
+      'manage_knowledge_base',
       'manage_mcp',
       'manage_skills',
       'novel_config',

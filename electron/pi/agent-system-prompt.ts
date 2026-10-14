@@ -149,6 +149,7 @@ function buildL0ProjectContext(core: ProjectCoreData | null, language: WritingLa
       '- 当与作者探讨小说人物（角色档案、人际关系网、境界身心状态、出场轨迹等）时，请使用 `manage_characters` 工具进行全方位查询、回溯指定章节历史状态、建档、局部微调、状态推进或级联改名。',
       '- 外部网页与链接资料查阅（Web Fetch）：当作者在对话中提供了任何 HTTP 或 HTTPS 网址（如 GitHub 仓库或文件、在线百科条目、技术文档、科普网页等），或者需要阅读特定网页参考资料时，必须使用 `web_fetch` 工具读取该网址内容。严禁调用 `bash` 或 `curl`/`wget` 抓取网页。',
       '- MCP 服务管理规范：当作者要求查看、添加、修改或连接 MCP 服务器时，必须调用 `manage_mcp` 工具完成配置与连接，严禁在 `bash` 中编写测试脚本或手动运行代理。',
+      '- 知识库管理与检索规范（Knowledge Base）：当需要查询小说参考资料、世界观设定考据、史料背景时，使用 `manage_knowledge_base` 进行混合检索（action: "search"）；当作者希望查看知识库文档清单时使用 `action: "list"`；当在对话中考据到有价值的参考资料或作者提供了一份新设定文档时，使用 `action: "add_text"` 自动存入知识库，沉淀为长久知识资产。',
     ].join('\n'),
     [
       '### Creative Collaboration & Direct Fill Rules:',
@@ -160,6 +161,7 @@ function buildL0ProjectContext(core: ProjectCoreData | null, language: WritingLa
       '- When discussing characters (profiles, relationships, power/physical states, chapter appearances, etc.), call the `manage_characters` tool to query, review chapter history, create, partially update, advance states, or cascade renames.',
       '- Web & External Link Inspection (Web Fetch): When the author provides any HTTP or HTTPS URL (such as GitHub repositories or files, online encyclopedia entries, documentation, or reference articles), always use the `web_fetch` tool. Never use `bash` or `curl`/`wget` to fetch web pages.',
       '- MCP Service Management: When adding, updating, or connecting MCP servers, always use the `manage_mcp` tool. Never use `bash` to run manual proxy scripts or test connections.',
+      '- Knowledge Base Management & Retrieval: When querying novel reference material, worldbuilding facts, or historical background, use `manage_knowledge_base` to search (action: "search"). Use action: "list" to view indexed documents, and action: "add_text" to archive valuable research facts or settings directly into the knowledge base.',
     ].join('\n'),
   ))
   return parts.join('\n')

@@ -9,6 +9,7 @@ import { createReadBlueprintTool } from './tools/read-blueprint.tool'
 import { createManageDraftsTool } from './tools/manage-drafts.tool'
 import { createReadProjectStateTool } from './tools/read-project-state.tool'
 import { createSearchKnowledgeTool } from './tools/search-knowledge.tool'
+import { createManageKnowledgeBaseTool } from './tools/manage-knowledge-base.tool'
 import { createReadFileTool } from './tools/read-file.tool'
 import { createInspectWritingSkillTool } from './tools/inspect-writing-skill.tool'
 import { createLoadWritingSkillTool } from './tools/load-writing-skill.tool'
@@ -54,6 +55,7 @@ export function buildAgentTools(
     createManageDraftsTool(language, rendererAction),
     createReadProjectStateTool(language),
     createSearchKnowledgeTool(language),
+    createManageKnowledgeBaseTool(language),
     createReadFileTool(language),
     createInstallWritingSkillTool(language),
     createBindWritingSkillTool(language),
@@ -90,6 +92,7 @@ export function confirmationToolNames(): ReadonlySet<string> {
     'manage_characters',
     'manage_mcp',
     'manage_skills',
+    'manage_knowledge_base',
     'install_writing_skill',
     'bind_writing_skill',
   ])
