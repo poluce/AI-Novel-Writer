@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, nativeImage } from 'electron'
 import { registerIPCHandlers } from './ipc-handlers'
 import { registerMCPHandlers } from './mcp/mcp-ipc-bridge'
 import { mainT } from './i18n'
@@ -146,6 +146,7 @@ function createWindow() {
   const appIconPath = process.platform === 'win32'
     ? path.join(process.env.APP_ROOT!, 'build', 'icon.ico')
     : path.join(process.env.APP_ROOT!, 'build', 'icon.png')
+  const appIcon = nativeImage.createFromPath(appIconPath)
 
   win = new BrowserWindow({
     width: 1440,
@@ -153,7 +154,7 @@ function createWindow() {
     minWidth: 1024,
     minHeight: 640,
     title: mainT(app.getLocale(), 'app.windowTitle'),
-    icon: appIconPath,
+    icon: appIcon,
     // 使用应用内自绘标题栏，避免 Windows 原生标题栏与棕色标题栏重复显示。
     frame: false,
     backgroundColor: '#1e1e1e',
@@ -167,11 +168,11 @@ function createWindow() {
   installWindowCloseGuard(win)
 
   if (process.platform === 'win32') {
-    win.setIcon(appIconPath)
+    win.setIcon(appIcon)
   }
 
   if (process.platform === 'darwin') {
-    app.dock?.setIcon(path.join(process.env.APP_ROOT!, 'build', 'icon.png'))
+    app.dock?.setIcon(appIcon)
   }
 
   // 隐藏默认菜单栏（Windows/Linux）
