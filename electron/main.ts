@@ -143,13 +143,17 @@ function publishUpdateState(state: UpdateState): void {
 }
 
 function createWindow() {
+  const appIconPath = process.platform === 'win32'
+    ? path.join(process.env.APP_ROOT!, 'build', 'icon.ico')
+    : path.join(process.env.APP_ROOT!, 'build', 'icon.png')
+
   win = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 1024,
     minHeight: 640,
     title: mainT(app.getLocale(), 'app.windowTitle'),
-    icon: path.join(process.env.APP_ROOT!, 'build', 'icon.png'),
+    icon: appIconPath,
     // 使用应用内自绘标题栏，避免 Windows 原生标题栏与棕色标题栏重复显示。
     frame: false,
     backgroundColor: '#1e1e1e',
@@ -161,6 +165,10 @@ function createWindow() {
     },
   })
   installWindowCloseGuard(win)
+
+  if (process.platform === 'win32') {
+    win.setIcon(appIconPath)
+  }
 
   if (process.platform === 'darwin') {
     app.dock?.setIcon(path.join(process.env.APP_ROOT!, 'build', 'icon.png'))
@@ -258,6 +266,9 @@ app.on('activate', () => {
 
 app.whenReady().then(async () => {
   if (!applicationInstanceAccepted) return
+  if (process.platform === 'win32') {
+    app.setAppUserModelId('com.ai-novel-writer.app')
+  }
   reportReleaseSmokeStage('electron-ready')
   if (releaseSmokeRequested) {
     const requestedSmokeModeCount = Number(releaseVectorSmokeRequested)
