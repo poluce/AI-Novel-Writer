@@ -278,6 +278,31 @@ export function formatSkillMarkdown(params: {
   return cleanBody
 }
 
+interface CustomSkillLocation {
+  directory: string
+  filePath: string
+  scope: 'project' | 'user'
+}
+
+function resolveCustomSkillLocation(name: string, projectPath?: string | null): CustomSkillLocation | null {
+  const projPath = projectPath ?? getCurrentProjectPath()
+  if (projPath) {
+    const projectDir = path.join(projPath, '.vela', 'skills', name)
+    const projectFile = path.join(projectDir, 'SKILL.md')
+    if (fs.existsSync(projectFile)) {
+      return { directory: projectDir, filePath: projectFile, scope: 'project' }
+    }
+  }
+
+  const userDir = path.join(VELA_HOME, 'skills', name)
+  const userFile = path.join(userDir, 'SKILL.md')
+  if (fs.existsSync(userFile)) {
+    return { directory: userDir, filePath: userFile, scope: 'user' }
+  }
+
+  return null
+}
+
 export async function createCustomWritingSkill(params: {
   name: string
   content: string
@@ -341,26 +366,18 @@ export async function updateCustomWritingSkill(params: {
   try {
     const name = params.name.trim()
     assertSpecSkillName(name)
-    let targetFile: string | null = null
-    const projPath = params.projectPath ?? getCurrentProjectPath()
-    if (projPath) {
-      const candidate = path.join(projPath, '.vela', 'skills', name, 'SKILL.md')
-      if (fs.existsSync(candidate)) targetFile = candidate
-    }
-    if (!targetFile) {
-      const userCand = path.join(VELA_HOME, 'skills', name, 'SKILL.md')
-      if (fs.existsSync(userCand)) targetFile = userCand
-    }
-    if (!targetFile) {
+
+    const location = resolveCustomSkillLocation(name, params.projectPath)
+    if (!location) {
       throw new Error(text(`未找到可修改的技能“${name}”（内置技能受保护只读）`, `Skill "${name}" not found or is protected builtin`))
     }
 
-    const existingRaw = fs.readFileSync(targetFile, 'utf8')
+    const existingRaw = fs.readFileSync(location.filePath, 'utf8')
     const inspected = inspectWritingSkillMarkdown(existingRaw)
-    const newContent = params.content !== undefined ? params.content : (inspected.content || existingRaw)
-    const newDesc = params.description !== undefined ? params.description : inspected.metadata.description
-    const newDisplayName = params.displayName !== undefined ? params.displayName : inspected.metadata.displayName
-    const newStage = params.stage !== undefined ? params.stage : inspected.metadata.stage
+    const newContent = params.content ?? (inspected.content || existingRaw)
+    const newDesc = params.description ?? inspected.metadata.description
+    const newDisplayName = params.displayName ?? inspected.metadata.displayName
+    const newStage = params.stage ?? inspected.metadata.stage
 
     const updatedRaw = formatSkillMarkdown({
       name,
@@ -369,7 +386,7 @@ export async function updateCustomWritingSkill(params: {
       displayName: newDisplayName,
       stage: newStage,
     })
-    fs.writeFileSync(targetFile, updatedRaw, { encoding: 'utf8', mode: 0o600 })
+    fs.writeFileSync(location.filePath, updatedRaw, { encoding: 'utf8', mode: 0o600 })
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) }
@@ -383,20 +400,12 @@ export async function deleteCustomWritingSkill(params: {
   try {
     const name = params.name.trim()
     assertSpecSkillName(name)
-    let targetDir: string | null = null
-    const projPath = params.projectPath ?? getCurrentProjectPath()
-    if (projPath) {
-      const candidate = path.join(projPath, '.vela', 'skills', name)
-      if (fs.existsSync(candidate)) targetDir = candidate
-    }
-    if (!targetDir) {
-      const userCand = path.join(VELA_HOME, 'skills', name)
-      if (fs.existsSync(userCand)) targetDir = userCand
-    }
-    if (!targetDir) {
+
+    const location = resolveCustomSkillLocation(name, params.projectPath)
+    if (!location) {
       throw new Error(text(`未找到可删除的技能“${name}”（内置技能不可删除）`, `Skill "${name}" not found or is a protected builtin skill`))
     }
-    fs.rmSync(targetDir, { recursive: true, force: true })
+    fs.rmSync(location.directory, { recursive: true, force: true })
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) }

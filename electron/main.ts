@@ -143,20 +143,39 @@ function publishUpdateState(state: UpdateState): void {
   }
 }
 
-function createWindow() {
+function resolveAppIcon(): unknown {
   const appIconPath = process.platform === 'win32'
     ? path.join(process.env.APP_ROOT!, 'build', 'icon.ico')
     : path.join(process.env.APP_ROOT!, 'build', 'icon.png')
-  let appIcon: unknown = appIconPath
+
   try {
     const nodeRequire = createRequire(import.meta.url)
     const electronModule = nodeRequire('electron') as { nativeImage?: { createFromPath?: (p: string) => unknown } }
     if (electronModule?.nativeImage?.createFromPath) {
-      appIcon = electronModule.nativeImage.createFromPath(appIconPath)
+      return electronModule.nativeImage.createFromPath(appIconPath)
     }
   } catch {
-    // mock fallback
+    // 单元测试与 mock 环境兜底回退为路径
   }
+  return appIconPath
+}
+
+function applyPlatformAppIcon(window: BrowserWindow, appIcon: unknown): void {
+  if (process.platform === 'win32') {
+    window.setIcon?.(appIcon as never)
+  } else if (process.platform === 'darwin') {
+    app.dock?.setIcon?.(appIcon as never)
+  }
+}
+
+function configurePlatformTaskbar(): void {
+  if (process.platform === 'win32') {
+    app.setAppUserModelId?.('com.ai-novel-writer.app')
+  }
+}
+
+function createWindow(): void {
+  const appIcon = resolveAppIcon()
 
   win = new BrowserWindow({
     width: 1440,
@@ -176,14 +195,7 @@ function createWindow() {
     },
   })
   installWindowCloseGuard(win)
-
-  if (process.platform === 'win32') {
-    win.setIcon?.(appIcon as never)
-  }
-
-  if (process.platform === 'darwin') {
-    app.dock?.setIcon?.(appIcon as never)
-  }
+  applyPlatformAppIcon(win, appIcon)
 
   // 隐藏默认菜单栏（Windows/Linux）
   win.setMenuBarVisibility(false)
@@ -277,9 +289,7 @@ app.on('activate', () => {
 
 app.whenReady().then(async () => {
   if (!applicationInstanceAccepted) return
-  if (process.platform === 'win32') {
-    app.setAppUserModelId?.('com.ai-novel-writer.app')
-  }
+  configurePlatformTaskbar()
   reportReleaseSmokeStage('electron-ready')
   if (releaseSmokeRequested) {
     const requestedSmokeModeCount = Number(releaseVectorSmokeRequested)

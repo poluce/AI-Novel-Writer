@@ -91,6 +91,25 @@ const Schema = Type.Object({
   })),
 })
 
+function formatSkillListingRow(
+  skill: AgentSkillCatalogEntry,
+  boundStage: string | undefined,
+  text: (zh: string, en: string) => string,
+): string {
+  let sourceTag = text('用户', 'User')
+  if (skill.source === 'builtin') {
+    sourceTag = text('内置', 'Builtin')
+  } else if (skill.source === 'project') {
+    sourceTag = text('项目', 'Project')
+  }
+
+  const bindingTag = boundStage
+    ? text(` · 已绑定【${boundStage}】阶段`, ` · bound to [${boundStage}]`)
+    : ''
+
+  return `- **${skill.name}** (${sourceTag}${bindingTag}): ${skill.description}`
+}
+
 /**
  * 统一写作技能管理工具（Manage Skills）：
  *
@@ -137,18 +156,9 @@ export function createManageSkillsTool(
             stageMap.set(rawName, stg)
           }
 
-          const rows = available.map(skill => {
-            const boundStage = stageMap.get(skill.name)
-            const sourceTag = skill.source === 'builtin'
-              ? text('内置', 'Builtin')
-              : skill.source === 'project'
-                ? text('项目', 'Project')
-                : text('用户', 'User')
-            const bindingTag = boundStage
-              ? text(` · 已绑定【${boundStage}】阶段`, ` · bound to [${boundStage}]`)
-              : ''
-            return `- **${skill.name}** (${sourceTag}${bindingTag}): ${skill.description}`
-          })
+          const rows = available.map(skill =>
+            formatSkillListingRow(skill, stageMap.get(skill.name), text)
+          )
 
           const body = rows.length > 0
             ? rows.join('\n')

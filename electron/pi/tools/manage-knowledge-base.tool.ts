@@ -45,6 +45,28 @@ const Schema = Type.Object({
   })),
 })
 
+function ensureTextFileName(name: string): string {
+  const trimmed = name.trim()
+  if (trimmed.endsWith('.md') || trimmed.endsWith('.txt')) {
+    return trimmed
+  }
+  return `${trimmed}.md`
+}
+
+function extractErrorMessage(result: unknown): string {
+  if (result && typeof result === 'object' && 'error' in result && result.error) {
+    return String(result.error)
+  }
+  return 'Unknown error'
+}
+
+function formatVectorStatus(dimension: number, text: (zh: string, en: string) => string): string {
+  if (dimension > 0) {
+    return text(`已启用（维度: ${dimension}）`, `Enabled (dimension: ${dimension})`)
+  }
+  return text('未配置（当前为 BM25 全文检索模式）', 'Not configured (currently in BM25 FTS mode)')
+}
+
 /**
  * 统一知识库管理工具（Manage Knowledge Base）：
  *
@@ -176,13 +198,10 @@ export function createManageKnowledgeBaseTool(
 
         // ===== 3. 将资料或设定存入知识库 =====
         case 'add_text': {
-          let fileName = params.file_name?.trim()
-          if (!fileName) {
+          if (!params.file_name?.trim()) {
             throw new Error(text('缺少 file_name 参数（如 "历史考据.md"）', 'The file_name parameter is required'))
           }
-          if (!fileName.endsWith('.md') && !fileName.endsWith('.txt')) {
-            fileName += '.md'
-          }
+          const fileName = ensureTextFileName(params.file_name)
 
           const rawText = params.text?.trim()
           if (!rawText) {
@@ -193,7 +212,7 @@ export function createManageKnowledgeBaseTool(
           const result = await knowledgeBaseLoader.run((kb) => {
             return kb.importText(
               rawText,
-              fileName!,
+              fileName,
               projectPath,
               embConfig?.protocol ?? 'openai',
               embConfig?.model ?? { baseUrl: '', apiKey: '', modelName: '' },
@@ -201,7 +220,7 @@ export function createManageKnowledgeBaseTool(
           })
 
           if (!result || typeof result !== 'object' || !('success' in result) || !result.success) {
-            const err = (result && typeof result === 'object' && 'error' in result) ? String(result.error) : 'Unknown error'
+            const err = extractErrorMessage(result)
             throw new Error(text(`存入知识库失败: ${err}`, `Failed to store into knowledge base: ${err}`))
           }
 
@@ -266,9 +285,7 @@ export function createManageKnowledgeBaseTool(
           }
 
           const embConfig = getEmbeddingConfig()
-          const vectorStatus = stats.vectorDimension > 0
-            ? text(`已启用（维度: ${stats.vectorDimension}）`, `Enabled (dimension: ${stats.vectorDimension})`)
-            : text('未配置（当前为 BM25 全文检索模式）', 'Not configured (currently in BM25 FTS mode)')
+          const vectorStatus = formatVectorStatus(stats.vectorDimension, text)
 
           return {
             content: [{
