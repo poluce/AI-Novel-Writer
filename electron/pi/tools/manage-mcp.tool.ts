@@ -1,5 +1,5 @@
 import type { AgentTool } from '@earendil-works/pi-agent-core'
-import { Type } from '@earendil-works/pi-ai'
+import { Type, StringEnum } from '@earendil-works/pi-ai'
 
 import { mcpManager } from '../../mcp/mcp-manager'
 import {
@@ -7,21 +7,21 @@ import {
   type WritingLanguage,
 } from '../../../src/shared/writing-language'
 
-function resolveAction(raw?: string): 'list' | 'get' | 'add' | 'update' | 'connect' | 'disconnect' | 'delete' {
-  const str = String(raw ?? 'list').toLowerCase().trim()
-  if (str === 'list' || str.includes('列出') || str.includes('列表') || str.includes('清单') || str.includes('已配置') || str.includes('查看')) return 'list'
-  if (str === 'get' || str.includes('读取') || str.includes('详情') || str.includes('单个')) return 'get'
-  if (str === 'add' || str.includes('添加') || str.includes('新增') || str.includes('新建')) return 'add'
-  if (str === 'update' || str.includes('修改') || str.includes('更新') || str.includes('编辑')) return 'update'
-  if (str === 'disconnect' || str.includes('断开')) return 'disconnect'
-  if (str === 'connect' || str.includes('连接') || str.includes('重连')) return 'connect'
-  if (str === 'delete' || str.includes('删除') || str.includes('移除')) return 'delete'
-  return 'list'
-}
+export const MANAGE_MCP_ACTIONS = [
+  'list',
+  'get',
+  'add',
+  'update',
+  'connect',
+  'disconnect',
+  'delete',
+] as const
+
+export type ManageMcpAction = typeof MANAGE_MCP_ACTIONS[number]
 
 const Schema = Type.Object({
-  action: Type.Optional(Type.String({
-    description: '操作类型：list（列出全部服务器及状态，默认）、get（读取单个完整配置）、add（添加新服务器）、update（局部修改）、connect（连接）、disconnect（断开）、delete（删除）',
+  action: Type.Optional(StringEnum(MANAGE_MCP_ACTIONS, {
+    description: 'Operation action: "list" (show all configured servers, default), "get" (read single server config), "add" (add a server), "update" (partially modify server), "connect" (connect server), "disconnect" (disconnect server), "delete" (delete server).',
   })),
   server_id: Type.Optional(Type.String({ description: '目标服务器 ID（get / update / delete 必填）' })),
   command: Type.Optional(Type.String({ description: 'stdio 启动命令，如 npx、node 或可执行文件路径' })),
@@ -77,7 +77,7 @@ export function createManageMcpTool(
     description,
     parameters: Schema,
     execute: async (_id, params) => {
-      const action = resolveAction(params.action)
+      const action = (params.action ?? 'list') as ManageMcpAction
       switch (action) {
         case 'list': {
           return listServers(language)

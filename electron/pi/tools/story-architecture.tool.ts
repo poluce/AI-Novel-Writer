@@ -1,5 +1,5 @@
 import type { AgentTool } from '@earendil-works/pi-agent-core'
-import { Type } from '@earendil-works/pi-ai'
+import { Type, StringEnum } from '@earendil-works/pi-ai'
 
 import { ProjectCoreRepository } from '../../repositories/project-core-repository'
 import type { RendererActionSink } from '../renderer-action'
@@ -8,17 +8,13 @@ import {
   type WritingLanguage,
 } from '../../../src/shared/writing-language'
 
-const Action = Type.Union([
-  Type.Literal('read', { description: 'Read story architecture documents (default)' }),
-  Type.Literal('update', { description: 'Update or fill specified story architecture documents' }),
-], { description: 'Operation mode: "read" to inspect existing documents, "update" to fill or modify documents' })
+const Action = StringEnum(['read', 'update'] as const, {
+  description: 'Operation mode: "read" to inspect existing documents (default), "update" to fill or modify documents',
+})
 
-const Section = Type.Union([
-  Type.Literal('all', { description: 'All three core architecture documents (read-only)' }),
-  Type.Literal('premise', { description: 'Story Premise: Logline, core conflict chain, golden finger placement, suspense framework' }),
-  Type.Literal('worldbuilding', { description: 'Worldbuilding: core rules, hierarchy and resource battlefields, deep crisis' }),
-  Type.Literal('synopsis', { description: 'Whole-book plot outline: overarching story arc, volume outlines, and narrative beats' }),
-], { description: 'Architecture section: "premise", "worldbuilding", or "synopsis". Defaults to "all" for read' })
+const Section = StringEnum(['all', 'premise', 'worldbuilding', 'synopsis'] as const, {
+  description: 'Architecture section: "premise", "worldbuilding", or "synopsis". Defaults to "all" for read',
+})
 
 const Schema = Type.Object({
   action: Type.Optional(Action),

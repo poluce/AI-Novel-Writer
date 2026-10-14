@@ -1,5 +1,5 @@
 import type { AgentTool } from '@earendil-works/pi-agent-core'
-import { Type } from '@earendil-works/pi-ai'
+import { Type, StringEnum } from '@earendil-works/pi-ai'
 
 import { BlueprintRepository } from '../../repositories/blueprint-repository'
 import {
@@ -12,13 +12,9 @@ import {
   type WritingLanguage,
 } from '../../../src/shared/writing-language'
 
-const Action = Type.Union([
-  Type.Literal('read', { description: '读取章节细纲（未指定章节号则返回全部或指定范围的完整蓝图文档）' }),
-  Type.Literal('create', { description: '为指定章节创建全新细纲蓝图' }),
-  Type.Literal('update', { description: '修改指定章节蓝图的部分或全部字段' }),
-  Type.Literal('upsert', { description: '智能写入：若已存在则更新，若不存在则创建（默认）' }),
-  Type.Literal('delete', { description: '删除指定章节蓝图' }),
-], { description: '操作类型：默认为 upsert 智能写入' })
+const Action = StringEnum(['read', 'create', 'update', 'upsert', 'delete'] as const, {
+  description: 'Operation action: "read" (inspect blueprints), "create" (new blueprint), "update" (modify existing), "upsert" (smart write, default), or "delete" (remove blueprint).',
+})
 
 const BlueprintItemSchema = Type.Object({
   chapter_number: Type.Number({ description: '目标章节号（正整数，如 1）' }),

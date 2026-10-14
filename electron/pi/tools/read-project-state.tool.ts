@@ -1,5 +1,5 @@
 import type { AgentTool } from '@earendil-works/pi-agent-core'
-import { Type } from '@earendil-works/pi-ai'
+import { Type, StringEnum } from '@earendil-works/pi-ai'
 
 import { ProjectCoreRepository } from '../../repositories/project-core-repository'
 import { BlueprintRepository } from '../../repositories/blueprint-repository'
@@ -12,6 +12,9 @@ import {
 
 /** 单次返回的最大章节行数，避免几千章的项目把结果撑爆。 */
 const MAX_CHAPTER_ROWS = 200
+
+const ALL_SECTIONS = ['config', 'progress', 'recent_notes', 'blueprints'] as const
+type SectionKey = (typeof ALL_SECTIONS)[number]
 
 const SECTION_ALIASES: Record<string, SectionKey> = {
   config: 'config',
@@ -28,19 +31,13 @@ const SECTION_ALIASES: Record<string, SectionKey> = {
   '章节蓝图': 'blueprints',
 }
 
-const Section = Type.Union([
-  Type.Literal('config', { description: '小说配置（书名、类型、题材、大纲、视角等设定）' }),
-  Type.Literal('progress', { description: '章节进度（统计每章是否有蓝图、草稿、定稿）' }),
-  Type.Literal('recent_notes', { description: '近章要点（最近章节的核心事件与剧情备忘）' }),
-  Type.Literal('blueprints', { description: '章节蓝图清单（各章简要定位与目的）' }),
-], { description: '项目状态板块：config、progress、recent_notes、blueprints' })
+const Section = StringEnum(ALL_SECTIONS, {
+  description: 'Project state section: "config", "progress", "recent_notes", or "blueprints".',
+})
 
 const Schema = Type.Object({
   sections: Type.Optional(Type.Array(Section, { description: '要读取的状态板块列表，不传时默认读取全部 4 个板块' })),
 })
-
-const ALL_SECTIONS = ['config', 'progress', 'recent_notes', 'blueprints'] as const
-type SectionKey = (typeof ALL_SECTIONS)[number]
 
 export function createReadProjectStateTool(
   language: WritingLanguage,

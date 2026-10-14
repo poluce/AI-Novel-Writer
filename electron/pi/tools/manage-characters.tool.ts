@@ -1,6 +1,6 @@
-import type { AgentTool } from '@earendil-works/pi-agent-core'
-import { Type } from '@earendil-works/pi-ai'
 import { randomUUID } from 'node:crypto'
+import type { AgentTool } from '@earendil-works/pi-agent-core'
+import { Type, StringEnum } from '@earendil-works/pi-ai'
 
 import { CharacterRosterRepository } from '../../repositories/character-roster-repository'
 import { BlueprintRepository } from '../../repositories/blueprint-repository'
@@ -20,12 +20,10 @@ import {
   type CharacterRole,
 } from '../../../src/shared/character-role'
 
-const CharacterRoleSchema = Type.Union([
-  Type.Literal('protagonist', { description: '主角 / 领衔核心角色' }),
-  Type.Literal('antagonist', { description: '反派 / 主要敌对势力角色' }),
-  Type.Literal('supporting', { description: '重要配角 / 常驻盟友或同伴' }),
-  Type.Literal('minor', { description: '次要角色 / 临时龙套或过渡角色' }),
-], { description: '角色定位' })
+const CharacterRoleSchema = StringEnum(
+  ['protagonist', 'antagonist', 'supporting', 'minor'] as const,
+  { description: 'Character role: "protagonist" (main hero), "antagonist" (villain/rival), "supporting" (key ally), or "minor" (extra/passerby).' },
+)
 
 const RelationshipItemSchema = Type.Object({
   target: Type.String({ description: '目标角色姓名（必须是已存在或同批创建的角色）' }),
@@ -58,9 +56,20 @@ const SingleCharacterPayloadSchema = Type.Object({
   currentState: Type.Optional(StateFieldsSchema),
 })
 
+export const CHARACTER_ACTIONS = [
+  'read',
+  'track_appearances',
+  'create',
+  'batch_create',
+  'update',
+  'rename',
+  'update_relationship',
+  'delete',
+] as const
+
 const Schema = Type.Object({
-  action: Type.Optional(Type.String({
-    description: '操作类型：read（多维查询，默认）、track_appearances（出场追踪）、create（建档）、batch_create（批量建档）、update（修改档案/状态）、rename（级联改名）、update_relationship（关系更新）、delete（删除角色）',
+  action: Type.Optional(StringEnum(CHARACTER_ACTIONS, {
+    description: 'Operation action: "read" (inspect roster or character, default), "track_appearances" (trace chapter appearances), "create" (add new character), "batch_create" (add group), "update" (modify profile or state), "rename" (cascade rename), "update_relationship" (update relationship), "delete" (delete character).',
   })),
 
   // === 查询与目标定位参数 ===
@@ -68,11 +77,9 @@ const Schema = Type.Object({
   chapter_number: Type.Optional(Type.Integer({ minimum: 0, description: '目标章节序号。read 时用于查该章节历史状态快照；track_appearances 时用于反查该章节登场角色' })),
   role: Type.Optional(CharacterRoleSchema),
   keyword: Type.Optional(Type.String({ description: '模糊搜索关键词（匹配姓名、性格、背景、能力、备注等）' })),
-  scope: Type.Optional(Type.Union([
-    Type.Literal('all', { description: '读取完整档案与动态状态（默认）' }),
-    Type.Literal('profile', { description: '仅读取静态人设档案（不含状态）' }),
-    Type.Literal('state', { description: '仅读取动态状态信息' }),
-  ], { description: '读取范围' })),
+  scope: Type.Optional(StringEnum(['all', 'profile', 'state'] as const, {
+    description: 'Read scope: "all" (default), "profile", or "state".',
+  })),
   limit: Type.Optional(Type.Integer({ minimum: 1, description: '返回的最大角色条目数量' })),
 
   // === 基础档案字段（create / update 通用） ===
@@ -103,10 +110,9 @@ const Schema = Type.Object({
   source_name: Type.Optional(Type.String({ description: '关系出发角色姓名（update_relationship 专用）' })),
   target_name: Type.Optional(Type.String({ description: '关系目标角色姓名（update_relationship 专用）' })),
   relation: Type.Optional(Type.String({ description: '关系描述（update_relationship 专用）' })),
-  relationship_operation: Type.Optional(Type.Union([
-    Type.Literal('add', { description: '添加或覆盖更新关系（默认）' }),
-    Type.Literal('remove', { description: '删除该条关系' }),
-  ], { description: '关系操作类型' })),
+  relationship_operation: Type.Optional(StringEnum(['add', 'remove'] as const, {
+    description: 'Relationship operation: "add" (add or update, default) or "remove" (delete relationship).',
+  })),
 })
 
 export function createManageCharactersTool(

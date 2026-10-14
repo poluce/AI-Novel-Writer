@@ -1,5 +1,5 @@
 import type { AgentTool } from '@earendil-works/pi-agent-core'
-import { Type } from '@earendil-works/pi-ai'
+import { Type, StringEnum } from '@earendil-works/pi-ai'
 
 import { ProjectCoreRepository } from '../../repositories/project-core-repository'
 import type { RendererActionSink } from '../renderer-action'
@@ -13,22 +13,39 @@ import {
   type WritingLanguage,
 } from '../../../src/shared/writing-language'
 
-const Action = Type.Union([
-  Type.Literal('read', { description: 'Read configuration fields from the project database (default)' }),
-  Type.Literal('update', { description: 'Update or fill specified configuration fields in the project database' }),
-], { description: 'Operation mode: "read" to inspect existing settings, "update" to fill or modify settings' })
+const Action = StringEnum(['read', 'update'] as const, {
+  description: 'Operation mode: "read" to inspect existing settings (default), "update" to fill or modify settings',
+})
 
-const Field = Type.Union([
-  Type.Literal('all', { description: 'All novel configuration fields' }),
-  Type.Literal('basic_info', { description: 'Basic metadata: title, genre, subgenre, audience, chapters, words per chapter, structure, POV' }),
-  Type.Literal('coreOutline', { description: 'Core story outline: main plot arc and key milestones' }),
-  Type.Literal('worldSetting', { description: 'World setting: era, background rules, power/magic/tech system' }),
-  Type.Literal('goldenFinger', { description: 'Golden finger / core hook: protagonist advantage, mechanics, limits, and costs' }),
-  Type.Literal('protagonistProfile', { description: 'Protagonist profile: name, background, personality, core desire, flaws' }),
-  Type.Literal('globalGuidance', { description: 'Global writing guidance: cross-chapter rules, constraints, and instructions' }),
-  Type.Literal('writingStyle', { description: 'Writing style: prose rhythm, dialogue density, sensory detail expectations' }),
-  Type.Literal('referenceWorks', { description: 'Reference works: mentor novels or reference literature' }),
-], { description: 'Configuration field name to read. Defaults to "all"' })
+const Field = StringEnum([
+  'all',
+  'basic_info',
+  'coreOutline',
+  'worldSetting',
+  'goldenFinger',
+  'protagonistProfile',
+  'globalGuidance',
+  'writingStyle',
+  'referenceWorks',
+] as const, {
+  description: 'Configuration field name: "all" (default), "basic_info", "coreOutline", "worldSetting", "goldenFinger", "protagonistProfile", "globalGuidance", "writingStyle", or "referenceWorks"',
+})
+
+const PlotStructureEnum = StringEnum([
+  'three_act',
+  'heros_journey',
+  'save_the_cat',
+  'kishotenketsu',
+  'multi_thread',
+  'freeform',
+] as const, { description: 'Story structure framework: "three_act", "heros_journey", "save_the_cat", "kishotenketsu", "multi_thread", or "freeform"' })
+
+const NarrativePovEnum = StringEnum([
+  'third_limited',
+  'first_person',
+  'third_omniscient',
+  'multi_pov',
+] as const, { description: 'Narrative point of view: "third_limited", "first_person", "third_omniscient", or "multi_pov"' })
 
 const Schema = Type.Object({
   action: Type.Optional(Action),
@@ -42,20 +59,8 @@ const Schema = Type.Object({
   targetAudience: Type.Optional(Type.String({ description: 'Target audience (e.g. male-oriented, female-oriented, general)' })),
   totalChapters: Type.Optional(Type.Integer({ minimum: 1, description: 'Planned total chapter count (positive integer, e.g. 100)' })),
   wordsPerChapter: Type.Optional(Type.Integer({ minimum: 100, description: 'Target word count per chapter (positive integer, default ~3000)' })),
-  plotStructure: Type.Optional(Type.Union([
-    Type.Literal('three_act', { description: 'Three-act structure: setup, confrontation, climax' }),
-    Type.Literal('heros_journey', { description: 'Hero’s journey: twelve-stage mythic progression' }),
-    Type.Literal('save_the_cat', { description: 'Beat sheet: fifteen-beat commercial pacing' }),
-    Type.Literal('kishotenketsu', { description: 'Kishōtenketsu: four-part development structure' }),
-    Type.Literal('multi_thread', { description: 'Multi-thread: intertwined character storylines' }),
-    Type.Literal('freeform', { description: 'Freeform: content-driven adaptable structure' }),
-  ], { description: 'Story structure framework' })),
-  narrativePOV: Type.Optional(Type.Union([
-    Type.Literal('third_limited', { description: 'Third-person limited viewpoint (most standard in fiction)' }),
-    Type.Literal('first_person', { description: 'First-person viewpoint ("I")' }),
-    Type.Literal('third_omniscient', { description: 'Third-person omniscient viewpoint' }),
-    Type.Literal('multi_pov', { description: 'Multiple alternating viewpoints' }),
-  ], { description: 'Narrative point of view' })),
+  plotStructure: Type.Optional(PlotStructureEnum),
+  narrativePOV: Type.Optional(NarrativePovEnum),
   globalGuidance: Type.Optional(Type.String({ description: 'Long-term stable writing rules, cross-chapter prohibitions, and author guidance' })),
   writingStyle: Type.Optional(Type.String({ description: 'Stylistic instructions: pacing, dialogue tone, and descriptive density' })),
   referenceWorks: Type.Optional(Type.String({ description: 'Titles of mentor works or stylistic references' })),

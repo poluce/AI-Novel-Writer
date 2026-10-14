@@ -1,5 +1,5 @@
 import type { AgentTool } from '@earendil-works/pi-agent-core'
-import { Type } from '@earendil-works/pi-ai'
+import { Type, StringEnum } from '@earendil-works/pi-ai'
 
 import { ProjectCoreRepository } from '../../repositories/project-core-repository'
 import {
@@ -8,7 +8,7 @@ import {
 } from '../../../src/shared/writing-language'
 
 /**
- * 全书设定与大纲。角色图谱不在这里返回：角色只有 `read_characters`
+ * 全书设定与大纲。角色图谱不在这里返回：角色只有 `manage_characters`
  * 一个来源（权威角色名单），避免两个工具对同一事实给出不同口径。
  */
 const SECTION_ALIASES: Record<string, 'all' | 'premise' | 'worldbuilding' | 'synopsis'> = {
@@ -29,12 +29,9 @@ const SECTION_ALIASES: Record<string, 'all' | 'premise' | 'worldbuilding' | 'syn
   '情节': 'synopsis',
 }
 
-const Section = Type.Union([
-  Type.Literal('all', { description: '读取全部三大架构文档（默认）' }),
-  Type.Literal('premise', { description: '故事前提：一句话前提、核心冲突链、金手指定位、悬念骨架' }),
-  Type.Literal('worldbuilding', { description: '世界观：核心规则与漏洞、阶层与资源战场、深层危机' }),
-  Type.Literal('synopsis', { description: '情节大纲：全书宏观故事线与分卷剧情脉络' }),
-], { description: '要读取的故事架构模块，不传时默认读取全部' })
+const Section = StringEnum(['all', 'premise', 'worldbuilding', 'synopsis'] as const, {
+  description: 'Architecture section to read: "all" (default), "premise", "worldbuilding", or "synopsis".',
+})
 
 const Schema = Type.Object({
   section: Type.Optional(Section),

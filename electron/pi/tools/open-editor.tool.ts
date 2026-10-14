@@ -1,7 +1,7 @@
 import path from 'node:path'
 
 import type { AgentTool } from '@earendil-works/pi-agent-core'
-import { Type } from '@earendil-works/pi-ai'
+import { Type, StringEnum } from '@earendil-works/pi-ai'
 
 import { getCurrentProjectPath } from '../../database'
 import { assertProjectFilePath } from '../../utils/project-context'
@@ -41,14 +41,10 @@ const TARGET_ALIASES: Record<string, BuiltinEditorTarget | 'file'> = {
   '文件': 'file',
 }
 
-const Target = Type.Union([
-  Type.Literal('config', { description: '小说配置页面（基础参数、受众、核心大纲、金手指等）' }),
-  Type.Literal('blueprints', { description: '章节蓝图页面（全书章节规划细纲清单）' }),
-  Type.Literal('characters', { description: '角色管理页面（全书角色档案与关系图谱）' }),
-  Type.Literal('architecture', { description: '故事架构页面（故事前提、世界观设定）' }),
-  Type.Literal('synopsis', { description: '情节大纲页面（全书分卷情节大纲）' }),
-  Type.Literal('file', { description: '以只读方式查看项目物理文本文件（需提供 file_path）' }),
-], { description: '要打开的目标编辑器或页面类型' })
+const Target = StringEnum(
+  ['config', 'blueprints', 'characters', 'architecture', 'synopsis', 'file'] as const,
+  { description: 'Target editor: "config", "blueprints", "characters", "architecture", "synopsis", or "file".' },
+)
 
 const Schema = Type.Object({
   target: Target,

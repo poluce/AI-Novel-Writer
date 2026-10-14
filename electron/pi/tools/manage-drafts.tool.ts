@@ -1,5 +1,5 @@
 import type { AgentTool } from '@earendil-works/pi-agent-core'
-import { Type } from '@earendil-works/pi-ai'
+import { Type, StringEnum } from '@earendil-works/pi-ai'
 
 import { DraftRepository } from '../../repositories/draft-repository'
 import { DraftAnnotationRepository } from '../../repositories/draft-annotation-repository'
@@ -12,32 +12,38 @@ import {
   type WritingLanguage,
 } from '../../../src/shared/writing-language'
 
-const DraftType = Type.Union([
-  Type.Literal('latest', { description: '当前最新版本正文草稿（默认）' }),
-  Type.Literal('draft_v1', { description: '章节初稿（第 1 版正文草稿）' }),
-  Type.Literal('revised', { description: '修订润色稿' }),
-], { description: '草稿版本类型' })
+export const DRAFT_ACTIONS = [
+  'read',
+  'write',
+  'replace_excerpt',
+  'list_versions',
+  'list_annotations',
+  'resolve_annotation',
+  'delete',
+] as const
 
-const WriteMode = Type.Union([
-  Type.Literal('new_version', { description: '创建新版本草稿（如 Draft v2、v3），完整保留历史旧版本（推荐，整章重写默认）' }),
-  Type.Literal('overwrite', { description: '直接全量覆盖当前未定稿的草稿正文（注意：已定稿章节受保护严禁覆盖）' }),
-], { description: '整篇写入模式' })
+export const DRAFT_TYPES = ['latest', 'draft_v1', 'revised'] as const
+export const WRITE_MODES = ['new_version', 'overwrite'] as const
 
 const Schema = Type.Object({
-  action: Type.Optional(Type.String({
-    description: '操作类型：read（读取草稿正文，默认）、write（整篇写草稿/新建/重写）、replace_excerpt（指定位置无损局部替换）、list_versions（版本清单）、list_annotations（待处理批注）、resolve_annotation（解决批注）、delete（删除草稿）',
+  action: Type.Optional(StringEnum(DRAFT_ACTIONS, {
+    description: 'Operation action: "read" (read draft body with pending annotations, default), "write" (create new draft or rewrite whole chapter), "replace_excerpt" (precisely replace passage), "list_versions" (list chapter draft versions), "list_annotations" (inspect annotations), "resolve_annotation" (mark annotation resolved), "delete" (delete unfinalized draft).',
   })),
   chapter_number: Type.Integer({ minimum: 1, description: '目标章节序号（正整数，如 1 代表第 1 章）' }),
 
   // === read 参数 ===
-  draft_type: Type.Optional(DraftType),
+  draft_type: Type.Optional(StringEnum(DRAFT_TYPES, {
+    description: 'Draft type to read: "latest" (default), "draft_v1" (initial draft), or "revised" (revised draft).',
+  })),
   version: Type.Optional(Type.Integer({ minimum: 1, description: '指定的草稿版本号（如 1、2、3）' })),
   offset: Type.Optional(Type.Integer({ minimum: 1, description: '读取起始行号（从 1 开始）' })),
   limit: Type.Optional(Type.Integer({ minimum: 1, description: '单次读取的最大行数' })),
 
   // === write 参数 ===
   content: Type.Optional(Type.String({ description: '要写入的完整草稿正文内容（write 操作必填）' })),
-  mode: Type.Optional(WriteMode),
+  mode: Type.Optional(StringEnum(WRITE_MODES, {
+    description: 'Write mode: "new_version" (create new version v2/v3, recommended default) or "overwrite" (overwrite unfinalized draft).',
+  })),
 
   // === replace_excerpt 参数 ===
   old_text: Type.Optional(Type.String({ description: '单处替换：要被替换的原文片段（必须唯一存在）' })),
