@@ -1,11 +1,12 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 
 const CONNECT_TIMEOUT_MS = 10_000
 
 export interface McpTransportConfig {
-  transport: 'stdio' | 'sse'
+  transport: 'stdio' | 'sse' | 'streamable-http'
   command?: string
   args?: string[]
   env?: Record<string, string>
@@ -35,17 +36,41 @@ function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
   })
 }
 
-/** Open an official MCP SDK client for stdio or SSE. */
+/** Open an official MCP SDK client for stdio, SSE, or Streamable HTTP. */
 export async function openMcpSdkSession(config: McpTransportConfig): Promise<McpSdkSession> {
-  const client = new Client({ name: 'vela', version: '1.0.0' })
-  const transport = config.transport === 'sse'
-    ? new SSEClientTransport(new URL(config.url ?? ''))
-    : new StdioClientTransport({
-        command: config.command ?? '',
-        args: config.args,
-        env: { ...process.env, ...config.env } as Record<string, string>,
-      })
-  await withTimeout(client.connect(transport), 'initialize')
+  let client = new Client({ name: 'vela', version: '1.0.0' })
+
+  if (config.transport === 'stdio') {
+    const transport = new StdioClientTransport({
+      command: config.command ?? '',
+      args: config.args,
+      env: { ...process.env, ...config.env } as Record<string, string>,
+    })
+    await withTimeout(client.connect(transport), 'initialize (stdio)')
+  } else if (config.transport === 'streamable-http') {
+    const transport = new StreamableHTTPClientTransport(new URL(config.url ?? ''))
+    await withTimeout(client.connect(transport), 'initialize (streamable-http)')
+  } else {
+    // transport 为 sse 或默认 URL 模式：
+    // 优先尝试标准的 SSEClientTransport；
+    // 如果远程服务器返回 405（Method Not Allowed，表明该端点为只接受 POST 的 Streamable HTTP），
+    // 自动平滑升级为 StreamableHTTPClientTransport 进行直连。
+    const targetUrl = new URL(config.url ?? '')
+    try {
+      const sseTransport = new SSEClientTransport(targetUrl)
+      await withTimeout(client.connect(sseTransport), 'initialize (sse)')
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      if (errorMsg.includes('405') || errorMsg.includes('Non-200 status code (405)')) {
+        client = new Client({ name: 'vela', version: '1.0.0' })
+        const streamableTransport = new StreamableHTTPClientTransport(targetUrl)
+        await withTimeout(client.connect(streamableTransport), 'initialize (streamable-http fallback)')
+      } else {
+        throw error
+      }
+    }
+  }
+
   return {
     listTools: () => client.listTools(),
     listResources: () => client.listResources(),
