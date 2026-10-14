@@ -8,11 +8,7 @@ import {
   writingLanguageText,
   type WritingLanguage,
 } from '../../../src/shared/writing-language'
-import {
-  inspectWritingSkillMarkdown,
-  WRITING_SKILL_STAGES,
-  type WritingSkillStage,
-} from '../../../src/shared/writing-skills'
+import { inspectWritingSkillMarkdown } from '../../../src/shared/writing-skills'
 import type { AgentSkillCatalogEntry } from '../../../src/shared/agent-skills'
 import { logFailure } from '../../../src/shared/fail-log'
 import {
@@ -22,11 +18,6 @@ import {
   inspectWritingSkill,
   installWritingSkill,
 } from '../../services/writing-skill-service'
-import {
-  saveWritingSkillBinding,
-  getWritingSkillBindings,
-  removeWritingSkillBinding,
-} from '../../services/writing-skill-binding-service'
 import { getCurrentProjectPath } from '../../database'
 
 export const MANAGE_SKILLS_ACTIONS = [
@@ -35,22 +26,11 @@ export const MANAGE_SKILLS_ACTIONS = [
   'create',
   'update',
   'delete',
-  'bind',
-  'unbind',
   'inspect',
   'install',
 ] as const
 
 export type ManageSkillsAction = typeof MANAGE_SKILLS_ACTIONS[number]
-
-const StageEnum = StringEnum([
-  'planning',
-  'drafting',
-  'review',
-  'refinement',
-], {
-  description: '写作流程阶段："planning"（大纲策划）、"drafting"（正文起草）、"review"（审稿挑刺）、"refinement"（修稿润色）',
-})
 
 const ScopeEnum = StringEnum([
   'project',
@@ -62,18 +42,16 @@ const ScopeEnum = StringEnum([
 const Schema = Type.Object({
   action: Type.Optional(StringEnum(MANAGE_SKILLS_ACTIONS, {
     description: '技能操作类型：' +
-      '"list"（列出所有已安装与内置技能及阶段绑定，默认）、' +
+      '"list"（列出所有已安装与内置技能，默认）、' +
       '"load"（读取指定技能的完整指引正文）、' +
       '"create"（新建一个自定义写作技能）、' +
       '"update"（修改已有技能的正文或元数据）、' +
       '"delete"（删除指定的用户/项目技能）、' +
-      '"bind"（把技能绑定到小说的创作阶段）、' +
-      '"unbind"（解绑阶段的技能）、' +
       '"inspect"（只读预检远程 GitHub 技能包）、' +
       '"install"（从 GitHub 地址安装技能）。',
   })),
   name: Type.Optional(Type.String({
-    description: '技能唯一名称（小写短横线规范，如 "scene-design", "review-chapter"；load / create / update / delete / bind 常用）',
+    description: '技能唯一名称（小写短横线规范，如 "scene-design", "review-chapter"；load / create / update / delete 必填）',
   })),
   content: Type.Optional(Type.String({
     description: '技能 Markdown 正文与提示词指引（create 必填，update 可选）',
@@ -85,7 +63,6 @@ const Schema = Type.Object({
     description: '技能的可读显示名称（如 "场景五感精细设计"）',
   })),
   scope: Type.Optional(ScopeEnum),
-  stage: Type.Optional(StageEnum),
   source_url: Type.Optional(Type.String({
     description: '远程 GitHub 仓库或 SKILL.md 地址（inspect / install 专用）',
   })),
@@ -93,7 +70,6 @@ const Schema = Type.Object({
 
 function formatSkillListingRow(
   skill: AgentSkillCatalogEntry,
-  boundStage: string | undefined,
   text: (zh: string, en: string) => string,
 ): string {
   let sourceTag = text('用户', 'User')
@@ -103,19 +79,15 @@ function formatSkillListingRow(
     sourceTag = text('项目', 'Project')
   }
 
-  const bindingTag = boundStage
-    ? text(` · 已绑定【${boundStage}】阶段`, ` · bound to [${boundStage}]`)
-    : ''
-
-  return `- **${skill.name}** (${sourceTag}${bindingTag}): ${skill.description}`
+  return `- **${skill.name}** (${sourceTag}): ${skill.description}`
 }
 
 /**
- * 统一写作技能管理工具（Manage Skills）：
+ * 统一写作技能管理与调用工具（Manage Skills）：
  *
- * 集合了技能的 全生命周期 操作（查询、读取、新建、修改、删除、绑定、预检、安装）。
+ * 技能纯粹作为工具按需调用：
  * - 只读操作（list / load / inspect）自动静默放行；
- * - 变更操作（create / update / delete / bind / unbind / install）受受控 Seam 保护。
+ * - 变更操作（create / update / delete / install）受受控 Seam 保护。
  */
 export function createManageSkillsTool(
   language: WritingLanguage,
@@ -130,8 +102,8 @@ export function createManageSkillsTool(
     name: 'manage_skills',
     label: 'Manage Skills',
     description: text(
-      '统一管理写作技能（Skill）：查询技能列表及阶段绑定（list）、读取技能完整指导正文（load）、创建自定义技能（create）、修改已有技能（update）、删除技能（delete）、绑定/解绑到创作阶段（bind/unbind）、预检（inspect）与安装（install）远程技能。',
-      'Unified writing skill management: list installed skills and stage bindings (list), load full skill instructions (load), create custom skill (create), update skill (update), delete skill (delete), bind/unbind to stage (bind/unbind), inspect (inspect) and install (install) remote skills.',
+      '统一管理与调用写作技能（Skill）：查询技能列表（list）、读取技能完整指导正文（load）、创建自定义技能（create）、修改已有技能（update）、删除技能（delete）、预检（inspect）与安装（install）远程技能。',
+      'Unified writing skill management and invocation: list installed skills (list), load full skill instructions (load), create custom skill (create), update skill (update), delete skill (delete), inspect (inspect) and install (install) remote skills.',
     ),
     parameters: Schema,
     execute: async (_id, params) => {
@@ -146,18 +118,10 @@ export function createManageSkillsTool(
       }
 
       switch (action) {
-        // ===== 1. 列出所有技能及绑定 =====
+        // ===== 1. 列出所有技能 =====
         case 'list': {
-          const projectPath = getCurrentProjectPath()
-          const bindings = await getWritingSkillBindings(projectPath)
-          const stageMap = new Map<string, string>()
-          for (const [stg, id] of Object.entries(bindings)) {
-            const rawName = id.split(':')[1] ?? id
-            stageMap.set(rawName, stg)
-          }
-
           const rows = available.map(skill =>
-            formatSkillListingRow(skill, stageMap.get(skill.name), text)
+            formatSkillListingRow(skill, text)
           )
 
           const body = rows.length > 0
@@ -173,7 +137,7 @@ export function createManageSkillsTool(
                   '💡 Use action: "load", name: "<skill_name>" to load the full instructions for any skill.',
                 ),
             }],
-            details: { skills: available, bindings },
+            details: { skills: available },
           }
         }
 
@@ -217,7 +181,6 @@ export function createManageSkillsTool(
           const content = params.content?.trim()
           if (!content) throw new Error(text('缺少 content 参数（技能指导正文）', 'The content parameter is required'))
 
-          const stage = params.stage as WritingSkillStage | undefined
           const scope = params.scope as ('project' | 'user') | undefined
 
           const result = await createCustomWritingSkill({
@@ -225,28 +188,21 @@ export function createManageSkillsTool(
             content,
             description: params.description,
             displayName: params.display_name,
-            stage,
             scope,
             projectPath: getCurrentProjectPath(),
           })
 
           if (!result.success) throw new Error(result.error)
 
-          // 若附带了 stage，自动完成阶段绑定
-          if (stage) {
-            const skillId = `${result.skill.source}:${name}`
-            await saveWritingSkillBinding(stage, skillId).catch(() => {})
-          }
-
           return {
             content: [{
               type: 'text',
               text: text(
-                `成功创建并安装写作技能“${name}”（作用域: ${result.skill.source}）${stage ? `，并已自动绑定到【${stage}】创作阶段` : ''}。`,
-                `Successfully created writing skill "${name}" (scope: ${result.skill.source})${stage ? `, and bound to stage [${stage}]` : ''}.`,
+                `成功创建并安装写作技能“${name}”（作用域: ${result.skill.source}）。`,
+                `Successfully created writing skill "${name}" (scope: ${result.skill.source}).`,
               ),
             }],
-            details: { skill: result.skill, stage },
+            details: { skill: result.skill },
           }
         }
 
@@ -255,14 +211,11 @@ export function createManageSkillsTool(
           const name = params.name?.trim()
           if (!name) throw new Error(text('缺少 name 参数（请指定要修改的技能名）', 'The name parameter is required'))
 
-          const stage = params.stage as WritingSkillStage | undefined
-
           const result = await updateCustomWritingSkill({
             name,
             content: params.content,
             description: params.description,
             displayName: params.display_name,
-            stage,
             projectPath: getCurrentProjectPath(),
           })
 
@@ -292,75 +245,19 @@ export function createManageSkillsTool(
 
           if (!result.success) throw new Error(result.error)
 
-          // 自动解除任何指向该技能的阶段绑定
-          const projectPath = getCurrentProjectPath()
-          if (projectPath) {
-            const bindings = await getWritingSkillBindings(projectPath)
-            for (const [stg, id] of Object.entries(bindings)) {
-              if (id.endsWith(`:${name}`) || id === name) {
-                await removeWritingSkillBinding(stg as WritingSkillStage).catch(() => {})
-              }
-            }
-          }
-
           return {
             content: [{
               type: 'text',
               text: text(
-                `已成功删除写作技能“${name}”，并已清除相关创作阶段的绑定。`,
-                `Successfully deleted writing skill "${name}" and removed associated stage bindings.`,
+                `已成功删除写作技能“${name}”。`,
+                `Successfully deleted writing skill "${name}".`,
               ),
             }],
             details: { name },
           }
         }
 
-        // ===== 6. 绑定阶段 =====
-        case 'bind': {
-          const name = params.name?.trim()
-          if (!name) throw new Error(text('缺少 name 参数（请指定要绑定的技能名）', 'The name parameter is required'))
-          const stage = params.stage as WritingSkillStage | undefined
-          if (!stage || !WRITING_SKILL_STAGES.includes(stage)) {
-            throw new Error(text('缺少有效的 stage 参数（planning / drafting / review / refinement）', 'A valid stage parameter is required'))
-          }
-
-          // 解析 skill_id
-          const skill = byName.get(name)
-          const skillId = skill ? `${skill.source}:${name}` : `user:${name}`
-
-          await saveWritingSkillBinding(stage, skillId)
-          return {
-            content: [{
-              type: 'text',
-              text: text(
-                `已将技能“${name}”成功绑定到小说的【${stage}】阶段。`,
-                `Successfully bound skill "${name}" to stage [${stage}].`,
-              ),
-            }],
-            details: { name, stage, skillId },
-          }
-        }
-
-        // ===== 7. 解绑阶段 =====
-        case 'unbind': {
-          const stage = params.stage as WritingSkillStage | undefined
-          if (!stage || !WRITING_SKILL_STAGES.includes(stage)) {
-            throw new Error(text('缺少有效的 stage 参数（planning / drafting / review / refinement）', 'A valid stage parameter is required'))
-          }
-          await removeWritingSkillBinding(stage)
-          return {
-            content: [{
-              type: 'text',
-              text: text(
-                `已成功解除【${stage}】阶段的技能绑定。`,
-                `Successfully unbound skill from stage [${stage}].`,
-              ),
-            }],
-            details: { stage },
-          }
-        }
-
-        // ===== 8. 预检远程技能 =====
+        // ===== 6. 预检远程技能 =====
         case 'inspect': {
           const sourceUrl = params.source_url?.trim()
           if (!sourceUrl) throw new Error(text('缺少 source_url 参数', 'The source_url parameter is required'))
@@ -386,7 +283,7 @@ export function createManageSkillsTool(
           }
         }
 
-        // ===== 9. 安装远程技能 =====
+        // ===== 7. 安装远程技能 =====
         case 'install': {
           const sourceUrl = params.source_url?.trim()
           if (!sourceUrl) throw new Error(text('缺少 source_url 参数', 'The source_url parameter is required'))

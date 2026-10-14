@@ -33,7 +33,7 @@ describe('buildAgentTools', () => {
       'novel_config', 'story_architecture',
       'read_architecture', 'manage_characters', 'read_blueprint', 'manage_drafts',
       'read_project_state', 'search_knowledge', 'read_file',
-      'install_writing_skill', 'bind_writing_skill', 'open_editor',
+      'install_writing_skill', 'manage_skills', 'open_editor',
       'propose_chapter_blueprint', 'manage_mcp',
     ]) {
       expect(names).toContain(projectTool)
@@ -82,7 +82,6 @@ describe('buildAgentTools', () => {
     expect([...confirmationToolNames()].sort()).toEqual([
       // harness 自带的执行工具同样逐次确认。
       'bash',
-      'bind_writing_skill',
       'edit',
       'install_writing_skill',
       'manage_characters',

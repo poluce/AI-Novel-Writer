@@ -1,32 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AlertTriangle, Download, Link2, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react'
-import type { ProjectSessionContext } from '../../shared/ipc-channels'
-import { projectSessionContextFromProject } from '../../shared/project-session-context'
-import {
-  WRITING_SKILL_STAGES,
-  type RemoteWritingSkillInspection,
-  type WritingSkillStage,
-} from '../../shared/writing-skills'
+import type { RemoteWritingSkillInspection } from '../../shared/writing-skills'
 import { useLocaleStore } from '../../stores/locale-store'
-import { useProjectStore } from '../../stores/project-store'
 import { ipc } from '../../services/ipc-client'
 import { skillRegistry, type LoadedSkill } from '../../services/agent/skill-registry'
 import type { WritingSkillCatalogDiagnostic } from '../../shared/writing-skill-catalog'
-import {
-  loadWritingSkillBindings,
-  saveWritingSkillBinding,
-} from '../../services/agent/writing-skill-bindings'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
-import { NativeSelect } from '../ui/NativeSelect'
 import { confirm as confirmAction } from '../ui/Confirm'
-
-const STAGE_COPY: Record<WritingSkillStage, readonly [string, string]> = {
-  planning: ['设定与规划', 'Planning'],
-  drafting: ['章节正文', 'Chapter drafting'],
-  review: ['AI 审稿', 'AI review'],
-  refinement: ['修稿与定稿前润色', 'Revision and pre-final polish'],
-}
 
 const SOURCE_COPY = {
   builtin: ['内置', 'Built-in'],
@@ -92,33 +73,19 @@ function localizedSkillDescription(skill: LoadedSkill, text: (zhCN: string, enUS
   return copy ? text(skill.metadata.description, copy[1]) : skill.metadata.description
 }
 
-function stageCopy(text: (zhCN: string, enUS: string) => string, stage: WritingSkillStage): string {
-  const copy = STAGE_COPY[stage]
-  return text(copy[0], copy[1])
-}
-
 export default function SkillSettings() {
   const text = useLocaleStore(state => state.text)
-  const project = useProjectStore(state => state.currentProject)
-  const projectSession = useMemo(() => projectSessionContextFromProject(project), [project])
   const [skills, setSkills] = useState<LoadedSkill[]>([])
-  const [bindings, setBindings] = useState<Partial<Record<WritingSkillStage, string>>>({})
   const [sourceUrl, setSourceUrl] = useState('')
   const [inspection, setInspection] = useState<RemoteWritingSkillInspection | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [diagnostics, setDiagnostics] = useState<WritingSkillCatalogDiagnostic[]>([])
 
-  const reload = async (session: ProjectSessionContext | null = projectSession) => {
+  const reload = async () => {
     await skillRegistry.loadAll()
     setSkills(skillRegistry.listAll())
     setDiagnostics(skillRegistry.listDiagnostics())
-    if (session) {
-      const loaded = await loadWritingSkillBindings(session)
-      setBindings(loaded.bindings)
-    } else {
-      setBindings({})
-    }
   }
 
   useEffect(() => {
@@ -129,16 +96,12 @@ export default function SkillSettings() {
         if (disposed) return
         setSkills(skillRegistry.listAll())
         setDiagnostics(skillRegistry.listDiagnostics())
-        if (projectSession) {
-          const loaded = await loadWritingSkillBindings(projectSession)
-          if (!disposed) setBindings(loaded.bindings)
-        } else setBindings({})
       } catch (cause) {
         if (!disposed) setError(cause instanceof Error ? cause.message : String(cause))
       }
     })()
     return () => { disposed = true }
-  }, [projectSession])
+  }, [])
 
   const inspectSource = async () => {
     setBusy(true)
@@ -176,39 +139,15 @@ export default function SkillSettings() {
     }
   }
 
-  const updateBinding = async (stage: WritingSkillStage, skillId: string) => {
-    if (!projectSession) return
-    setBusy(true)
-    setError(null)
-    try {
-      await saveWritingSkillBinding(projectSession, stage, skillId || null)
-      setBindings(previous => {
-        const next = { ...previous }
-        if (skillId) next[stage] = skillId
-        else delete next[stage]
-        return next
-      })
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause))
-    } finally {
-      setBusy(false)
-    }
-  }
-
   const uninstall = async (skill: LoadedSkill) => {
     if (skill.source !== 'user') return
     if (!await confirmAction(text(
-      `卸载“${skillLabel(skill)}”？当前项目中的绑定也会解除。`,
-      `Uninstall “${skillLabel(skill)}”? Its bindings in the current project will also be removed.`,
+      `卸载“${skillLabel(skill)}”？`,
+      `Uninstall “${skillLabel(skill)}”?`,
     ), { title: text('卸载写作 Skill', 'Uninstall writing skill'), danger: true })) return
     setBusy(true)
     setError(null)
     try {
-      if (projectSession) {
-        for (const stage of WRITING_SKILL_STAGES) {
-          if (bindings[stage] === skill.skillId) await saveWritingSkillBinding(projectSession, stage, null)
-        }
-      }
       const result = await ipc.invoke('skills:uninstall-user', skill.metadata.name)
       if (!result.success) throw new Error(result.error || text('Skill 卸载失败', 'Skill uninstall failed'))
       await reload()
@@ -218,8 +157,6 @@ export default function SkillSettings() {
       setBusy(false)
     }
   }
-
-  const compatibleSkills = skills.filter(skill => skill.writingSkill.compatible)
 
   return (
     <div className="space-y-5">
@@ -258,7 +195,6 @@ export default function SkillSettings() {
                 <div className="text-sm font-medium text-[var(--color-text)]">{inspection.metadata.name}</div>
                 <p className="mt-0.5 text-xs leading-5 text-[var(--color-text-muted)]">{inspection.metadata.description}</p>
                 <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--color-text-secondary)]">
-                  <span>{text('建议阶段', 'Suggested stage')}: {stageCopy(text, inspection.suggestedStage)}</span>
                   <span>{text('语言', 'Language')}: {inspection.metadata.language}</span>
                   <span>{text('大小', 'Size')}: {formatBytes(inspection.utf8Bytes)}</span>
                 </div>
@@ -279,37 +215,6 @@ export default function SkillSettings() {
           </div>
         )}
         {error && <p role="alert" className="text-xs text-[var(--color-error-text)]">{error}</p>}
-      </section>
-
-      <section className="space-y-3" aria-labelledby="writing-skill-bindings-title">
-        <div>
-          <h3 id="writing-skill-bindings-title" className="text-sm font-semibold text-[var(--color-text)]">
-            {text('当前项目阶段绑定', 'Current project stage bindings')}
-          </h3>
-          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-            {projectSession
-              ? text('每个阶段最多启用一个 Skill；工作流启动时会冻结当次内容。', 'Each stage uses at most one skill; its content is frozen when the workflow starts.')
-              : text('请先打开项目再绑定 Skill。', 'Open a project to bind skills.')}
-          </p>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          {WRITING_SKILL_STAGES.map(stage => (
-            <label key={stage} className="space-y-1 text-xs text-[var(--color-text-secondary)]">
-              <span>{stageCopy(text, stage)}</span>
-              <NativeSelect
-                value={bindings[stage] ?? ''}
-                onChange={event => updateBinding(stage, event.target.value)}
-                disabled={busy || !projectSession}
-                aria-label={text(`${STAGE_COPY[stage][0]} Skill`, `${STAGE_COPY[stage][1]} skill`)}
-              >
-                <option value="">{text('不启用', 'Disabled')}</option>
-                {compatibleSkills.map(skill => (
-                  <option key={skill.skillId} value={skill.skillId}>{localizedSkillLabel(skill, text)}</option>
-                ))}
-              </NativeSelect>
-            </label>
-          ))}
-        </div>
       </section>
 
       {diagnostics.length > 0 && (
@@ -352,7 +257,6 @@ export default function SkillSettings() {
             {text('暂无可用 Skill', 'No skills available')}
           </div>
         ) : skills.map(skill => {
-          const activeStages = WRITING_SKILL_STAGES.filter(stage => bindings[stage] === skill.skillId)
           return (
             <div key={skill.skillId} className="flex items-start gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-panel)] px-4 py-3">
               <div className="min-w-0 flex-1">
@@ -370,7 +274,6 @@ export default function SkillSettings() {
                   <span>{text('版本', 'Version')}: {skill.metadata.version ?? '—'}</span>
                   <span>{text('语言', 'Language')}: {skill.writingSkill.metadata.language}</span>
                   <span>{text('大小', 'Size')}: {formatBytes(skill.writingSkill.utf8Bytes)}</span>
-                  <span>{text('启用阶段', 'Enabled stage')}: {activeStages.length ? activeStages.map(stage => stageCopy(text, stage)).join(text('、', ', ')) : text('未启用', 'None')}</span>
                 </div>
               </div>
               {skill.source === 'user' && (

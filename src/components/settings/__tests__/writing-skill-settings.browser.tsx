@@ -59,7 +59,7 @@ beforeEach(async () => {
   root = createRoot(container)
   await act(async () => root?.render(<SkillSettings />))
   await act(async () => {
-    await vi.waitFor(() => expect(container?.querySelector('option[value^="builtin:"]')).not.toBeNull())
+    await vi.waitFor(() => expect(container?.querySelector('section[aria-labelledby="writing-skill-library-title"]')).not.toBeNull())
   })
 })
 
@@ -96,52 +96,14 @@ describe('writing skill settings', () => {
     await vi.waitFor(() => expect(page.getByRole('dialog').query()).toBeNull())
   })
 
-  it('shows four project stages and persists one selected skill id', async () => {
-    await expect.element(page.getByLabelText('Planning skill')).toBeVisible()
-    await expect.element(page.getByLabelText('Chapter drafting skill')).toBeVisible()
-    await expect.element(page.getByLabelText('AI review skill')).toBeVisible()
-    await expect.element(page.getByLabelText('Revision and pre-final polish skill')).toBeVisible()
-
-    await act(async () => {
-      await page.getByLabelText('Revision and pre-final polish skill')
-        .selectOptions('builtin:natural-prose-refinement')
-    })
-    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith(
-      'fs:write-file',
-      'C:/novels/skill-project/.vela/writing-skills.json',
-      expect.stringContaining('builtin:natural-prose-refinement'),
-      'C:/novels/skill-project',
-      expect.objectContaining({ projectId: 'skill-project' }),
-    ))
-  })
-
-  it('uses an English separator when one skill is enabled for multiple stages', async () => {
-    await act(async () => {
-      await page.getByLabelText('Planning skill').selectOptions('builtin:long-form-continuity')
-    })
-    await expect.element(page.getByLabelText('Chapter drafting skill')).toBeEnabled()
-    await act(async () => {
-      await page.getByLabelText('Chapter drafting skill').selectOptions('builtin:long-form-continuity')
-    })
-
-    const library = container?.querySelector('section[aria-labelledby="writing-skill-library-title"]')
-    await vi.waitFor(() => expect(library?.textContent).toContain('Planning, Chapter drafting'))
-    expect(library?.textContent).not.toContain('Planning、Chapter drafting')
-  })
-
   it('localizes bundled skill metadata while preserving its Chinese copy', async () => {
     const library = container?.querySelector('section[aria-labelledby="writing-skill-library-title"]')
-    const builtinOptions = () => [...(container?.querySelectorAll('select option') ?? [])]
-      .filter(option => (option as HTMLOptionElement).value.startsWith('builtin:'))
-      .map(option => option.textContent ?? '')
-
     expect(library?.textContent).not.toMatch(/[\u3400-\u9fff]/u)
-    expect(builtinOptions().join(' ')).not.toMatch(/[\u3400-\u9fff]/u)
+    expect(library?.textContent).toContain('Long-form Continuity and Scene Progression')
 
     await act(async () => useLocaleStore.getState().setLocale('zh-CN'))
 
     expect(library?.textContent).toContain('长篇连续性与场景推进')
-    expect(builtinOptions()).toContain('自然语言润色')
   })
 })
 

@@ -14,7 +14,6 @@ import { createReadFileTool } from './tools/read-file.tool'
 import { createInspectWritingSkillTool } from './tools/inspect-writing-skill.tool'
 import { createLoadWritingSkillTool } from './tools/load-writing-skill.tool'
 import { createInstallWritingSkillTool } from './tools/install-writing-skill.tool'
-import { createBindWritingSkillTool } from './tools/bind-writing-skill.tool'
 import { createManageSkillsTool } from './tools/manage-skills.tool'
 import { createOpenEditorTool } from './tools/open-editor.tool'
 import { createProposeChapterBlueprintTool } from './tools/propose-chapter-blueprint.tool'
@@ -58,7 +57,6 @@ export function buildAgentTools(
     createManageKnowledgeBaseTool(language),
     createReadFileTool(language),
     createInstallWritingSkillTool(language),
-    createBindWritingSkillTool(language),
     createOpenEditorTool(language, rendererAction),
     createProposeChapterBlueprintTool(language),
     createManageCharactersTool(language, rendererAction),
@@ -94,6 +92,5 @@ export function confirmationToolNames(): ReadonlySet<string> {
     'manage_skills',
     'manage_knowledge_base',
     'install_writing_skill',
-    'bind_writing_skill',
   ])
 }

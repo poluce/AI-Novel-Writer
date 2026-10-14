@@ -560,28 +560,9 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
     let writingSkills: FrozenWritingSkillSnapshot = Object.freeze({})
     try {
       writingSkills = await freezeWritingSkillsSnapshot(projectSession, writingLanguage)
-    } catch (error) {
-      const failure = uiText(
-        uiLocale,
-        `写作 Skill 快照加载失败，工作流未启动：${error instanceof Error ? error.message : String(error)}`,
-        `Writing skill snapshot could not be loaded, so the workflow was not started: ${error instanceof Error ? error.message : String(error)}`,
-      )
-      updateRunById(set, run.id, {
-        status: 'failed',
-        completedAt: new Date().toISOString(),
-        error: failure,
-      })
-      set(s => {
-        const failedRun = s.activeRuns.find(active => active.id === run.id)
-        const newRuns = s.activeRuns.filter(active => active.id !== run.id)
-        return {
-          activeRuns: newRuns,
-          history: failedRun ? prependRunHistory(s.history, failedRun) : s.history,
-          ...computeCompat(newRuns, s.waitingRuns),
-        }
-      })
-      get().addLog('error', failure, uiLocale)
-      return runId
+    } catch {
+      // 阶段绑定已废除，技能纯粹作为工具按需调用；此处安全兜底为空快照，绝不阻断工作流
+      writingSkills = Object.freeze({})
     }
     if (!sameProjectSessionContext(
       projectSession,

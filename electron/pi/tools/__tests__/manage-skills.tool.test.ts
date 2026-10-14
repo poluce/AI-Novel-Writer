@@ -9,21 +9,10 @@ import { createManageSkillsTool } from '../manage-skills.tool'
 
 const mockState = vi.hoisted(() => ({
   currentProjectPath: null as string | null,
-  bindings: {} as Record<string, string>,
 }))
 
 vi.mock('../../../database', () => ({
   getCurrentProjectPath: () => mockState.currentProjectPath,
-}))
-
-vi.mock('../../../services/writing-skill-binding-service', () => ({
-  getWritingSkillBindings: vi.fn(async () => ({ ...mockState.bindings })),
-  saveWritingSkillBinding: vi.fn(async (stage: string, id: string) => {
-    mockState.bindings[stage] = id
-  }),
-  removeWritingSkillBinding: vi.fn(async (stage: string) => {
-    delete mockState.bindings[stage]
-  }),
 }))
 
 const roots: string[] = []
@@ -46,7 +35,6 @@ afterEach(() => {
 
 beforeEach(() => {
   mockState.currentProjectPath = temporaryDir()
-  mockState.bindings = {}
 })
 
 const catalogSkills: AgentSkillCatalogEntry[] = [
@@ -67,16 +55,15 @@ const catalogSkills: AgentSkillCatalogEntry[] = [
 ]
 
 describe('manage_skills tool', () => {
-  it('lists all available skills and indicates stage bindings', async () => {
-    mockState.bindings = { review: 'builtin:review-chapter' }
+  it('lists all available skills', async () => {
     const tool = createManageSkillsTool('zh-CN', catalogSkills)
 
     const result = await tool.execute('call-1', { action: 'list' })
     const text = result.content[0].type === 'text' ? result.content[0].text : ''
 
     expect(text).toContain('review-chapter')
-    expect(text).toContain('已绑定【review】阶段')
     expect(text).toContain('scene-design')
+    expect(text).toContain('内置')
   })
 
   it('loads the full content of a skill by name (explicit action: "load")', async () => {
@@ -106,7 +93,7 @@ describe('manage_skills tool', () => {
       .rejects.toThrow('没有名为“unknown-skill”的技能')
   })
 
-  it('creates a custom project skill, writes SKILL.md and can bind to a stage', async () => {
+  it('creates a custom project skill and writes SKILL.md', async () => {
     const tool = createManageSkillsTool('zh-CN', catalogSkills)
 
     const result = await tool.execute('call-5', {
@@ -115,13 +102,11 @@ describe('manage_skills tool', () => {
       display_name: '动作打斗设计',
       description: '动作场面分镜拆解与节奏控制',
       content: '详细描写每一个招式与破绽。',
-      stage: 'drafting',
       scope: 'project',
     })
 
     const text = result.content[0].type === 'text' ? result.content[0].text : ''
     expect(text).toContain('成功创建并安装写作技能“action-combat”')
-    expect(text).toContain('drafting')
 
     // 检查磁盘上的文件
     const skillFile = path.join(mockState.currentProjectPath!, '.vela', 'skills', 'action-combat', 'SKILL.md')
@@ -130,9 +115,6 @@ describe('manage_skills tool', () => {
     expect(fileContent).toContain('name: action-combat')
     expect(fileContent).toContain('display_name: 动作打斗设计')
     expect(fileContent).toContain('详细描写每一个招式与破绽。')
-
-    // 检查阶段绑定
-    expect(mockState.bindings['drafting']).toBe('project:action-combat')
   })
 
   it('updates an existing custom skill content and metadata', async () => {
@@ -164,42 +146,19 @@ describe('manage_skills tool', () => {
     expect(updatedContent).toContain('升级版高阶正文指引')
   })
 
-  it('binds and unbinds a skill to a workflow stage', async () => {
+  it('deletes a custom skill', async () => {
     const tool = createManageSkillsTool('zh-CN', catalogSkills)
 
-    // bind
-    const bindResult = await tool.execute('call-7a', {
-      action: 'bind',
-      name: 'review-chapter',
-      stage: 'review',
-    })
-    expect(bindResult.content[0].type === 'text' && bindResult.content[0].text).toContain('已将技能“review-chapter”成功绑定')
-    expect(mockState.bindings['review']).toBe('builtin:review-chapter')
-
-    // unbind
-    const unbindResult = await tool.execute('call-7b', {
-      action: 'unbind',
-      stage: 'review',
-    })
-    expect(unbindResult.content[0].type === 'text' && unbindResult.content[0].text).toContain('已成功解除【review】阶段的技能绑定')
-    expect(mockState.bindings['review']).toBeUndefined()
-  })
-
-  it('deletes a custom skill and removes any associated stage bindings', async () => {
-    const tool = createManageSkillsTool('zh-CN', catalogSkills)
-
-    // 创建并绑定
-    await tool.execute('call-8a', {
+    // 创建
+    await tool.execute('call-7a', {
       action: 'create',
       name: 'temp-skill',
       content: '临时内容',
-      stage: 'planning',
       scope: 'project',
     })
-    expect(mockState.bindings['planning']).toBe('project:temp-skill')
 
     // 删除
-    const delResult = await tool.execute('call-8b', {
+    const delResult = await tool.execute('call-7b', {
       action: 'delete',
       name: 'temp-skill',
     })
@@ -207,16 +166,15 @@ describe('manage_skills tool', () => {
 
     const skillDir = path.join(mockState.currentProjectPath!, '.vela', 'skills', 'temp-skill')
     expect(fs.existsSync(skillDir)).toBe(false)
-    expect(mockState.bindings['planning']).toBeUndefined()
   })
 
   it('protects builtin skills from deletion or modification', async () => {
     const tool = createManageSkillsTool('zh-CN', catalogSkills)
 
-    await expect(tool.execute('call-9a', { action: 'delete', name: 'review-chapter' }))
+    await expect(tool.execute('call-8a', { action: 'delete', name: 'review-chapter' }))
       .rejects.toThrow('内置技能不可删除')
 
-    await expect(tool.execute('call-9b', { action: 'update', name: 'review-chapter', content: 'hack' }))
+    await expect(tool.execute('call-8b', { action: 'update', name: 'review-chapter', content: 'hack' }))
       .rejects.toThrow('内置技能受保护只读')
   })
 })

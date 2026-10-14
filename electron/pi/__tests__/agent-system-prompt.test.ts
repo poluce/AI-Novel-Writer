@@ -130,7 +130,7 @@ describe('buildMainProcessAgentSystemPrompt', () => {
       source: 'user' as const,
     }
     const projectPrompt = buildMainProcessAgentSystemPrompt(core(), undefined, [skill])
-    expect(projectPrompt).toContain('写作工作流也可以在某个阶段绑定技能')
+    expect(projectPrompt).toContain('全书底层文风由项目设定的写作风格（writingStyle）统一规范')
     expect(projectPrompt).toContain('先用 load_writing_skill 读出正文')
     expect(projectPrompt).toContain('<available_skills>')
     expect(projectPrompt).toContain('用户在输入框输入 `/技能名` 时')
