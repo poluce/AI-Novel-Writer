@@ -61,6 +61,8 @@ beforeEach(() => {
     })),
     saveServer,
     deleteServer,
+    toggleServerDisabled: vi.fn(async () => ({ success: true })),
+    toolsForServer: (id: string) => useMCPStore.getState().tools.filter(t => t.serverId === id),
   })
   container = document.createElement('div')
   document.body.append(container)
@@ -152,5 +154,54 @@ describe('MCP server settings management', () => {
       expect(deleteServer).toHaveBeenCalledWith('filesystem')
     })
     expect(page.getByText('filesystem', { exact: true }).query()).toBeNull()
+  })
+
+  it('pre-fills editor from recommended template when clicking quick add', async () => {
+    await act(async () => root?.render(<MCPSettings />))
+
+    // Click "快速添加" on the first unconfigured template (e.g. AnySearch)
+    const quickAddBtn = page.getByRole('button', { name: '快速添加' }).first()
+    await act(async () => quickAddBtn.click())
+
+    await expect.element(page.getByLabelText('服务器 ID')).toHaveValue('anysearch')
+    await expect.element(page.getByLabelText('SSE 服务器 URL')).toHaveValue('https://api.anysearch.com/mcp')
+  })
+
+  it('inspects tools by toggling the tools drawer', async () => {
+    useMCPStore.setState({
+      tools: [
+        {
+          name: 'read_file',
+          description: '读取指定的本地参考文件内容',
+          inputSchema: { properties: { path: { type: 'string' } } },
+          serverId: 'filesystem',
+        },
+      ],
+    })
+
+    await act(async () => root?.render(<MCPSettings />))
+
+    const inspectBtn = page.getByRole('button', { name: /查看工具清单/ })
+    await expect.element(inspectBtn).toBeVisible()
+
+    // Click to expand drawer
+    await act(async () => inspectBtn.click())
+
+    await expect.element(page.getByText('read_file')).toBeVisible()
+    await expect.element(page.getByText('读取指定的本地参考文件内容')).toBeVisible()
+
+    // Click to collapse drawer
+    const hideBtn = page.getByRole('button', { name: /收起详情/ })
+    await act(async () => hideBtn.click())
+    expect(page.getByText('读取指定的本地参考文件内容').query()).toBeNull()
+  })
+
+  it('toggles server disabled state', async () => {
+    await act(async () => root?.render(<MCPSettings />))
+
+    const disableBtn = page.getByRole('button', { name: '休眠' })
+    await act(async () => disableBtn.click())
+
+    expect(useMCPStore.getState().toggleServerDisabled).toHaveBeenCalledWith('filesystem', true)
   })
 })

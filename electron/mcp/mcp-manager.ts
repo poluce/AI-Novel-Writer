@@ -45,6 +45,8 @@ export interface MCPServerConfig {
   env?: Record<string, string>
   /** SSE 模式：服务器 URL */
   url?: string
+  /** 是否禁用 */
+  disabled?: boolean
 }
 
 /** MCP 配置文件格式（兼容 Claude Desktop） */
@@ -54,6 +56,7 @@ export interface MCPConfig {
     args?: string[]
     env?: Record<string, string>
     url?: string
+    disabled?: boolean
   }>
 }
 
@@ -128,6 +131,7 @@ function parseServerEntry(
   const hasCommand = typeof cfg.command === 'string' && cfg.command.trim().length > 0
   const hasUrl = typeof cfg.url === 'string' && cfg.url.trim().length > 0
   if (hasCommand === hasUrl) return { ok: false }
+  const disabled = typeof cfg.disabled === 'boolean' ? cfg.disabled : undefined
   return {
     ok: true,
     config: {
@@ -138,17 +142,23 @@ function parseServerEntry(
       args: cfg.args,
       env: cfg.env,
       url: hasUrl ? cfg.url : undefined,
+      disabled,
     },
   }
 }
 
 /** 受信配置 → 磁盘条目（Claude Desktop 兼容，只写该传输方式相关字段）。 */
 function serializeServerEntry(config: MCPServerConfig): MCPConfig['mcpServers'][string] {
-  if (config.transport === 'sse') return { url: config.url ?? '' }
+  const base = config.transport === 'sse'
+    ? { url: config.url ?? '' }
+    : {
+        command: config.command ?? '',
+        ...(config.args && config.args.length > 0 ? { args: config.args } : {}),
+        ...(config.env && Object.keys(config.env).length > 0 ? { env: config.env } : {}),
+      }
   return {
-    command: config.command ?? '',
-    ...(config.args && config.args.length > 0 ? { args: config.args } : {}),
-    ...(config.env && Object.keys(config.env).length > 0 ? { env: config.env } : {}),
+    ...base,
+    ...(config.disabled ? { disabled: true } : {}),
   }
 }
 
@@ -160,6 +170,7 @@ function toConfigView(config: MCPServerConfig): MCPServerConfigView {
     args: config.args,
     env: config.env,
     url: config.url,
+    disabled: config.disabled,
   }
 }
 
@@ -223,7 +234,12 @@ class MCPManagerImpl {
         }
         const trustedConfig = parsedEntry.config
         trustedConfigs.set(id, trustedConfig)
-        servers.push({ id, name: id, transport: trustedConfig.transport })
+        servers.push({
+          id,
+          name: id,
+          transport: trustedConfig.transport,
+          disabled: trustedConfig.disabled,
+        })
       }
       for (const [id, runtime] of this.servers) {
         const trustedConfig = trustedConfigs.get(id)
@@ -303,6 +319,7 @@ class MCPManagerImpl {
       args: request.args,
       env: request.env,
       url: request.url,
+      disabled: request.disabled,
     })
     if (!parsedEntry.ok) {
       return { success: false, error: '配置无效：stdio 需要非空命令，SSE 需要非空 URL，二者只能填一个' }
@@ -362,7 +379,7 @@ class MCPManagerImpl {
    */
   async updateServer(
     serverId: string,
-    patch: { command?: string; args?: string[]; env?: Record<string, string>; url?: string },
+    patch: { command?: string; args?: string[]; env?: Record<string, string>; url?: string; disabled?: boolean },
   ): Promise<{ success: boolean; error?: string }> {
     if (!serverId || typeof serverId !== 'string') return { success: false, error: '服务器 ID 无效' }
     let config: MCPConfig | null
@@ -382,6 +399,7 @@ class MCPManagerImpl {
       args: patch.args !== undefined ? patch.args : existing.config.args,
       env: patch.env !== undefined ? patch.env : existing.config.env,
       url: patch.url !== undefined ? patch.url : existing.config.url,
+      disabled: patch.disabled !== undefined ? patch.disabled : existing.config.disabled,
     }
     const validated = parseServerEntry(serverId, merged)
     if (!validated.ok) {
@@ -552,7 +570,7 @@ class MCPManagerImpl {
   getAllTools(): MCPToolDesc[] {
     const tools: MCPToolDesc[] = []
     for (const runtime of this.servers.values()) {
-      if (runtime.status === 'connected') {
+      if (runtime.status === 'connected' && !runtime.config.disabled) {
         tools.push(...runtime.tools)
       }
     }
@@ -563,7 +581,7 @@ class MCPManagerImpl {
   getAllResources(): MCPResourceDesc[] {
     const resources: MCPResourceDesc[] = []
     for (const runtime of this.servers.values()) {
-      if (runtime.status === 'connected') {
+      if (runtime.status === 'connected' && !runtime.config.disabled) {
         resources.push(...runtime.resources)
       }
     }
@@ -578,6 +596,7 @@ class MCPManagerImpl {
       status: r.status,
       toolCount: r.tools.length,
       error: r.error,
+      disabled: r.config.disabled,
     }))
   }
 

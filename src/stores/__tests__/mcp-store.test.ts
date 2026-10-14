@@ -169,4 +169,72 @@ describe('renderer MCP server management', () => {
     })
     expect(mocks.invoke).toHaveBeenCalledWith('mcp:get-server-config', 'edit-me')
   })
+
+  it('skips auto-connect for disabled servers during init', async () => {
+    mocks.invoke.mockImplementation(async (channel: string) => {
+      if (channel === 'mcp:get-config-path') return 'C:/isolated/.vela/mcp_config.json'
+      if (channel === 'mcp:load-config') {
+        return {
+          success: true,
+          status: 'loaded',
+          servers: [
+            { id: 'disabled-server', name: 'disabled-server', transport: 'sse', disabled: true },
+            { id: 'active-server', name: 'active-server', transport: 'stdio' },
+          ],
+        }
+      }
+      if (channel === 'mcp:connect') return { success: true }
+      if (channel === 'mcp:get-servers-status') return []
+      if (channel === 'mcp:list-tools' || channel === 'mcp:list-resources') return []
+      throw new Error(`unexpected IPC: ${channel}`)
+    })
+
+    await useMCPStore.getState().init()
+
+    expect(mocks.invoke).toHaveBeenCalledWith('mcp:connect', 'active-server')
+    expect(mocks.invoke).not.toHaveBeenCalledWith('mcp:connect', 'disabled-server')
+  })
+
+  it('toggles server disabled state and disconnects when disabling', async () => {
+    mocks.invoke.mockImplementation(async (channel: string) => {
+      if (channel === 'mcp:get-server-config') {
+        return {
+          success: true,
+          config: { id: 'srv-1', transport: 'sse', url: 'https://api.example.com' },
+        }
+      }
+      if (channel === 'mcp:save-server') return { success: true }
+      if (channel === 'mcp:disconnect') return { success: true }
+      if (channel === 'mcp:load-config') return { success: true, status: 'loaded', servers: [] }
+      if (channel === 'mcp:get-servers-status') return []
+      if (channel === 'mcp:list-tools' || channel === 'mcp:list-resources') return []
+      throw new Error(`unexpected IPC: ${channel}`)
+    })
+
+    const res = await useMCPStore.getState().toggleServerDisabled('srv-1', true)
+    expect(res).toEqual({ success: true })
+    expect(mocks.invoke).toHaveBeenCalledWith('mcp:save-server', {
+      id: 'srv-1',
+      transport: 'sse',
+      url: 'https://api.example.com',
+      disabled: true,
+    })
+    expect(mocks.invoke).toHaveBeenCalledWith('mcp:disconnect', 'srv-1')
+  })
+
+  it('filters tools for a specific server via toolsForServer', () => {
+    useMCPStore.setState({
+      tools: [
+        { name: 'search', description: 'Search web', inputSchema: {}, serverId: 'anysearch' },
+        { name: 'fetch', description: 'Fetch page', inputSchema: {}, serverId: 'fetch-srv' },
+      ],
+    })
+
+    const anysearchTools = useMCPStore.getState().toolsForServer('anysearch')
+    expect(anysearchTools).toHaveLength(1)
+    expect(anysearchTools[0].name).toBe('search')
+
+    const emptyTools = useMCPStore.getState().toolsForServer('unknown')
+    expect(emptyTools).toHaveLength(0)
+  })
 })

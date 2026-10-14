@@ -61,6 +61,10 @@ interface MCPState {
   saveServer: (request: MCPServerSaveRequest) => Promise<{ success: boolean; error?: string }>
   /** 删除一个服务器，成功后刷新配置清单与状态 */
   deleteServer: (serverId: string) => Promise<{ success: boolean; error?: string }>
+  /** 切换服务器启用/禁用状态，即时写盘并同步连接 */
+  toggleServerDisabled: (serverId: string, disabled: boolean) => Promise<{ success: boolean; error?: string }>
+  /** 获取指定服务器已加载的工具列表 */
+  toolsForServer: (serverId: string) => MCPToolData[]
 }
 
 export const useMCPStore = create<MCPState>()((set, get) => ({
@@ -86,8 +90,9 @@ export const useMCPStore = create<MCPState>()((set, get) => ({
       }
       set({ configs: result.servers ?? [] })
 
-      // 自动连接所有配置的服务器
+      // 自动连接所有未禁用的服务器
       for (const server of result.servers ?? []) {
+        if (server.disabled) continue
         try {
           const connection = await ipc.invoke('mcp:connect', server.id)
           if (!connection.success) {
@@ -222,6 +227,40 @@ export const useMCPStore = create<MCPState>()((set, get) => ({
       logFailure('MCP', 'delete server failed', error, { serverId })
       return { success: false, error: String(error) }
     }
+  },
+
+  toggleServerDisabled: async (serverId: string, disabled: boolean) => {
+    try {
+      const serverConfig = await get().getServerConfig(serverId)
+      if (!serverConfig.success || !serverConfig.config) {
+        return { success: false, error: serverConfig.error ?? '无法读取服务器配置' }
+      }
+      const res = await get().saveServer({
+        ...serverConfig.config,
+        disabled,
+      })
+      if (!res.success) return res
+
+      if (disabled) {
+        await get().disconnectServer(serverId)
+      } else {
+        try {
+          await get().connectServer(serverId)
+        } catch {
+          // 状态已由 connectServer 记录并触发更新
+        }
+      }
+      await get().refreshTools()
+      await get().refreshStatus()
+      return { success: true }
+    } catch (error) {
+      logFailure('MCP', 'toggle server disabled failed', error, { serverId, disabled })
+      return { success: false, error: String(error) }
+    }
+  },
+
+  toolsForServer: (serverId: string) => {
+    return get().tools.filter(t => t.serverId === serverId)
   },
 }))
 

@@ -1110,6 +1110,7 @@ export interface MCPServerSummary {
   id: string
   name: string
   transport: 'stdio' | 'sse'
+  disabled?: boolean
 }
 
 export interface MCPServerStatus {
@@ -1118,6 +1119,7 @@ export interface MCPServerStatus {
   status: MCPConnectionStatus
   toolCount: number
   error?: string
+  disabled?: boolean
 }
 
 export interface MCPToolDescription {
@@ -1153,6 +1155,7 @@ export interface MCPServerConfigView {
   args?: string[]
   env?: Record<string, string>
   url?: string
+  disabled?: boolean
 }
 
 /** 设置页提交的服务器保存请求：id 已存在则覆盖，否则新建。传输方式由 command/url 推导。 */
@@ -1162,6 +1165,7 @@ export interface MCPServerSaveRequest {
   args?: string[]
   env?: Record<string, string>
   url?: string
+  disabled?: boolean
 }
 
 export interface MCPChannels {

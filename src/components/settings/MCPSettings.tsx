@@ -1,5 +1,17 @@
 import { useEffect, useState } from 'react'
-import { Plug, RefreshCw, Plus, Pencil, Trash2, Link2, Terminal } from 'lucide-react'
+import {
+  Plug,
+  RefreshCw,
+  Plus,
+  Pencil,
+  Trash2,
+  Link2,
+  Terminal,
+  Power,
+  ChevronDown,
+  ChevronRight,
+  Layers,
+} from 'lucide-react'
 import { useMCPStore } from '../../stores/mcp-store'
 import { useLocaleStore } from '../../stores/locale-store'
 import { Button } from '../ui/Button'
@@ -10,6 +22,7 @@ import { Textarea } from '../ui/Textarea'
 import { confirm } from '../ui/Confirm'
 import { toast } from '../ui/Toast'
 import type { MCPConnectionStatus, MCPServerConfigView } from '../../shared/ipc-channels'
+import { MCP_TEMPLATES, type MCPTemplate } from '../../shared/mcp-templates'
 
 /** 状态点颜色（与 Agent 面板的 MCP 子视图同一套语义色）。 */
 function statusColor(status: MCPConnectionStatus | undefined): string {
@@ -37,6 +50,7 @@ interface EditorDraft {
   args: string
   env: string
   url: string
+  disabled: boolean
 }
 
 const EMPTY_DRAFT: EditorDraft = {
@@ -46,6 +60,7 @@ const EMPTY_DRAFT: EditorDraft = {
   args: '',
   env: '',
   url: '',
+  disabled: false,
 }
 
 /** 解析「每行一个」的文本输入，去掉空行与首尾空白。 */
@@ -73,20 +88,24 @@ export default function MCPSettings() {
     getServerConfig,
     saveServer,
     deleteServer,
+    toggleServerDisabled,
+    toolsForServer,
   } = useMCPStore()
 
   const [editor, setEditor] = useState<EditorDraft | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [expandedServerId, setExpandedServerId] = useState<string | null>(null)
 
   useEffect(() => {
     // 设置页打开时确保配置与状态是最新的一份。
     void (async () => {
       await reloadConfig()
       await refreshStatus()
+      await refreshTools()
     })()
-  }, [reloadConfig, refreshStatus])
+  }, [reloadConfig, refreshStatus, refreshTools])
 
   const statusOf = (id: string) => servers.find(server => server.id === id)?.status
 
@@ -104,6 +123,19 @@ export default function MCPSettings() {
       return
     }
     setEditor(configToDraft(result.config))
+  }
+
+  const applyTemplate = (tpl: MCPTemplate) => {
+    setEditingId(null)
+    setEditor({
+      id: tpl.id,
+      transport: tpl.transport,
+      command: tpl.command ?? '',
+      args: (tpl.args ?? []).join('\n'),
+      env: Object.entries(tpl.env ?? {}).map(([key, value]) => `${key}=${value}`).join('\n'),
+      url: tpl.url ?? '',
+      disabled: false,
+    })
   }
 
   const handleSave = async () => {
@@ -128,6 +160,7 @@ export default function MCPSettings() {
     try {
       const result = await saveServer({
         id,
+        ...(editor.disabled ? { disabled: true } : {}),
         ...(isSse
           ? { url }
           : {
@@ -193,6 +226,16 @@ export default function MCPSettings() {
     toast.success(text('已重新加载 MCP 配置', 'MCP configuration reloaded'))
   }
 
+  const handleToggleDisabled = async (id: string, currentDisabled: boolean | undefined) => {
+    setBusyId(id)
+    try {
+      await toggleServerDisabled(id, !currentDisabled)
+      toast.success(currentDisabled ? text('已启用服务器', 'Server enabled') : text('已休眠服务器', 'Server disabled'))
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* 顶部说明与操作 */}
@@ -218,6 +261,67 @@ export default function MCPSettings() {
             <Plus size={12} />
             {text('添加服务器', 'Add server')}
           </Button>
+        </div>
+      </div>
+
+      {/* 推荐创作插件模版卡片 */}
+      <div
+        className="rounded-xl p-3"
+        style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-bg-secondary)' }}
+      >
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-1.5">
+            <Layers size={13} style={{ color: 'var(--color-accent)' }} />
+            <span className="text-xs font-semibold" style={{ color: 'var(--color-text)' }}>
+              {text('推荐创作插件模版', 'Recommended Creative Plugins')}
+            </span>
+          </div>
+          <span className="text-[0.68rem]" style={{ color: 'var(--color-text-muted)' }}>
+            {text('点击一键预填标准配置', 'Click to pre-fill configuration')}
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {MCP_TEMPLATES.map(tpl => {
+            const isAdded = configs.some(c => c.id === tpl.id)
+            return (
+              <div
+                key={tpl.id}
+                className="flex flex-col justify-between p-2.5 rounded-lg"
+                style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <span className="text-xs font-semibold truncate" style={{ color: 'var(--color-text)' }}>
+                      {text(tpl.name, tpl.nameEn)}
+                    </span>
+                    <span
+                      className="text-[0.62rem] px-1.5 py-0.2 rounded font-mono shrink-0"
+                      style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text-secondary)' }}
+                    >
+                      {tpl.transport === 'stdio' ? 'stdio' : 'HTTP/SSE'}
+                    </span>
+                  </div>
+                  <p className="text-[0.68rem] leading-relaxed line-clamp-2" style={{ color: 'var(--color-text-muted)' }}>
+                    {text(tpl.description, tpl.descriptionEn)}
+                  </p>
+                </div>
+                <div className="mt-2 flex items-center justify-between pt-1">
+                  <span className="text-[0.62rem] font-mono opacity-60" style={{ color: 'var(--color-text-muted)' }}>
+                    ID: {tpl.id}
+                  </span>
+                  <Button
+                    variant={isAdded ? 'ghost' : 'outline'}
+                    size="sm"
+                    className="h-6 text-[0.68rem] px-2"
+                    onClick={() => applyTemplate(tpl)}
+                    disabled={editor !== null}
+                  >
+                    {isAdded ? text('已配置(覆盖)', 'Configured') : text('快速添加', 'Quick add')}
+                  </Button>
+                </div>
+              </div>
+            )
+          })}
         </div>
       </div>
 
@@ -257,7 +361,7 @@ export default function MCPSettings() {
                 onChange={event => setEditor({ ...editor, transport: event.target.value === 'sse' ? 'sse' : 'stdio' })}
               >
                 <option value="stdio">{text('本地命令 (stdio)', 'Local command (stdio)')}</option>
-                <option value="sse">{text('远程服务 (SSE)', 'Remote service (SSE)')}</option>
+                <option value="sse">{text('远程服务 (SSE / Streamable HTTP)', 'Remote service (SSE / Streamable HTTP)')}</option>
               </NativeSelect>
             </div>
           </div>
@@ -309,6 +413,9 @@ export default function MCPSettings() {
                 placeholder="https://example.com/sse"
                 className="font-mono"
               />
+              <p className="text-[0.68rem] mt-1" style={{ color: 'var(--color-text-muted)' }}>
+                {text('支持标准 SSE 与最新 Streamable HTTP 远程服务。', 'Supports standard SSE and Streamable HTTP remote services.')}
+              </p>
             </div>
           )}
 
@@ -339,54 +446,145 @@ export default function MCPSettings() {
 
         {configs.map(config => {
           const status = statusOf(config.id)
+          const isDisabled = config.disabled
+          const serverTools = toolsForServer(config.id)
+          const isExpanded = expandedServerId === config.id
+
           return (
             <div
               key={config.id}
-              className="flex items-center gap-3 rounded-xl px-3 py-2.5"
-              style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}
+              className="rounded-xl overflow-hidden transition-all"
+              style={{
+                border: '1px solid var(--color-border)',
+                backgroundColor: 'var(--color-panel)',
+                opacity: isDisabled ? 0.78 : 1,
+              }}
             >
-              <span
-                className="w-2 h-2 rounded-full flex-shrink-0"
-                style={{ backgroundColor: statusColor(status) }}
-                title={statusText(text, status)}
-              />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-medium truncate" style={{ color: 'var(--color-text)' }}>
-                    {config.name}
-                  </span>
-                  <span
-                    className="text-[0.65rem] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0"
-                    style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text-secondary)' }}
-                  >
-                    {config.transport === 'stdio' ? 'stdio' : 'SSE'}
-                  </span>
+              <div className="flex items-center gap-3 px-3 py-2.5">
+                <span
+                  className="w-2 h-2 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: isDisabled ? 'var(--color-text-muted)' : statusColor(status) }}
+                  title={isDisabled ? text('已休眠', 'Disabled') : statusText(text, status)}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-medium truncate" style={{ color: 'var(--color-text)' }}>
+                      {config.name}
+                    </span>
+                    <span
+                      className="text-[0.65rem] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 font-mono"
+                      style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text-secondary)' }}
+                    >
+                      {config.transport === 'stdio' ? 'stdio' : 'SSE'}
+                    </span>
+                    {isDisabled && (
+                      <span
+                        className="text-[0.62rem] px-1.5 py-0.5 rounded font-medium flex-shrink-0"
+                        style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text-muted)' }}
+                      >
+                        {text('休眠中', 'Disabled')}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    <p className="text-[0.68rem] truncate" style={{ color: 'var(--color-text-muted)' }}>
+                      {statusText(text, status)}
+                      {status === 'connected' && text(` · ${servers.find(s => s.id === config.id)?.toolCount ?? 0} 个工具`, ` · ${servers.find(s => s.id === config.id)?.toolCount ?? 0} tools`)}
+                    </p>
+                    {!isDisabled && status === 'connected' && (
+                      <button
+                        type="button"
+                        onClick={() => setExpandedServerId(isExpanded ? null : config.id)}
+                        className="inline-flex items-center gap-0.5 text-[0.68rem] px-1.5 py-0.5 rounded hover:bg-[var(--color-hover)] transition-colors cursor-pointer"
+                        style={{ color: 'var(--color-accent)' }}
+                      >
+                        <span>{isExpanded ? text('收起详情', 'Hide tools') : text('查看工具清单', 'Inspect tools')}</span>
+                        {isExpanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <p className="text-[0.68rem] mt-0.5 truncate" style={{ color: 'var(--color-text-muted)' }}>
-                  {statusText(text, status)}
-                  {status === 'connected' && text(` · ${servers.find(s => s.id === config.id)?.toolCount ?? 0} 个工具`, ` · ${servers.find(s => s.id === config.id)?.toolCount ?? 0} tools`)}
-                </p>
+
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void handleToggleDisabled(config.id, isDisabled)}
+                    disabled={busyId === config.id}
+                    title={isDisabled ? text('启用该服务器并注入工具', 'Enable server and load tools') : text('休眠该服务器，不向助手注入工具以节约上下文', 'Disable server to save context')}
+                  >
+                    <Power size={12} className={isDisabled ? 'text-[var(--color-text-muted)]' : 'text-[var(--color-success)]'} />
+                    {isDisabled ? text('启用', 'Enable') : text('休眠', 'Disable')}
+                  </Button>
+
+                  {!isDisabled && (
+                    status === 'connected' ? (
+                      <Button variant="outline" size="sm" onClick={() => void handleDisconnect(config.id)} disabled={busyId === config.id}>
+                        {text('断开', 'Disconnect')}
+                      </Button>
+                    ) : (
+                      <Button variant="outline" size="sm" onClick={() => void handleConnect(config.id)} disabled={busyId === config.id}>
+                        <Link2 size={12} />
+                        {text('连接', 'Connect')}
+                      </Button>
+                    )
+                  )}
+
+                  <Button variant="outline" size="sm" onClick={() => void startEdit(config.id)} disabled={editor !== null}>
+                    <Pencil size={12} />
+                    {text('修改', 'Edit')}
+                  </Button>
+                  <Button variant="destructive" size="sm" onClick={() => void handleDelete(config.id)} disabled={editor !== null} title={text('删除服务器', 'Delete server')}>
+                    <Trash2 size={12} />
+                  </Button>
+                </div>
               </div>
 
-              <div className="flex items-center gap-1.5 flex-shrink-0">
-                {status === 'connected' ? (
-                  <Button variant="outline" size="sm" onClick={() => void handleDisconnect(config.id)} disabled={busyId === config.id}>
-                    {text('断开', 'Disconnect')}
-                  </Button>
-                ) : (
-                  <Button variant="outline" size="sm" onClick={() => void handleConnect(config.id)} disabled={busyId === config.id}>
-                    <Link2 size={12} />
-                    {text('连接', 'Connect')}
-                  </Button>
-                )}
-                <Button variant="outline" size="sm" onClick={() => void startEdit(config.id)} disabled={editor !== null}>
-                  <Pencil size={12} />
-                  {text('修改', 'Edit')}
-                </Button>
-                <Button variant="destructive" size="sm" onClick={() => void handleDelete(config.id)} disabled={editor !== null} title={text('删除服务器', 'Delete server')}>
-                  <Trash2 size={12} />
-                </Button>
-              </div>
+              {/* 展开的工具列表抽屉 */}
+              {isExpanded && !isDisabled && (
+                <div
+                  className="px-3 py-2.5 space-y-2"
+                  style={{
+                    backgroundColor: 'var(--color-bg-secondary)',
+                    borderTop: '1px solid var(--color-border)',
+                  }}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[0.72rem] font-medium" style={{ color: 'var(--color-text)' }}>
+                      {text('可用工具列表', 'Available Tools')}
+                    </span>
+                    <span className="text-[0.65rem] font-mono" style={{ color: 'var(--color-text-muted)' }}>
+                      {text(`共 ${serverTools.length} 个工具`, `${serverTools.length} tools total`)}
+                    </span>
+                  </div>
+                  {serverTools.length === 0 ? (
+                    <p className="text-[0.68rem] italic" style={{ color: 'var(--color-text-muted)' }}>
+                      {text('暂未获取到工具描述（请确认连接已就绪）', 'No tools discovered yet (verify connection is ready)')}
+                    </p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {serverTools.map(tool => (
+                        <div
+                          key={tool.name}
+                          className="p-2 rounded-lg text-xs"
+                          style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}
+                        >
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <span className="font-mono font-semibold text-[0.75rem]" style={{ color: 'var(--color-accent)' }}>
+                              {tool.name}
+                            </span>
+                          </div>
+                          {tool.description && (
+                            <p className="text-[0.68rem] leading-relaxed line-clamp-3 whitespace-pre-wrap" style={{ color: 'var(--color-text-secondary)' }}>
+                              {tool.description}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )
         })}
@@ -403,6 +601,7 @@ function configToDraft(config: MCPServerConfigView): EditorDraft {
     args: (config.args ?? []).join('\n'),
     env: Object.entries(config.env ?? {}).map(([key, value]) => `${key}=${value}`).join('\n'),
     url: config.url ?? '',
+    disabled: !!config.disabled,
   }
 }
 
