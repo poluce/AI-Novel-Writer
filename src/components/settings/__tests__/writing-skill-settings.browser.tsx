@@ -45,7 +45,7 @@ beforeEach(async () => {
     configurable: true,
     value: { invoke, on: () => () => {}, once: () => {}, send: () => {} },
   })
-  useLocaleStore.setState({ locale: 'en-US' })
+  useLocaleStore.getState().setLocale('en-US')
   useProjectStore.setState({
     currentProject: {
       id: 'skill-project',
@@ -104,6 +104,16 @@ describe('writing skill settings', () => {
     await act(async () => useLocaleStore.getState().setLocale('zh-CN'))
 
     expect(library?.textContent).toContain('长篇连续性与场景推进')
+  })
+
+  it('opens a dialog showing full instructions when a skill card is clicked', async () => {
+    const card = container?.querySelector('div[role="button"]') as HTMLElement
+    expect(card).not.toBeNull()
+    await act(async () => card.click())
+    await expect.element(page.getByRole('dialog')).toBeVisible()
+    await expect.element(page.getByText('Full Instructions (Prompt Guide)')).toBeVisible()
+    await act(async () => page.getByRole('button', { name: 'Close' }).first().click())
+    await vi.waitFor(() => expect(page.getByRole('dialog').query()).toBeNull())
   })
 })
 
