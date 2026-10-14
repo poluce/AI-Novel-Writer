@@ -61,3 +61,82 @@ describe('AgentMessage copy action', () => {
     expect(container.textContent).toContain('Keep this visible')
   })
 })
+
+describe('AgentMessage tool calls display (Option B: Collapsible summary above content)', () => {
+  let container: HTMLDivElement
+  let root: Root
+
+  beforeEach(() => {
+    useLocaleStore.setState({ locale: 'zh-CN', initialized: true })
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+
+  afterEach(async () => {
+    await act(async () => root.unmount())
+    container.remove()
+  })
+
+  it('renders tool calls in a collapsed summary bar positioned ABOVE the content', async () => {
+    await act(async () => root.render(<AgentMessage message={{
+      id: 'assistant-1',
+      role: 'assistant',
+      content: '这里是正文结论',
+      createdAt: 1,
+      toolCalls: [{
+        id: 'tc-1',
+        toolName: 'web_fetch',
+        arguments: { url: 'https://example.com' },
+        status: 'completed',
+      }],
+    }} />))
+
+    // The summary bar should show executed tool count and tool name
+    const summaryBtn = page.getByRole('button', { name: /已执行 1 个操作/ })
+    await expect.element(summaryBtn).toBeVisible()
+    expect(summaryBtn.element().textContent).toContain('web_fetch')
+    expect(summaryBtn.element().textContent).toContain('详情')
+
+    // In DOM order, the tool calls summary precedes the content
+    const fullText = container.textContent || ''
+    const toolIndex = fullText.indexOf('已执行 1 个操作')
+    const contentIndex = fullText.indexOf('这里是正文结论')
+    expect(toolIndex).toBeGreaterThan(-1)
+    expect(contentIndex).toBeGreaterThan(toolIndex)
+
+    // Initially collapsed: ToolCallBlock details shouldn't be expanded
+    expect(container.querySelector('.tool-call-block')).toBeNull()
+
+    // Clicking the summary bar expands the details
+    await act(async () => summaryBtn.click())
+    expect(container.querySelector('.tool-call-block')).not.toBeNull()
+    expect(summaryBtn.element().textContent).toContain('收起')
+
+    // Clicking again collapses it
+    await act(async () => summaryBtn.click())
+    expect(container.querySelector('.tool-call-block')).toBeNull()
+  })
+
+  it('auto-reveals confirmation card when tool call is in waiting_confirm', async () => {
+    await act(async () => root.render(<AgentMessage message={{
+      id: 'assistant-2',
+      role: 'assistant',
+      content: '等待作者确认',
+      createdAt: 1,
+      toolCalls: [{
+        id: 'tc-confirm',
+        toolName: 'manage_drafts',
+        arguments: { chapter_number: 1, content: '新正文' },
+        status: 'waiting_confirm',
+      }],
+    }} />))
+
+    // The summary indicates confirmation needed
+    const summaryBtn = page.getByRole('button', { name: /需要确认操作/ })
+    await expect.element(summaryBtn).toBeVisible()
+
+    // Confirm card is visible
+    expect(container.textContent).toContain('manage_drafts')
+  })
+})

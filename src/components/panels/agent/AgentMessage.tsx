@@ -6,9 +6,19 @@
  * - 助手消息：左侧 Markdown 风格渲染
  * - Tool 调用：ToolCallBlock / ConfirmCard / ArtifactCard
  */
-import { useState } from 'react'
-import { Check, Copy } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import {
+  Check,
+  Copy,
+  ChevronRight,
+  ChevronDown,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+  AlertTriangle,
+} from 'lucide-react'
 import type { AgentMessage as AgentMessageType } from '../../../stores/agent-store'
+import type { ToolCallInfo } from '../../../shared/agent-ui-types'
 import { useLocaleStore } from '../../../stores/locale-store'
 import MarkdownContent, { StreamingCursor } from '../../ui/MarkdownContent'
 import ToolCallBlock from './ToolCallBlock'
@@ -18,6 +28,110 @@ import '../../../styles/agent-tools.css'
 
 interface Props {
   message: AgentMessageType
+}
+
+function getToolSummary(toolCalls: ToolCallInfo[], text: (zh: string, en: string) => string) {
+  const hasWaitingConfirm = toolCalls.some(tc => tc.status === 'waiting_confirm')
+  const hasRunning = toolCalls.some(tc => tc.status === 'running' || tc.status === 'pending')
+  const hasFailed = toolCalls.some(tc => tc.status === 'failed')
+
+  let statusIcon = <CheckCircle2 size={12} className="text-[var(--color-success)] shrink-0" />
+  let statusText = text(`已执行 ${toolCalls.length} 个操作`, `Executed ${toolCalls.length} tools`)
+
+  if (hasWaitingConfirm) {
+    statusIcon = <AlertTriangle size={12} className="text-[var(--color-warning)] shrink-0 animate-pulse" />
+    statusText = text('需要确认操作', 'Action requires confirmation')
+  } else if (hasRunning) {
+    statusIcon = <Loader2 size={12} className="text-[var(--color-accent)] shrink-0 animate-spin" />
+    const runningCall = toolCalls.find(tc => tc.status === 'running' || tc.status === 'pending')
+    statusText = text(
+      `正在执行: ${runningCall?.toolName || '工具'}...`,
+      `Running: ${runningCall?.toolName || 'tool'}...`,
+    )
+  } else if (hasFailed) {
+    statusIcon = <XCircle size={12} className="text-[var(--color-error)] shrink-0" />
+    statusText = text('执行完成（包含失败项）', 'Completed with errors')
+  }
+
+  const uniqueToolNames = Array.from(new Set(toolCalls.map(tc => tc.toolName)))
+
+  return {
+    hasWaitingConfirm,
+    hasRunning,
+    statusIcon,
+    statusText,
+    uniqueToolNames,
+  }
+}
+
+function ToolCallsCollapsibleSection({
+  toolCalls,
+  text,
+}: {
+  toolCalls: ToolCallInfo[]
+  text: (zh: string, en: string) => string
+}) {
+  const hasWaitingConfirm = toolCalls.some(tc => tc.status === 'waiting_confirm')
+  const [expanded, setExpanded] = useState(hasWaitingConfirm)
+
+  useEffect(() => {
+    if (hasWaitingConfirm) {
+      setExpanded(true)
+    }
+  }, [hasWaitingConfirm])
+
+  const summary = getToolSummary(toolCalls, text)
+
+  return (
+    <div className="mb-2">
+      <button
+        type="button"
+        onClick={() => setExpanded(v => !v)}
+        className="w-full flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[0.72rem] transition-colors cursor-pointer select-none hover:bg-[var(--color-hover)]"
+        style={{
+          backgroundColor: 'var(--color-bg-secondary)',
+          border: '1px solid var(--color-border)',
+          color: 'var(--color-text-secondary)',
+        }}
+      >
+        {summary.statusIcon}
+        <span className="font-medium text-[var(--color-text)]">
+          {summary.statusText}
+        </span>
+        {summary.uniqueToolNames.length > 0 && (
+          <span className="truncate opacity-75 text-[var(--color-text-muted)]">
+            · {summary.uniqueToolNames.join(' · ')}
+          </span>
+        )}
+        <span className="ml-auto flex items-center gap-1 text-[0.68rem] opacity-60 shrink-0">
+          <span>{expanded ? text('收起', 'Hide') : text('详情', 'Details')}</span>
+          {expanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+        </span>
+      </button>
+
+      {/* 展开的卡片内容 */}
+      {expanded && (
+        <div className="mt-1.5 space-y-1.5">
+          {toolCalls.map(tc => (
+            tc.status === 'waiting_confirm' ? (
+              <ConfirmCard key={tc.id} toolCall={tc} />
+            ) : (
+              <ToolCallBlock key={tc.id} toolCall={tc} />
+            )
+          ))}
+        </div>
+      )}
+
+      {/* 即使折叠，未确认的卡片也始终显示在外，防止用户漏掉审批 */}
+      {!expanded && summary.hasWaitingConfirm && (
+        <div className="mt-1.5 space-y-1.5">
+          {toolCalls.filter(tc => tc.status === 'waiting_confirm').map(tc => (
+            <ConfirmCard key={tc.id} toolCall={tc} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function AgentMessage({ message }: Props) {
@@ -76,7 +190,15 @@ export default function AgentMessage({ message }: Props) {
         className="max-w-full text-xs leading-relaxed break-words w-full"
         style={{ color: 'var(--color-text)' }}
       >
-        {/* 文本内容 */}
+        {/* 1. 顶部：Tool 调用过程折叠条（自然时序位于正文之前，默认收拢） */}
+        {toolCalls && toolCalls.length > 0 && (
+          <ToolCallsCollapsibleSection
+            toolCalls={toolCalls}
+            text={text}
+          />
+        )}
+
+        {/* 2. 中间：文本回复内容 */}
         {content ? (
           <MarkdownContent content={content} streaming={streaming} />
         ) : streaming ? (
@@ -85,20 +207,7 @@ export default function AgentMessage({ message }: Props) {
           </span>
         ) : null}
 
-        {/* Tool 调用区块列表 */}
-        {toolCalls && toolCalls.length > 0 && (
-          <div className="mt-2">
-            {toolCalls.map(tc => (
-              tc.status === 'waiting_confirm' ? (
-                <ConfirmCard key={tc.id} toolCall={tc} />
-              ) : (
-                <ToolCallBlock key={tc.id} toolCall={tc} />
-              )
-            ))}
-          </div>
-        )}
-
-        {/* 产物卡片列表 */}
+        {/* 3. 底部：最终产物卡片列表 */}
         {artifacts && artifacts.length > 0 && (
           <div className="mt-2">
             {artifacts.map((a, i) => (
