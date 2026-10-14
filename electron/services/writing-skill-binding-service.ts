@@ -99,3 +99,39 @@ export async function saveWritingSkillBinding(
     `${JSON.stringify({ version: 1, bindings }, null, 2)}\n`,
   )
 }
+
+export async function getWritingSkillBindings(projectPath?: string | null): Promise<Record<string, string>> {
+  const targetPath = projectPath ?? getCurrentProjectPath()
+  if (!targetPath) return {}
+  const filePath = bindingPath(targetPath)
+  try {
+    const raw = fs.readFileSync(filePath, 'utf8')
+    const parsed = JSON.parse(raw) as { bindings?: Record<string, string> }
+    return (parsed && typeof parsed.bindings === 'object') ? (parsed.bindings ?? {}) : {}
+  } catch {
+    return {}
+  }
+}
+
+export async function removeWritingSkillBinding(stage: WritingSkillStage): Promise<void> {
+  const projectPath = getCurrentProjectPath()
+  if (!projectPath) throw new Error('No project is open')
+  const filePath = bindingPath(projectPath)
+  let current: Record<string, string> = {}
+  try {
+    const raw = fs.readFileSync(filePath, 'utf8')
+    const parsed = JSON.parse(raw) as { bindings?: Record<string, string> }
+    if (parsed && typeof parsed.bindings === 'object' && parsed.bindings) {
+      current = parsed.bindings
+    }
+  } catch {
+    return
+  }
+  if (!current[stage]) return
+  delete current[stage]
+  const capability = createSecureFileCapability(projectPath, filePath)
+  await windowsSafeFileSystem.writeTextAtomically(
+    capability,
+    `${JSON.stringify({ version: 1, bindings: current }, null, 2)}\n`,
+  )
+}

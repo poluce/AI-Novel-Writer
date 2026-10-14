@@ -8,9 +8,11 @@ import {
   parseGitHubWritingSkillUrl,
   type InstalledWritingSkill,
   type RemoteWritingSkillInspection,
+  type WritingSkillStage,
 } from '../../src/shared/writing-skills'
 import { mainText } from '../i18n'
 import { VELA_HOME } from '../utils/config-utils'
+import { getCurrentProjectPath } from '../database'
 
 const WRITING_SKILL_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 const MAX_WRITING_SKILL_BYTES = 64 * 1024
@@ -35,7 +37,8 @@ function assertSpecSkillName(name: string): void {
 }
 
 function text(zhCNText: string, enUSText: string): string {
-  return mainText(app.getLocale(), zhCNText, enUSText)
+  const locale = (typeof app !== 'undefined' && app?.getLocale) ? app.getLocale() : 'zh-CN'
+  return mainText(locale, zhCNText, enUSText)
 }
 
 function isContainedPath(rootPath: string, candidatePath: string): boolean {
@@ -245,6 +248,156 @@ export async function installWritingSkill(sourceUrl: string): Promise<WritingSki
       utf8Bytes: inspection.utf8Bytes,
     }
     return { success: true, skill }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+export function formatSkillMarkdown(params: {
+  name: string
+  description?: string
+  displayName?: string
+  version?: string
+  stage?: string
+  content: string
+}): string {
+  const frontmatterLines = [
+    '---',
+    `name: ${params.name}`,
+    ...(params.displayName ? [`display_name: ${params.displayName}`] : []),
+    ...(params.description ? [`description: ${params.description.replace(/[\r\n]+/g, ' ')}`] : []),
+    ...(params.version ? [`version: ${params.version}`] : ['version: 1.0.0']),
+    ...(params.stage ? [`stage: ${params.stage}`] : []),
+    'language: bilingual',
+    '---',
+    '',
+  ]
+  const cleanBody = params.content.startsWith('---')
+    ? params.content
+    : `${frontmatterLines.join('\n')}${params.content.trim()}\n`
+  return cleanBody
+}
+
+export async function createCustomWritingSkill(params: {
+  name: string
+  content: string
+  description?: string
+  displayName?: string
+  stage?: WritingSkillStage
+  scope?: 'user' | 'project'
+  projectPath?: string | null
+}): Promise<WritingSkillInstallResult> {
+  try {
+    const name = params.name.trim()
+    assertSpecSkillName(name)
+    const scope = params.scope ?? (params.projectPath ? 'project' : 'user')
+    let targetDir: string
+    if (scope === 'project') {
+      const projPath = params.projectPath ?? getCurrentProjectPath()
+      if (!projPath) {
+        throw new Error(text('未打开小说项目，无法创建项目级技能', 'No project is open to create project skill'))
+      }
+      targetDir = path.join(projPath, '.vela', 'skills', name)
+    } else {
+      targetDir = writingSkillDirectory(name)
+    }
+    if (fs.existsSync(targetDir)) {
+      throw new Error(text(`同名 Writing Skill 已存在：“${name}”`, `Writing Skill with name "${name}" already exists`))
+    }
+    fs.mkdirSync(targetDir, { recursive: true })
+    const filePath = path.join(targetDir, 'SKILL.md')
+    const raw = formatSkillMarkdown({
+      name,
+      content: params.content,
+      description: params.description,
+      displayName: params.displayName,
+      stage: params.stage,
+    })
+    fs.writeFileSync(filePath, raw, { encoding: 'utf8', mode: 0o600 })
+    return {
+      success: true,
+      skill: {
+        name,
+        source: scope,
+        version: '1.0.0',
+        language: 'bilingual',
+        compatible: true,
+        utf8Bytes: Buffer.byteLength(raw, 'utf8'),
+      },
+    }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+export async function updateCustomWritingSkill(params: {
+  name: string
+  content?: string
+  description?: string
+  displayName?: string
+  stage?: WritingSkillStage
+  projectPath?: string | null
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const name = params.name.trim()
+    assertSpecSkillName(name)
+    let targetFile: string | null = null
+    const projPath = params.projectPath ?? getCurrentProjectPath()
+    if (projPath) {
+      const candidate = path.join(projPath, '.vela', 'skills', name, 'SKILL.md')
+      if (fs.existsSync(candidate)) targetFile = candidate
+    }
+    if (!targetFile) {
+      const userCand = path.join(VELA_HOME, 'skills', name, 'SKILL.md')
+      if (fs.existsSync(userCand)) targetFile = userCand
+    }
+    if (!targetFile) {
+      throw new Error(text(`未找到可修改的技能“${name}”（内置技能受保护只读）`, `Skill "${name}" not found or is protected builtin`))
+    }
+
+    const existingRaw = fs.readFileSync(targetFile, 'utf8')
+    const inspected = inspectWritingSkillMarkdown(existingRaw)
+    const newContent = params.content !== undefined ? params.content : (inspected.content || existingRaw)
+    const newDesc = params.description !== undefined ? params.description : inspected.metadata.description
+    const newDisplayName = params.displayName !== undefined ? params.displayName : inspected.metadata.displayName
+    const newStage = params.stage !== undefined ? params.stage : inspected.metadata.stage
+
+    const updatedRaw = formatSkillMarkdown({
+      name,
+      content: newContent,
+      description: newDesc,
+      displayName: newDisplayName,
+      stage: newStage,
+    })
+    fs.writeFileSync(targetFile, updatedRaw, { encoding: 'utf8', mode: 0o600 })
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+export async function deleteCustomWritingSkill(params: {
+  name: string
+  projectPath?: string | null
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const name = params.name.trim()
+    assertSpecSkillName(name)
+    let targetDir: string | null = null
+    const projPath = params.projectPath ?? getCurrentProjectPath()
+    if (projPath) {
+      const candidate = path.join(projPath, '.vela', 'skills', name)
+      if (fs.existsSync(candidate)) targetDir = candidate
+    }
+    if (!targetDir) {
+      const userCand = path.join(VELA_HOME, 'skills', name)
+      if (fs.existsSync(userCand)) targetDir = userCand
+    }
+    if (!targetDir) {
+      throw new Error(text(`未找到可删除的技能“${name}”（内置技能不可删除）`, `Skill "${name}" not found or is a protected builtin skill`))
+    }
+    fs.rmSync(targetDir, { recursive: true, force: true })
+    return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) }
   }

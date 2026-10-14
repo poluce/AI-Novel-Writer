@@ -46,7 +46,7 @@ export interface RemoteWritingSkillInspection extends Omit<WritingSkillInspectio
 
 export interface InstalledWritingSkill {
   name: string
-  source: 'user'
+  source: 'user' | 'project'
   version?: string
   language: WritingSkillLanguage
   compatible: true

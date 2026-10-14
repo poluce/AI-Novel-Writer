@@ -76,14 +76,16 @@ function skillInvocationNote(language: WritingLanguage): string {
     language,
     [
       '技能自动加载与按需执行规则：',
-      '- 目录里只有技能名与描述。当任务或用户意图与某个技能的描述相符时，先用 load_writing_skill 读出正文，再按正文自动执行，为用户提供自动化的专家体验。',
+      '- 目录里只有技能名与描述。当任务或用户意图与某个技能的描述相符时，先用 load_writing_skill 读出正文（亦可使用统一的 manage_skills load），再按正文自动执行，为用户提供自动化的专家体验。',
+      '- 当用户需要管理技能（查看列表、创建自定义技能、修改技能内容、删除技能或绑定阶段）时，使用统一的 manage_skills 工具。',
       '- 用户在输入框输入 `/技能名` 时，正文已经注入到那一轮消息，不需要再读；写作工作流也可以在某个阶段绑定技能。',
       '- 不要用 read_file 去读技能文件：用户级技能在项目目录之外，会被拒绝。',
       '- 必须主动自动加载执行，避免让用户重复手动输入；仅在向用户汇报或推荐时才提 `/技能名`。',
     ].join('\n'),
     [
       'Read skill instructions on demand instead of guessing from a description:',
-      '- The listing carries only names and descriptions. When a task matches a skill description, load its body with load_writing_skill first and then follow it automatically.',
+      '- The listing carries only names and descriptions. When a task matches a skill description, load its body with load_writing_skill (or manage_skills load) first and then follow it automatically.',
+      '- When managing skills (listing, creating, updating, deleting, or binding to stages), use the manage_skills tool.',
       '- When the user types `/skill-name`, that skill body is already injected into that turn and does not need loading; a writing workflow can also bind a skill to one of its stages.',
       '- Do not read skill files with read_file: user-level skills live outside the project directory and such reads are rejected.',
       '- Prioritize automatic tool loading over manual requests; only when relevant you may suggest the user enable it with `/skill-name`.',

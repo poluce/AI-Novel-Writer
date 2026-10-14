@@ -88,6 +88,7 @@ describe('buildAgentTools', () => {
       'manage_characters',
       'manage_drafts',
       'manage_mcp',
+      'manage_skills',
       'novel_config',
       'open_editor',
       'propose_chapter_blueprint',

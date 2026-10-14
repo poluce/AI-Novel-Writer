@@ -1,4 +1,5 @@
-import { app, BrowserWindow, ipcMain, shell, nativeImage } from 'electron'
+import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { createRequire } from 'node:module'
 import { registerIPCHandlers } from './ipc-handlers'
 import { registerMCPHandlers } from './mcp/mcp-ipc-bridge'
 import { mainT } from './i18n'
@@ -146,7 +147,16 @@ function createWindow() {
   const appIconPath = process.platform === 'win32'
     ? path.join(process.env.APP_ROOT!, 'build', 'icon.ico')
     : path.join(process.env.APP_ROOT!, 'build', 'icon.png')
-  const appIcon = nativeImage.createFromPath(appIconPath)
+  let appIcon: unknown = appIconPath
+  try {
+    const nodeRequire = createRequire(import.meta.url)
+    const electronModule = nodeRequire('electron') as { nativeImage?: { createFromPath?: (p: string) => unknown } }
+    if (electronModule?.nativeImage?.createFromPath) {
+      appIcon = electronModule.nativeImage.createFromPath(appIconPath)
+    }
+  } catch {
+    // mock fallback
+  }
 
   win = new BrowserWindow({
     width: 1440,
@@ -154,7 +164,7 @@ function createWindow() {
     minWidth: 1024,
     minHeight: 640,
     title: mainT(app.getLocale(), 'app.windowTitle'),
-    icon: appIcon,
+    icon: appIcon as never,
     // 使用应用内自绘标题栏，避免 Windows 原生标题栏与棕色标题栏重复显示。
     frame: false,
     backgroundColor: '#1e1e1e',
@@ -168,11 +178,11 @@ function createWindow() {
   installWindowCloseGuard(win)
 
   if (process.platform === 'win32') {
-    win.setIcon(appIcon)
+    win.setIcon?.(appIcon as never)
   }
 
   if (process.platform === 'darwin') {
-    app.dock?.setIcon(appIcon)
+    app.dock?.setIcon?.(appIcon as never)
   }
 
   // 隐藏默认菜单栏（Windows/Linux）
@@ -268,7 +278,7 @@ app.on('activate', () => {
 app.whenReady().then(async () => {
   if (!applicationInstanceAccepted) return
   if (process.platform === 'win32') {
-    app.setAppUserModelId('com.ai-novel-writer.app')
+    app.setAppUserModelId?.('com.ai-novel-writer.app')
   }
   reportReleaseSmokeStage('electron-ready')
   if (releaseSmokeRequested) {
