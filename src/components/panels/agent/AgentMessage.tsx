@@ -156,10 +156,10 @@ export default function AgentMessage({ message }: Props) {
           : text('复制消息', 'Copy message')}
         disabled={!content || streaming}
         onClick={() => void copyMessage()}
-        className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100 disabled:cursor-not-allowed disabled:opacity-0"
-        style={{ color: 'var(--color-text-muted)', background: 'var(--color-hover)' }}
+        className="flex h-5 w-5 items-center justify-center rounded opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100 disabled:cursor-not-allowed disabled:opacity-0 hover:bg-[var(--color-hover)]"
+        style={{ color: 'var(--color-text-muted)' }}
       >
-        {copyState === 'copied' ? <Check size={13} /> : <Copy size={13} />}
+        {copyState === 'copied' ? <Check size={12} /> : <Copy size={12} />}
       </button>
       {copyState === 'failed' && <span role="alert" className="sr-only">{text('无法复制这条消息', 'Could not copy this message')}</span>}
     </>
@@ -177,8 +177,10 @@ export default function AgentMessage({ message }: Props) {
           }}
         >
           {content}
+          <div className="flex justify-end mt-0.5">
+            {copyButton}
+          </div>
         </div>
-        {copyButton}
       </div>
     )
   }
@@ -198,14 +200,24 @@ export default function AgentMessage({ message }: Props) {
           />
         )}
 
-        {/* 2. 中间：文本回复内容 */}
+        {/* 2. 中间：文本回复内容与底部解耦的操作栏 */}
         {content ? (
-          <MarkdownContent content={content} streaming={streaming} />
-        ) : streaming ? (
-          <span className="inline-flex items-center h-4">
-            <StreamingCursor />
-          </span>
-        ) : null}
+          <div>
+            <MarkdownContent content={content} streaming={streaming} />
+            <div className="flex items-center justify-end mt-1 pt-0.5">
+              {copyButton}
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between min-h-[16px]">
+            {streaming ? (
+              <span className="inline-flex items-center h-4">
+                <StreamingCursor />
+              </span>
+            ) : <span />}
+            {copyButton}
+          </div>
+        )}
 
         {/* 3. 底部：最终产物卡片列表 */}
         {artifacts && artifacts.length > 0 && (
@@ -216,7 +228,6 @@ export default function AgentMessage({ message }: Props) {
           </div>
         )}
       </div>
-      {copyButton}
     </div>
   )
 }

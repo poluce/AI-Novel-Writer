@@ -139,4 +139,27 @@ describe('AgentMessage tool calls display (Option B: Collapsible summary above c
     // Confirm card is visible
     expect(container.textContent).toContain('manage_drafts')
   })
+
+  it('positions the copy button below the content without colliding with the top collapsible bar', async () => {
+    await act(async () => root.render(<AgentMessage message={{
+      id: 'assistant-3',
+      role: 'assistant',
+      content: '测试正文内容',
+      createdAt: 1,
+      toolCalls: [{
+        id: 'tc-2',
+        toolName: 'web_fetch',
+        arguments: {},
+        status: 'completed',
+      }],
+    }} />))
+
+    const copyBtn = page.getByRole('button', { name: /复制消息|Copy message/ }).element()
+    const summaryBtn = page.getByRole('button', { name: /已执行 1 个操作/ }).element()
+
+    // summaryBtn is before copyBtn in vertical document order
+    expect(summaryBtn.compareDocumentPosition(copyBtn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // copyBtn does not have absolute top-1 class
+    expect(copyBtn.className).not.toContain('top-1')
+  })
 })
