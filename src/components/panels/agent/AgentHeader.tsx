@@ -57,8 +57,16 @@ export default function AgentHeader() {
         height: 'var(--height-panel-header)',
         borderBottom: '1px solid var(--color-border)'}}
     >
+      {/* 左侧标题 */}
+      <div
+        className="flex min-w-0 items-center overflow-hidden text-ellipsis whitespace-nowrap gap-1.5"
+        style={{ color: 'var(--color-text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}
+      >
+        <span>{text('AI 写作助手', 'AI Writing Assistant')}</span>
+      </div>
+
       {/* 右侧工具按钮组 */}
-      <div className="flex items-center gap-1.5 px-0.5 flex-shrink-0">
+      <div className="flex items-center gap-1.5 px-0.5 flex-shrink-0 ml-auto">
 
         {/* 新建对话按钮 */}
         <IconBtn
@@ -94,9 +102,10 @@ export default function AgentHeader() {
           {/* 更多菜单下拉 */}
           {showMore && (
             <div
-              className="absolute right-0 top-full mt-1 z-50 py-1 rounded-lg shadow-lg"
+              className="absolute right-[-24px] top-full mt-1 z-50 py-1 rounded-lg shadow-lg"
               style={{
-                width: subView === 'main' ? 200 : 260,
+                width: subView === 'main' ? 180 : 230,
+                maxWidth: 'calc(100vw - 32px)',
                 backgroundColor: 'var(--color-sidebar)',
                 border: '1px solid var(--color-border)',
                 boxShadow: '0 8px 24px rgba(0,0,0,0.25)'}}
