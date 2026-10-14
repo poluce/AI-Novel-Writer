@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- 1. 品牌主背景渐变 (高雅明亮浅色系：极简瓷白到浅灰蓝) -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#F1F5F9" />
+    </linearGradient>
+
+    <!-- 2. 钢笔与墨迹亮色渐变 (电光蓝 -> 宝石蓝 -> 深邃蓝) -->
+    <linearGradient id="brandBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="40%" stop-color="#2563EB" />
+      <stop offset="100%" stop-color="#1D4ED8" />
+    </linearGradient>
+
+    <!-- 3. 机械臂深空钛金金属渐变 (在浅底上对比鲜明，高机械质感) -->
+    <linearGradient id="armGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#64748B" />
+      <stop offset="50%" stop-color="#475569" />
+      <stop offset="100%" stop-color="#1E293B" />
+    </linearGradient>
+
+    <!-- 柔和立体微环境投影 -->
+    <filter id="shadow" x="-10%" y="-10%" width="125%" height="125%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#0F172A" flood-opacity="0.15" />
+    </filter>
+  </defs>
+
+  <!-- 图标圆角外框 (现代桌面端标准圆角，浅灰轮廓) -->
+  <rect x="32" y="32" width="448" height="448" rx="108" fill="url(#bgGrad)" stroke="#E2E8F0" stroke-width="4" />
+
+  <!-- 内部装饰性黄金比例几何微环 -->
+  <circle cx="256" cy="256" r="165" fill="none" stroke="#0284C7" stroke-width="1.5" stroke-dasharray="6 10" opacity="0.18" />
+
+  <g filter="url(#shadow)">
+    <!-- A. 底部流体书写轨迹 (自动化与顺滑笔迹) -->
+    <path d="M 128 380 C 175 340, 225 410, 285 375 C 335 345, 360 365, 392 355" 
+          fill="none" stroke="url(#brandBlue)" stroke-width="22" stroke-linecap="round" />
+
+    <!-- B. 倾斜45度的极简几何钢笔 (核心视觉中心) -->
+    <g transform="translate(275, 255) rotate(35)">
+      <!-- 笔杆上段 -->
+      <rect x="-22" y="-135" width="44" height="125" rx="10" fill="url(#brandBlue)" />
+      <!-- 钢笔金属笔尖 -->
+      <path d="M -20 -2 L 20 -2 L 26 35 L 0 88 L -26 35 Z" fill="url(#brandBlue)" />
+      <!-- 笔尖呼吸圆孔与中缝 (浅色底镂空) -->
+      <circle cx="0" cy="30" r="7" fill="#F8FAFC" />
+      <line x1="0" y1="37" x2="0" y2="86" stroke="#F8FAFC" stroke-width="5" stroke-linecap="round" />
+    </g>
+
+    <!-- C. 极简机械臂与C型锁紧夹爪 (环抱式负空间设计) -->
+    <!-- 左上机械大臂 -->
+    <path d="M 105 190 L 185 190" stroke="url(#armGrad)" stroke-width="28" stroke-linecap="round" />
+    
+    <!-- 机械旋转主关节轴 -->
+    <circle cx="195" cy="190" r="28" fill="url(#armGrad)" />
+    <circle cx="195" cy="190" r="12" fill="#F8FAFC" />
+
+    <!-- 机械手C型抱爪 (外框浅色描边与笔杆穿插隔离) -->
+    <path d="M 215 178 L 285 208 C 308 218, 315 245, 298 265 L 252 246" 
+          fill="none" stroke="#F8FAFC" stroke-width="34" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M 215 178 L 285 208 C 308 218, 315 245, 298 265 L 252 246" 
+          fill="none" stroke="url(#armGrad)" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+</svg>

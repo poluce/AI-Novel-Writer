@@ -237,10 +237,10 @@ export default function TitleBar() {
     >
       <div className="flex items-center gap-2 flex-shrink-0 min-w-0">
         <div
-          className="writer-brand-mark flex h-8 w-8 items-center justify-center rounded-md"
+          className="writer-brand-mark flex h-8 w-8 items-center justify-center rounded-md overflow-hidden"
           title={locale === 'zh-CN' ? APP_BRAND.zhName : APP_BRAND.enName}
         >
-          <ScrollText size={18} strokeWidth={1.7} />
+          <img src="/logo.svg" alt="logo" className="h-6 w-6 object-contain" />
         </div>
       </div>
 
