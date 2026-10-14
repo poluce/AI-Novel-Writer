@@ -75,18 +75,18 @@ function skillInvocationNote(language: WritingLanguage): string {
   return writingLanguageText(
     language,
     [
-      '技能说明按需读取，不要凭描述猜内容：',
-      '- 目录里只有技能名与描述。当任务与某个技能的描述相符时，先用 load_writing_skill 读出正文，再按正文执行。',
+      '技能自动加载与按需执行规则：',
+      '- 目录里只有技能名与描述。当任务或用户意图与某个技能的描述相符时，先用 load_writing_skill 读出正文，再按正文自动执行，为用户提供自动化的专家体验。',
       '- 用户在输入框输入 `/技能名` 时，正文已经注入到那一轮消息，不需要再读；写作工作流也可以在某个阶段绑定技能。',
       '- 不要用 read_file 去读技能文件：用户级技能在项目目录之外，会被拒绝。',
-      '- 当任务与某个技能的描述相符时，也可以直接用 `/技能名` 建议用户启用它。',
+      '- 必须主动自动加载执行，避免让用户重复手动输入；仅在向用户汇报或推荐时才提 `/技能名`。',
     ].join('\n'),
     [
       'Read skill instructions on demand instead of guessing from a description:',
-      '- The listing carries only names and descriptions. When a task matches a skill description, load its body with load_writing_skill first and then follow it.',
+      '- The listing carries only names and descriptions. When a task matches a skill description, load its body with load_writing_skill first and then follow it automatically.',
       '- When the user types `/skill-name`, that skill body is already injected into that turn and does not need loading; a writing workflow can also bind a skill to one of its stages.',
       '- Do not read skill files with read_file: user-level skills live outside the project directory and such reads are rejected.',
-      '- When a task matches a skill description, you may also suggest the user enable it with `/skill-name`.',
+      '- Prioritize automatic tool loading over manual requests; only when relevant you may suggest the user enable it with `/skill-name`.',
     ].join('\n'),
   )
 }
