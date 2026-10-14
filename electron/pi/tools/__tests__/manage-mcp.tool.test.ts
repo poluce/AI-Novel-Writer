@@ -62,6 +62,20 @@ describe('manage_mcp agent tool', () => {
     expect(JSON.stringify(result)).not.toContain('API_KEY')
   })
 
+  it('gracefully handles descriptive action values hallucinated by LLMs', async () => {
+    loadConfig.mockResolvedValue({
+      status: 'loaded',
+      servers: [{ id: 'docs', name: 'docs', transport: 'stdio' }],
+    })
+    getServersStatus.mockReturnValue([{ id: 'docs', name: 'docs', status: 'connected', toolCount: 3 }])
+    const tool = createManageMcpTool('zh-CN')
+
+    const result = await tool.execute('call-desc', {
+      action: '列出全部已配置的 MCP 服务器及其连接状态与工具数量（不含凭据）',
+    })
+    expect(textOf(result)).toContain('docs（stdio）')
+  })
+
   it('reads one server full configuration on demand', async () => {
     getServerConfig.mockResolvedValue({
       success: true,

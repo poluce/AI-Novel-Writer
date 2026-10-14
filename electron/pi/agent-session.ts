@@ -296,6 +296,10 @@ export class AgentSession {
         || rawAction === '列表'
         || rawAction === '连接'
         || rawAction === '断开'
+        || rawAction.includes('列出')
+        || rawAction.includes('列表')
+        || rawAction.includes('查看')
+        || rawAction.includes('读取')
       ) {
         return false
       }

@@ -12,16 +12,6 @@ import {
   type WritingLanguage,
 } from '../../../src/shared/writing-language'
 
-const DraftAction = Type.Union([
-  Type.Literal('read', { description: '读取草稿正文内容，自动附带未处理的作者划词标注列表（默认）' }),
-  Type.Literal('write', { description: '整篇写草稿：为章节新建首版草稿、整章推倒重写（追加新版本）或覆盖未定稿草稿' }),
-  Type.Literal('replace_excerpt', { description: '指定位置局部替换：精确替换章节草稿中的一段原文或多处原文（批量替换），自动返回上下文预览' }),
-  Type.Literal('list_versions', { description: '查看章节拥有的所有草稿版本清单（版本号、字数、状态、创建时间）' }),
-  Type.Literal('list_annotations', { description: '专项查询：仅查看本章当前草稿中作者留下的待处理划词批注与修改意见' }),
-  Type.Literal('resolve_annotation', { description: '标记批注已解决：将已处理的作者划词批注标记归档（可传 annotation_id 或 resolve_all: true）' }),
-  Type.Literal('delete', { description: '删除未定稿的草稿版本' }),
-], { description: '操作类型' })
-
 const DraftType = Type.Union([
   Type.Literal('latest', { description: '当前最新版本正文草稿（默认）' }),
   Type.Literal('draft_v1', { description: '章节初稿（第 1 版正文草稿）' }),
@@ -34,7 +24,9 @@ const WriteMode = Type.Union([
 ], { description: '整篇写入模式' })
 
 const Schema = Type.Object({
-  action: Type.Optional(DraftAction),
+  action: Type.Optional(Type.String({
+    description: '操作类型：read（读取草稿正文，默认）、write（整篇写草稿/新建/重写）、replace_excerpt（指定位置无损局部替换）、list_versions（版本清单）、list_annotations（待处理批注）、resolve_annotation（解决批注）、delete（删除草稿）',
+  })),
   chapter_number: Type.Integer({ minimum: 1, description: '目标章节序号（正整数，如 1 代表第 1 章）' }),
 
   // === read 参数 ===

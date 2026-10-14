@@ -7,18 +7,22 @@ import {
   type WritingLanguage,
 } from '../../../src/shared/writing-language'
 
-const Action = Type.Union([
-  Type.Literal('list', { description: '列出全部已配置的 MCP 服务器及其连接状态与工具数量（不含凭据）' }),
-  Type.Literal('get', { description: '读取单个服务器的完整配置（含命令、参数、环境变量与 URL，编辑前先读它）' }),
-  Type.Literal('add', { description: '添加一个新服务器（stdio 填 command，SSE 填 url，二者只能填一个）' }),
-  Type.Literal('update', { description: '局部修改已有服务器：未提供的字段保留原值；要清掉某个字段或切换传输方式，把另一侧字段显式传空字符串（如 url: ""）' }),
-  Type.Literal('connect', { description: '连接（或重新连接）一个已配置的服务器，使其工具可用' }),
-  Type.Literal('disconnect', { description: '断开一个已连接服务器，其工具暂时不可用（配置保留）' }),
-  Type.Literal('delete', { description: '删除一个服务器并断开其连接' }),
-], { description: '操作类型' })
+function resolveAction(raw?: string): 'list' | 'get' | 'add' | 'update' | 'connect' | 'disconnect' | 'delete' {
+  const str = String(raw ?? 'list').toLowerCase().trim()
+  if (str === 'list' || str.includes('列出') || str.includes('列表') || str.includes('清单') || str.includes('已配置') || str.includes('查看')) return 'list'
+  if (str === 'get' || str.includes('读取') || str.includes('详情') || str.includes('单个')) return 'get'
+  if (str === 'add' || str.includes('添加') || str.includes('新增') || str.includes('新建')) return 'add'
+  if (str === 'update' || str.includes('修改') || str.includes('更新') || str.includes('编辑')) return 'update'
+  if (str === 'disconnect' || str.includes('断开')) return 'disconnect'
+  if (str === 'connect' || str.includes('连接') || str.includes('重连')) return 'connect'
+  if (str === 'delete' || str.includes('删除') || str.includes('移除')) return 'delete'
+  return 'list'
+}
 
 const Schema = Type.Object({
-  action: Type.Optional(Action),
+  action: Type.Optional(Type.String({
+    description: '操作类型：list（列出全部服务器及状态，默认）、get（读取单个完整配置）、add（添加新服务器）、update（局部修改）、connect（连接）、disconnect（断开）、delete（删除）',
+  })),
   server_id: Type.Optional(Type.String({ description: '目标服务器 ID（get / update / delete 必填）' })),
   command: Type.Optional(Type.String({ description: 'stdio 启动命令，如 npx、node 或可执行文件路径' })),
   args: Type.Optional(Type.Array(Type.String(), { description: 'stdio 命令参数列表，如 ["-y", "some-package"]' })),
@@ -73,7 +77,7 @@ export function createManageMcpTool(
     description,
     parameters: Schema,
     execute: async (_id, params) => {
-      const action = params.action ?? 'list'
+      const action = resolveAction(params.action)
       switch (action) {
         case 'list': {
           return listServers(language)

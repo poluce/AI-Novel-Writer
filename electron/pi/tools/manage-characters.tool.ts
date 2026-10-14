@@ -58,19 +58,10 @@ const SingleCharacterPayloadSchema = Type.Object({
   currentState: Type.Optional(StateFieldsSchema),
 })
 
-const Action = Type.Union([
-  Type.Literal('read', { description: '多维查询：列出人物清单、读取单人档案或指定章节的历史状态快照（默认）' }),
-  Type.Literal('track_appearances', { description: '出场追踪：查询指定角色的全书出场轨迹，或反查某章节的登场阵容' }),
-  Type.Literal('create', { description: '创建单个新角色档案' }),
-  Type.Literal('batch_create', { description: '批量创建角色（一次性建立新门派、新势力群像档案与内部关系网）' }),
-  Type.Literal('update', { description: '修改已有角色档案字段，或增量更新其状态（未提供的状态字段自动继承）' }),
-  Type.Literal('rename', { description: '角色全工程级联改名（自动同步更新人际关系网及全书所有章节蓝图）' }),
-  Type.Literal('update_relationship', { description: '定向更新两角色之间的单条人际关系（添加、修改或删除）' }),
-  Type.Literal('delete', { description: '删除角色（自动清理指向该角色的无效关系）' }),
-], { description: '操作类型' })
-
 const Schema = Type.Object({
-  action: Type.Optional(Action),
+  action: Type.Optional(Type.String({
+    description: '操作类型：read（多维查询，默认）、track_appearances（出场追踪）、create（建档）、batch_create（批量建档）、update（修改档案/状态）、rename（级联改名）、update_relationship（关系更新）、delete（删除角色）',
+  })),
 
   // === 查询与目标定位参数 ===
   character_name: Type.Optional(Type.String({ description: '目标角色姓名（适用于 read/update/delete/rename/track_appearances）' })),
