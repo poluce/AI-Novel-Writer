@@ -24,6 +24,11 @@ export interface ConfinedExecutionEnvOptions {
    * 并跟踪「提交态未知」的路径供 `consumeUnknownCommit` 查询。
    */
   writeTextAtomically?: AtomicTextWrite
+  /**
+   * 受保护的路径列表（例如 `<projectPath>/.vela`）。
+   * 即使在 allowed roots 内，命中受保护路径的操作也会被拒绝（permission_denied）。
+   */
+  protectedPaths?: readonly string[]
 }
 
 /**
@@ -35,7 +40,7 @@ export interface ConfinedExecutionEnvOptions {
  * 与 `assertProjectFilePath` 同样的语义：先做词法包含检查，能解析真身时
  * 再对 canonical path 检查一次，防止 junction/symlink 指到外面。
  *
- * 传了 `writeTextAtomically` 时，文件写入与领域工具 `write_file` 共用同一套
+ * 传了 `writeTextAtomically` 时，文件写入与领域写工具共用同一套
  * 提交态语义：要么整份落地，要么不落地；失败且提交态未知时记下来，
  * 让上层按 ADR 0008 终止本轮，而不是让模型自动重写一遍。
  *
@@ -44,6 +49,7 @@ export interface ConfinedExecutionEnvOptions {
  */
 export class ConfinedExecutionEnv implements ExecutionEnv {
   private readonly roots: readonly string[]
+  private readonly protectedPaths: readonly string[]
   /** 写入失败但无法证明没落地的路径；上层读一次就清掉。 */
   private readonly unknownCommits = new Set<string>()
 
@@ -53,6 +59,7 @@ export class ConfinedExecutionEnv implements ExecutionEnv {
     private readonly options: ConfinedExecutionEnvOptions = {},
   ) {
     this.roots = roots.map(root => path.resolve(root))
+    this.protectedPaths = (options.protectedPaths ?? []).map(protectedPath => path.resolve(protectedPath))
   }
 
   get cwd(): string {
@@ -163,7 +170,11 @@ export class ConfinedExecutionEnv implements ExecutionEnv {
 
   async listDir(target: string, context: Context): Promise<Result<FileInfo[], FileError>> {
     const guarded = await this.guard(target, context, true)
-    return guarded.ok ? this.inner.listDir(guarded.value, context) : guarded
+    if (!guarded.ok) return guarded
+    const listed = await this.inner.listDir(guarded.value, context)
+    if (!listed.ok) return listed
+    if (this.protectedPaths.length === 0) return listed
+    return ok(listed.value.filter(entry => !this.isProtected(entry.path)))
   }
 
   async canonicalPath(target: string, context: Context): Promise<Result<string, FileError>> {
@@ -217,7 +228,7 @@ export class ConfinedExecutionEnv implements ExecutionEnv {
     return this.inner.cleanup(context)
   }
 
-  /** 越界路径一律以 `permission_denied` 返回，绝不抛异常（FileSystem 契约）。 */
+  /** 越界或受保护路径一律以 `permission_denied` 返回，绝不抛异常（FileSystem 契约）。 */
   private async guard(
     target: string,
     context: Context,
@@ -226,10 +237,12 @@ export class ConfinedExecutionEnv implements ExecutionEnv {
     const absolute = await this.inner.absolutePath(target, context)
     if (!absolute.ok) return absolute
     if (!this.inside(absolute.value)) return this.denied(target, absolute.value)
+    if (this.isProtected(absolute.value)) return this.denied(target, absolute.value, true)
     if (!existing) return absolute
     const canonical = await this.inner.canonicalPath(absolute.value, context)
     if (!canonical.ok) return canonical
     if (!this.inside(canonical.value)) return this.denied(target, canonical.value)
+    if (this.isProtected(canonical.value)) return this.denied(target, canonical.value, true)
     return absolute
   }
 
@@ -241,10 +254,22 @@ export class ConfinedExecutionEnv implements ExecutionEnv {
     })
   }
 
-  private denied(target: string, resolved: string): Result<string, FileError> {
+  private isProtected(target: string): boolean {
+    const resolved = path.resolve(target)
+    const targetToCheck = process.platform === 'win32' ? resolved.toLowerCase() : resolved
+    return this.protectedPaths.some((protectedPath) => {
+      const baseToCheck = process.platform === 'win32' ? protectedPath.toLowerCase() : protectedPath
+      const relative = path.relative(baseToCheck, targetToCheck)
+      return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
+    })
+  }
+
+  private denied(target: string, resolved: string, isProtected = false): Result<string, FileError> {
     return err(new FileError(
       'permission_denied',
-      `路径越界：「${target}」不在助手可访问的目录内。`,
+      isProtected
+        ? `路径受限：「${target}」属于受保护的系统目录，禁止直接访问。`
+        : `路径越界：「${target}」不在助手可访问的目录内。`,
       resolved,
     ))
   }

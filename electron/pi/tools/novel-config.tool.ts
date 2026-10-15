@@ -121,6 +121,35 @@ const FIELD_DISPLAY_NAMES: Record<string, [string, string]> = {
   writingLanguage: ['写作语言', 'Writing Language'],
 }
 
+/** 判定某次 novel_config 调用是否为写入操作（单一真实事实源）。 */
+export function isNovelConfigWrite(params: Record<string, unknown>): boolean {
+  const rawAction = String(params.action ?? '').toLowerCase().trim()
+  const isExplicitUpdate = rawAction === 'update' || rawAction === '修改' || rawAction === '更新' || rawAction === '填充'
+  const isExplicitRead = rawAction === 'read' || rawAction === '读取' || rawAction === '查看'
+
+  const hasUpdatePayload = Boolean(
+    params.changes
+    || params.coreOutline
+    || params.worldSetting
+    || params.goldenFinger
+    || params.protagonistProfile
+    || params.genre
+    || params.subGenre
+    || params.targetAudience
+    || params.totalChapters
+    || params.wordsPerChapter
+    || params.plotStructure
+    || params.narrativePOV
+    || params.globalGuidance
+    || params.writingStyle
+    || params.referenceWorks
+    || (params.field && params.content)
+    || (params.old_text && params.new_text),
+  )
+
+  return isExplicitUpdate || (!isExplicitRead && hasUpdatePayload)
+}
+
 export function createNovelConfigTool(
   language: WritingLanguage,
   rendererAction: RendererActionSink,
@@ -135,38 +164,14 @@ export function createNovelConfigTool(
     label: 'Novel Config',
     description,
     parameters: Schema,
+    isWriteOperation: isNovelConfigWrite,
     execute: async (_id, params) => {
       const core = ProjectCoreRepository.get()
       if (!core) {
         throw new Error(text('项目未打开或未初始化', 'Project is not open or not initialized'))
       }
 
-      // 判定动作类型：显式 action 优先；若传了变更内容则判定为 update，否则判定为 read
-      const rawAction = String(params.action ?? '').toLowerCase().trim()
-      const isExplicitUpdate = rawAction === 'update' || rawAction === '修改' || rawAction === '更新' || rawAction === '填充'
-      const isExplicitRead = rawAction === 'read' || rawAction === '读取' || rawAction === '查看'
-
-      const hasUpdatePayload = Boolean(
-        params.changes
-        || params.coreOutline
-        || params.worldSetting
-        || params.goldenFinger
-        || params.protagonistProfile
-        || params.genre
-        || params.subGenre
-        || params.targetAudience
-        || params.totalChapters
-        || params.wordsPerChapter
-        || params.plotStructure
-        || params.narrativePOV
-        || params.globalGuidance
-        || params.writingStyle
-        || params.referenceWorks
-        || (params.field && params.content)
-        || (params.old_text && params.new_text),
-      )
-
-      const isUpdate = isExplicitUpdate || (!isExplicitRead && hasUpdatePayload)
+      const isUpdate = isNovelConfigWrite(params as Record<string, unknown>)
 
       if (!isUpdate) {
         // ========== 读取逻辑 ==========

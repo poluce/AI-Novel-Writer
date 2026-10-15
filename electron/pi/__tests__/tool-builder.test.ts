@@ -12,7 +12,7 @@ vi.mock('../../mcp/mcp-manager', () => ({
 }))
 vi.mock('../../database', () => ({ getCurrentProjectPath: vi.fn() }))
 
-import { buildAgentTools, confirmationToolNames } from '../tool-builder'
+import { buildAgentTools, confirmationToolNames, sequentialToolNames } from '../tool-builder'
 
 describe('buildAgentTools', () => {
   it('keeps every tool name flat, colon-free and snake case', () => {
@@ -80,6 +80,23 @@ describe('buildAgentTools', () => {
   it('keeps only the intended tools behind user confirmation', () => {
     expect([...confirmationToolNames()].sort()).toEqual([
       // harness 自带的执行工具同样逐次确认。
+      'bash',
+      'edit',
+      'manage_characters',
+      'manage_drafts',
+      'manage_knowledge_base',
+      'manage_mcp',
+      'manage_skills',
+      'novel_config',
+      'open_editor',
+      'propose_chapter_blueprint',
+      'story_architecture',
+      'write',
+    ])
+  })
+
+  it('keeps sequentialToolNames explicitly defined and decoupled from confirmation', () => {
+    expect([...sequentialToolNames()].sort()).toEqual([
       'bash',
       'edit',
       'manage_characters',

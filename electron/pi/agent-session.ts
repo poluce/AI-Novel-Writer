@@ -140,6 +140,8 @@ export class AgentSession {
   private fullText = ''
   /** 执行模式：'plan'（审查计划）| 'writing'（全自动写作） */
   private executionMode: 'plan' | 'writing' = 'plan'
+  /** 当前装配的工具映射表；确认判定直接查询工具的自声明逻辑。 */
+  private readonly toolsMap = new Map<string, AnyAgentTool>()
   /** 有一轮生成在跑；`close()` 之外的并发操作靠它判断。 */
   private busy = false
   private closed = false
@@ -165,6 +167,9 @@ export class AgentSession {
     this.commitTracker = options.executionEnv instanceof ConfinedExecutionEnv
       ? options.executionEnv
       : null
+    for (const tool of options.tools) {
+      this.toolsMap.set(tool.name, tool)
+    }
     this.registerHooks(options.sampling ?? null)
     this.registerEvents()
   }
@@ -259,7 +264,7 @@ export class AgentSession {
 
     // 工具结果统一截断；「写入了但提交态未知」时终止本轮，避免自动重写。
     // harness 自带的 write / edit 不报提交态，这里按执行环境记录的结果补上，
-    // 让它们与领域工具 write_file 走同一条 ADR 0008 保护。
+    // 让它们与领域写工具走同一条 ADR 0008 保护。
     this.unsubscribes.push(this.harness.hooks.on('after_tool', (event) => {
       const commitState = this.harnessWriteCommitState(event)
       const previousDetails = event.details
@@ -284,26 +289,21 @@ export class AgentSession {
   private isConfirmationRequired(toolName: string, args?: Record<string, unknown>): boolean {
     if (toolName.startsWith('mcp__')) return true
 
-    // MCP 服务器管理：查看与连接/断开自动放行，增删改无论哪种执行模式都要用户点头。
+    // MCP 服务器管理：配置增删改无论哪种执行模式都要用户点头；查看与连接/断开自动放行。
     if (toolName === 'manage_mcp') {
-      const rawAction = String(args?.action ?? '').toLowerCase().trim()
-      if (
-        rawAction === 'list'
-        || rawAction === 'get'
-        || rawAction === 'connect'
-        || rawAction === 'disconnect'
-        || rawAction === '查看'
-        || rawAction === '列表'
-        || rawAction === '连接'
-        || rawAction === '断开'
-        || rawAction.includes('列出')
-        || rawAction.includes('列表')
-        || rawAction.includes('查看')
-        || rawAction.includes('读取')
-      ) {
-        return false
+      const tool = this.toolsMap.get(toolName)
+      if (tool?.isWriteOperation) {
+        return tool.isWriteOperation(args ?? {})
       }
-      return true
+      return isManageMcpWriteFallback(args ?? {})
+    }
+
+    // 技能安装（联网抓取并写入全局目录）：无论哪种执行模式都必须确认。
+    if (toolName === 'manage_skills') {
+      const rawAction = String(args?.action ?? '').toLowerCase().trim()
+      if (rawAction === 'install' || rawAction === '安装') {
+        return true
+      }
     }
 
     // 写作模式（writing）：创作类工具全部自动放行，零弹窗直接落盘；操作系统级 bash 命令保留底线确认
@@ -312,79 +312,16 @@ export class AgentSession {
       return false
     }
 
-    // 计划模式（plan）：保持逐项确认
+    // 计划模式（plan）：不在确认名单内的工具自动放行
     if (!this.confirmationNames.has(toolName)) return false
-    if (toolName === 'propose_chapter_blueprint') {
-      const rawAction = String(args?.action ?? '').toLowerCase().trim()
-      if (rawAction === 'read' || rawAction === '读取' || rawAction === '查看') {
-        return false
-      }
+
+    // 工具自声明的写入判定（单一真实事实源）：只读操作自动放行，写操作要求确认
+    const tool = this.toolsMap.get(toolName)
+    if (tool?.isWriteOperation) {
+      return tool.isWriteOperation(args ?? {})
     }
-    if (toolName === 'novel_config') {
-      const rawAction = String(args?.action ?? '').toLowerCase().trim()
-      const isExplicitRead = rawAction === 'read' || rawAction === '读取' || rawAction === '查看'
-      const isExplicitUpdate = rawAction === 'update' || rawAction === '修改' || rawAction === '更新' || rawAction === '填充'
-      const hasUpdatePayload = Boolean(
-        args?.changes
-        || args?.coreOutline
-        || args?.worldSetting
-        || args?.goldenFinger
-        || args?.protagonistProfile
-        || args?.genre
-        || args?.subGenre
-        || args?.targetAudience
-        || args?.totalChapters
-        || args?.wordsPerChapter
-        || args?.plotStructure
-        || args?.narrativePOV
-        || args?.globalGuidance
-        || args?.writingStyle
-        || args?.referenceWorks
-        || (args?.field && args?.content),
-      )
-      if (isExplicitRead || (!isExplicitUpdate && !hasUpdatePayload)) {
-        return false
-      }
-    }
-    if (toolName === 'story_architecture') {
-      const rawAction = String(args?.action ?? '').toLowerCase().trim()
-      const isExplicitRead = rawAction === 'read' || rawAction === '读取' || rawAction === '查看'
-      const isExplicitUpdate = rawAction === 'update' || rawAction === '修改' || rawAction === '更新' || rawAction === '填充'
-      const hasUpdatePayload = Boolean(
-        args?.content
-        || args?.premise
-        || args?.worldbuilding
-        || args?.synopsis,
-      )
-      if (isExplicitRead || (!isExplicitUpdate && !hasUpdatePayload)) {
-        return false
-      }
-    }
-    if (toolName === 'manage_characters') {
-      const rawAction = String(args?.action ?? 'read').toLowerCase().trim()
-      if (rawAction === 'read' || rawAction === 'track_appearances' || rawAction === '出场追踪' || rawAction === '出场') {
-        return false
-      }
-    }
-    if (toolName === 'manage_drafts') {
-      const rawAction = String(args?.action ?? 'read').toLowerCase().trim()
-      if (
-        rawAction === 'read'
-        || rawAction === 'list_versions'
-        || rawAction === '版本清单'
-        || rawAction === '查看版本'
-        || rawAction === 'list_annotations'
-        || rawAction === '查看标注'
-        || rawAction === '标注列表'
-        || rawAction === '批注'
-        || rawAction === 'resolve_annotation'
-        || rawAction === '解决批注'
-        || rawAction === '解决标注'
-        || rawAction === '归档批注'
-      ) {
-        return false
-      }
-    }
+
+    // 未自声明的写工具（如 write / edit / bash / open_editor）按名单默认要求确认
     return true
   }
 
@@ -534,6 +471,10 @@ export class AgentSession {
   }
 
   async setTools(tools: AnyAgentTool[]): Promise<void> {
+    this.toolsMap.clear()
+    for (const tool of tools) {
+      this.toolsMap.set(tool.name, tool)
+    }
     // 领域工具每轮重建（技能目录、范围会变），但 harness 的执行工具必须一起保留：
     // lane 的 `activeToolNames` 在创建时就固定为完整名单，只设领域工具会让
     // `activeToolNames ⊆ tools` 校验失败，整轮直接以「工具不可用」告终。
@@ -672,4 +613,19 @@ function toolResultErrorText(result: unknown): string {
     .join('\n')
     .trim()
   return text || '工具执行失败'
+}
+
+/** manage_mcp 的写入判定兜底：若装配的工具未附带 isWriteOperation（例如测试 mock），按此兜底。 */
+function isManageMcpWriteFallback(params: Record<string, unknown>): boolean {
+  const rawAction = String(params.action ?? 'list').toLowerCase().trim()
+  return !(
+    rawAction === 'list'
+    || rawAction === 'get'
+    || rawAction === 'connect'
+    || rawAction === 'disconnect'
+    || rawAction === '查看'
+    || rawAction === '列表'
+    || rawAction === '连接'
+    || rawAction === '断开'
+  )
 }

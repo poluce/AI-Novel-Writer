@@ -552,6 +552,13 @@ function handleRead(ctx: DraftToolContext): ToolOutput {
   })
 }
 
+/** 判定某次 manage_drafts 调用是否为写入操作。 */
+export function isManageDraftsWrite(params: Record<string, unknown>): boolean {
+  const rawAction = String(params.action || 'read').toLowerCase().trim()
+  const action = resolveDraftAction(rawAction)
+  return action === 'write' || action === 'replace_excerpt' || action === 'delete'
+}
+
 export function createManageDraftsTool(
   language: WritingLanguage,
   rendererAction: RendererActionSink,
@@ -570,6 +577,7 @@ export function createManageDraftsTool(
     label: 'Manage Drafts',
     description,
     parameters: Schema,
+    isWriteOperation: isManageDraftsWrite,
     execute: async function execute(_id, params): Promise<ToolOutput> {
       requireOpenProject(text)
 

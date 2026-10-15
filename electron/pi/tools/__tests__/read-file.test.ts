@@ -46,4 +46,12 @@ describe('read_file', () => {
     const tool = createReadFileTool('zh-CN')
     await expect(tool.execute('c1', { file_path: '../secret.md' })).rejects.toThrow('路径越界')
   })
+
+  it('throws when trying to read inside .vela directory', async () => {
+    projectPathMock.mockReturnValue('/proj')
+    assertPathMock.mockReturnValue(undefined)
+
+    const tool = createReadFileTool('zh-CN')
+    await expect(tool.execute('c1', { file_path: '.vela/vela.db' })).rejects.toThrow('路径受限')
+  })
 })

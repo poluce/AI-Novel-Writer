@@ -58,6 +58,12 @@ const Schema = Type.Object({
   blueprints: Type.Optional(Type.Array(BlueprintItemSchema, { description: '批量多章提交：一次性创建或更新多个章节的蓝图列表' })),
 })
 
+/** 判定某次 propose_chapter_blueprint 调用是否为写入操作。 */
+export function isProposeChapterBlueprintWrite(params: Record<string, unknown>): boolean {
+  const rawAction = String(params.action ?? 'upsert').toLowerCase().trim()
+  return rawAction !== 'read' && rawAction !== '读取' && rawAction !== '查看'
+}
+
 export function createProposeChapterBlueprintTool(
   language: WritingLanguage,
 ): AgentTool<typeof Schema, { chapterNumber?: number; fields?: number; totalCount?: number; isNew?: boolean; status?: string }> {
@@ -71,6 +77,7 @@ export function createProposeChapterBlueprintTool(
     label: 'Chapter Blueprint',
     description,
     parameters: Schema,
+    isWriteOperation: isProposeChapterBlueprintWrite,
     execute: async (_id, params) => {
       const action = params.action || 'upsert'
 

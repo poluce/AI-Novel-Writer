@@ -52,6 +52,23 @@ const SECTION_LABELS: Record<string, readonly [string, string]> = {
   synopsis: ['全书情节大纲', 'Plot Outline'],
 }
 
+/** 判定某次 story_architecture 调用是否为写入操作（单一真实事实源）。 */
+export function isStoryArchitectureWrite(params: Record<string, unknown>): boolean {
+  const rawAction = String(params.action ?? '').toLowerCase().trim()
+  const isExplicitUpdate = rawAction === 'update' || rawAction === '修改' || rawAction === '更新' || rawAction === '填充'
+  const isExplicitRead = rawAction === 'read' || rawAction === '读取' || rawAction === '查看'
+
+  const hasUpdatePayload = Boolean(
+    params.content
+    || params.premise
+    || params.worldbuilding
+    || params.synopsis
+    || (params.old_text && params.new_text),
+  )
+
+  return isExplicitUpdate || (!isExplicitRead && hasUpdatePayload)
+}
+
 export function createStoryArchitectureTool(
   language: WritingLanguage,
   rendererAction: RendererActionSink,
@@ -66,25 +83,14 @@ export function createStoryArchitectureTool(
     label: 'Story Architecture',
     description,
     parameters: Schema,
+    isWriteOperation: isStoryArchitectureWrite,
     execute: async (_id, params) => {
       const core = ProjectCoreRepository.get()
       if (!core) {
         throw new Error(text('项目架构未初始化或未打开项目', 'Project architecture is not initialized or project is not open'))
       }
 
-      const rawAction = String(params.action ?? '').toLowerCase().trim()
-      const isExplicitUpdate = rawAction === 'update' || rawAction === '修改' || rawAction === '更新' || rawAction === '填充'
-      const isExplicitRead = rawAction === 'read' || rawAction === '读取' || rawAction === '查看'
-
-      const hasUpdatePayload = Boolean(
-        params.content
-        || params.premise
-        || params.worldbuilding
-        || params.synopsis
-        || (params.old_text && params.new_text),
-      )
-
-      const isUpdate = isExplicitUpdate || (!isExplicitRead && hasUpdatePayload)
+      const isUpdate = isStoryArchitectureWrite(params as Record<string, unknown>)
 
       if (!isUpdate) {
         // ========== 读取逻辑 ==========

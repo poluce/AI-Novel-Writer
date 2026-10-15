@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { createNovelConfigTool } from '../novel-config.tool'
-import { createStoryArchitectureTool } from '../story-architecture.tool'
+import { createNovelConfigTool, isNovelConfigWrite } from '../novel-config.tool'
+import { createStoryArchitectureTool, isStoryArchitectureWrite } from '../story-architecture.tool'
 import { ProjectCoreRepository } from '../../../repositories/project-core-repository'
 
 vi.mock('../../../repositories/project-core-repository', () => ({
@@ -189,5 +189,19 @@ describe('story_architecture tool', () => {
       synopsis: '第1-10章：外门崛起；第11-20章：远古遗迹试炼与反杀。',
     })
     expect(actions).toEqual([{ type: 'refresh_architecture', section: 'synopsis' }])
+  })
+
+  it('correctly declares write operation even when action is omitted with old_text/new_text', () => {
+    // novel_config
+    expect(isNovelConfigWrite({ field: 'coreOutline', old_text: 'old', new_text: 'new' })).toBe(true)
+    expect(isNovelConfigWrite({ field: 'coreOutline' })).toBe(false)
+    expect(isNovelConfigWrite({ action: 'read', field: 'coreOutline' })).toBe(false)
+    expect(isNovelConfigWrite({ action: 'update', changes: { genre: 'Fantasy' } })).toBe(true)
+
+    // story_architecture
+    expect(isStoryArchitectureWrite({ section: 'premise', old_text: 'old', new_text: 'new' })).toBe(true)
+    expect(isStoryArchitectureWrite({ section: 'premise' })).toBe(false)
+    expect(isStoryArchitectureWrite({ action: 'read', section: 'premise' })).toBe(false)
+    expect(isStoryArchitectureWrite({ action: 'update', content: 'new content' })).toBe(true)
   })
 })

@@ -119,6 +119,21 @@ const Schema = Type.Object({
   })),
 })
 
+/** 判定某次 manage_characters 调用是否为写入操作。 */
+export function isManageCharactersWrite(params: Record<string, unknown>): boolean {
+  const rawAction = String(params.action || 'read').toLowerCase().trim()
+  return !(
+    rawAction === 'read'
+    || rawAction === '读取'
+    || rawAction === '查看'
+    || rawAction === 'list'
+    || rawAction === '列表'
+    || rawAction === 'track_appearances'
+    || rawAction === '出场追踪'
+    || rawAction === '出场'
+  )
+}
+
 export function createManageCharactersTool(
   language: WritingLanguage,
   rendererAction: RendererActionSink,
@@ -137,6 +152,7 @@ export function createManageCharactersTool(
     label: 'Manage Characters',
     description,
     parameters: Schema,
+    isWriteOperation: isManageCharactersWrite,
     execute: async (_id, params) => {
       const projectPath = getCurrentProjectPath()
       if (!projectPath) {

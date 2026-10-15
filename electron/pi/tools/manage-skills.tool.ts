@@ -4,6 +4,7 @@ import path from 'node:path'
 import { formatSkillInvocation, type AgentTool } from '@earendil-works/pi-agent-core'
 import { Type, StringEnum } from '@earendil-works/pi-ai'
 
+
 import {
   writingLanguageText,
   type WritingLanguage,
@@ -82,6 +83,21 @@ function formatSkillListingRow(
   return `- **${skill.name}** (${sourceTag}): ${skill.description}`
 }
 
+/** 判定某次 manage_skills 调用是否为写入/变动操作。 */
+export function isManageSkillsWrite(params: Record<string, unknown>): boolean {
+  const rawAction = String(params.action ?? '').toLowerCase().trim()
+  return (
+    rawAction === 'create'
+    || rawAction === 'update'
+    || rawAction === 'delete'
+    || rawAction === 'install'
+    || rawAction === '创建'
+    || rawAction === '修改'
+    || rawAction === '删除'
+    || rawAction === '安装'
+  )
+}
+
 /**
  * 统一写作技能管理与调用工具（Manage Skills）：
  *
@@ -106,6 +122,7 @@ export function createManageSkillsTool(
       'Unified writing skill management and invocation: list installed skills (list), load full skill instructions (load), create custom skill (create), update skill (update), delete skill (delete), inspect (inspect) and install (install) remote skills.',
     ),
     parameters: Schema,
+    isWriteOperation: isManageSkillsWrite,
     execute: async (_id, params) => {
       let action = params.action as ManageSkillsAction | undefined
       if (!action) {

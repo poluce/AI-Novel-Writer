@@ -33,6 +33,19 @@ describe('buildExecutionTools', () => {
       .toEqual(['bash', 'edit', 'read', 'write'])
   })
 
+  it('marks write, edit, and bash as sequential, leaving read parallel', () => {
+    const tools = buildExecutionTools()
+    const read = tools.find(tool => tool.name === 'read')
+    const write = tools.find(tool => tool.name === 'write')
+    const edit = tools.find(tool => tool.name === 'edit')
+    const bash = tools.find(tool => tool.name === 'bash')
+
+    expect(read?.executionMode).toBeUndefined()
+    expect(write?.executionMode).toBe('sequential')
+    expect(edit?.executionMode).toBe('sequential')
+    expect(bash?.executionMode).toBe('sequential')
+  })
+
   it('gives a command without an explicit timeout the default cap', async () => {
     const calls: Array<Record<string, unknown>> = []
     const env = {

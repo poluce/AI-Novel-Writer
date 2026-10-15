@@ -12,6 +12,16 @@
 import type { AgentHarnessTool, AgentTool, ExecutionEnv } from '@earendil-works/pi-agent-core'
 import type { TSchema } from '@earendil-works/pi-ai'
 
+declare module '@earendil-works/pi-agent-core' {
+  interface AgentTool {
+    /**
+     * 工具自声明的写入判定：判定一次具体调用是否为写入/变动操作。
+     * 会话的确认门直接查询此判定，避免在 session 层重复维护各工具的 action 表。
+     */
+    isWriteOperation?: (params: Record<string, unknown>) => boolean
+  }
+}
+
 /**
  * harness 自带执行工具要求的上下文。
  *

@@ -282,6 +282,28 @@ async function handleStats(projectPath: string, text: LanguageText): Promise<Too
   )
 }
 
+/** 判定某次 manage_knowledge_base 调用是否为写入操作。 */
+export function isManageKnowledgeBaseWrite(params: Record<string, unknown>): boolean {
+  const rawAction = String(params.action ?? '').toLowerCase().trim()
+  if (rawAction === 'add_text' || rawAction === 'delete' || rawAction === '添加' || rawAction === '删除') {
+    return true
+  }
+  if (
+    rawAction === 'search'
+    || rawAction === 'list'
+    || rawAction === 'stats'
+    || rawAction === '搜索'
+    || rawAction === '检索'
+    || rawAction === '列表'
+    || rawAction === '统计'
+  ) {
+    return false
+  }
+  // 未指定 action 时的推断：传了 text 或 file_name 为写入归档
+  if (params.text || params.file_name) return true
+  return false
+}
+
 /**
  * 统一知识库管理工具（Manage Knowledge Base）：
  *
@@ -310,6 +332,7 @@ export function createManageKnowledgeBaseTool(
       'Unified knowledge base management and search: search reference materials using semantic/FTS retrieval (search), list installed documents (list), store reference or worldbuilding text into knowledge base (add_text), delete obsolete document (delete), inspect knowledge base stats (stats).',
     ),
     parameters: Schema,
+    isWriteOperation: isManageKnowledgeBaseWrite,
     execute: async (_id, params) => {
       const projectPath = requireProjectPath(text)
       const action = resolveAction(params)

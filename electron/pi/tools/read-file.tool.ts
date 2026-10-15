@@ -53,6 +53,17 @@ export function createReadFileTool(
         ))
       }
 
+      const velaPath = path.join(projectPath, '.vela')
+      const targetToCheck = process.platform === 'win32' ? fullPath.toLowerCase() : fullPath
+      const baseToCheck = process.platform === 'win32' ? velaPath.toLowerCase() : velaPath
+      const relToVela = path.relative(baseToCheck, targetToCheck)
+      if (relToVela === '' || (!relToVela.startsWith('..') && !path.isAbsolute(relToVela))) {
+        throw new Error(text(
+          `路径受限：「${filePath}」属于应用内部目录，禁止读取。`,
+          `Access denied: "${filePath}" is inside the app-owned directory and cannot be read.`,
+        ))
+      }
+
       try {
         const capability = createSecureFileCapability(projectPath, fullPath)
         const content = await windowsSafeFileSystem.readText(capability)

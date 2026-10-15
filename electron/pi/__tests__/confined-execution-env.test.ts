@@ -114,6 +114,57 @@ describe('ConfinedExecutionEnv', () => {
     const result = await env.exec('echo hi', { cwd: root }, BACKGROUND_CONTEXT)
     expect(result.ok).toBe(true)
   })
+
+  it('blocks reads, writes, and modifications inside protectedPaths and filters listDir', async () => {
+    const root = temporaryDir('vela-confined-')
+    const velaDir = path.join(root, '.vela')
+    fs.mkdirSync(velaDir, { recursive: true })
+    fs.writeFileSync(path.join(velaDir, 'vela.db'), 'sqlite content')
+    fs.writeFileSync(path.join(root, 'chapter1.md'), '正文')
+
+    const env = new ConfinedExecutionEnv(
+      new NodeExecutionEnv({ cwd: root }),
+      [root],
+      { protectedPaths: [velaDir] },
+    )
+
+    // 禁止读取 .vela 及其子文件
+    const readDb = await env.readTextFile(path.join(velaDir, 'vela.db'), BACKGROUND_CONTEXT)
+    expect(readDb.ok).toBe(false)
+    if (!readDb.ok) {
+      expect(readDb.error.code).toBe('permission_denied')
+      expect(readDb.error.message).toContain('受保护')
+    }
+
+    // 禁止通过相对路径写入 .vela
+    const writeDb = await env.writeFile(path.join('.vela', 'vela.db'), 'hacked', BACKGROUND_CONTEXT)
+    expect(writeDb.ok).toBe(false)
+    if (!writeDb.ok) {
+      expect(writeDb.error.code).toBe('permission_denied')
+    }
+    expect(fs.readFileSync(path.join(velaDir, 'vela.db'), 'utf8')).toBe('sqlite content')
+
+    // 禁止删除受保护文件
+    const removeDb = await env.remove(path.join('.vela', 'vela.db'), undefined, BACKGROUND_CONTEXT)
+    expect(removeDb.ok).toBe(false)
+    expect(fs.existsSync(path.join(velaDir, 'vela.db'))).toBe(true)
+
+    // listDir 根目录时自动过滤掉受保护的 .vela
+    const listed = await env.listDir(root, BACKGROUND_CONTEXT)
+    expect(listed.ok).toBe(true)
+    if (listed.ok) {
+      const names = listed.value.map(entry => entry.name)
+      expect(names).toContain('chapter1.md')
+      expect(names).not.toContain('.vela')
+    }
+
+    // 直接 listDir 受保护目录本身被拒绝
+    const listVela = await env.listDir(velaDir, BACKGROUND_CONTEXT)
+    expect(listVela.ok).toBe(false)
+    if (!listVela.ok) {
+      expect(listVela.error.code).toBe('permission_denied')
+    }
+  })
 })
 
 describe('ConfinedExecutionEnv atomic writes', () => {

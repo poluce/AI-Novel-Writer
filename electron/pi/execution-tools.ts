@@ -16,6 +16,7 @@ import {
   windowsSafeFileSystem,
   type SecureFileCapability,
 } from '../security/windows-safe-file-system'
+import { withExecutionMode } from './tool-builder'
 import type { AnyHarnessTool } from './tool-types'
 
 /** 没写 timeout 的命令按这个上限跑，避免一条命令把会话挂死。 */
@@ -28,7 +29,7 @@ export const DEFAULT_COMMAND_TIMEOUT_SECONDS = 120
  * env（见 `projectExecutionEnv`）。写与执行类工具都进了确认白名单，
  * 每一次改动都要用户在确认卡上点头。
  *
- * 写文件与领域工具 `write_file` 共用同一条原子写路径和提交态语义
+ * 写文件与领域工具共用同一条原子写路径和提交态语义
  * （见 `ConfinedExecutionEnv` 的 `writeTextAtomically`）；`bash` 天然无法
  * 逐条约束写行为，仍只靠确认卡把关。
  *
@@ -41,7 +42,7 @@ export function buildExecutionTools(): AnyHarnessTool[] {
     createWriteTool(),
     createEditTool(),
     withDefaultTimeout(createBashTool() as AnyHarnessTool),
-  ]
+  ].map(withExecutionMode)
 }
 
 /** 给缺省 timeout 的命令补上默认上限；schema 不动，模型仍可自行指定。 */
@@ -65,7 +66,7 @@ function withDefaultTimeout(tool: AnyHarnessTool): AnyHarnessTool {
 }
 
 /**
- * 助手执行工具的原子写：与领域写工具 `write_file` 同一条路径。
+ * 助手执行工具的原子写：与领域写工具共用同一条路径。
  *
  * 平台安全助手（Windows / macOS）在根句柄内完成替换，失败会带
  * `commitState`；没有助手的平台（Linux 开发/CI）退回同目录临时文件 +
@@ -113,11 +114,14 @@ async function plainAtomicTextWrite(fullPath: string, content: string): Promise<
   }
 }
 
-/** 助手执行环境：cwd 与可访问范围都钉在项目根。 */
+/** 助手执行环境：cwd 与可访问范围钉在项目根，并保护应用私有的 .vela 目录。 */
 export function projectExecutionEnv(projectPath: string): ConfinedExecutionEnv {
   return new ConfinedExecutionEnv(
     new NodeExecutionEnv({ cwd: projectPath }),
     [projectPath],
-    { writeTextAtomically: agentAtomicTextWrite([projectPath]) },
+    {
+      writeTextAtomically: agentAtomicTextWrite([projectPath]),
+      protectedPaths: [path.join(projectPath, '.vela')],
+    },
   )
 }

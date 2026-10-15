@@ -496,4 +496,53 @@ describe('AgentSession', () => {
     expect(disconnectRun.events.some(e => e.type === 'tool_call_confirm')).toBe(false)
     expect(disconnectRun.events.some(e => e.type === 'tool_call_complete')).toBe(true)
   })
+
+  it('respects isWriteOperation: requires confirmation for novel_config old_text in plan mode, and bypasses for read', async () => {
+    const NovelConfigSchema = Type.Object({
+      action: Type.Optional(Type.String()),
+      field: Type.Optional(Type.String()),
+      old_text: Type.Optional(Type.String()),
+      new_text: Type.Optional(Type.String()),
+    })
+    const mockNovelConfigTool = {
+      name: 'novel_config',
+      label: 'Novel Config',
+      description: 'Novel config.',
+      parameters: NovelConfigSchema,
+      isWriteOperation: (params: Record<string, unknown>) => Boolean(params.old_text && params.new_text),
+      execute: async () => ({ content: [{ type: 'text' as const, text: 'ok' }], details: {} }),
+    }
+
+    // 1. 省略 action 但传了 old_text / new_text 时判定为写，计划模式必须触发确认
+    const writeRun = await buildSession({
+      tools: [mockNovelConfigTool] as never,
+      confirmationToolNames: new Set(['novel_config']),
+      decision: () => true,
+      responses: [
+        fauxAssistantMessage([fauxToolCall('novel_config', { field: 'coreOutline', old_text: '旧设定', new_text: '新设定' })]),
+        fauxAssistantMessage('替换完成'),
+      ],
+    })
+    writeRun.session.setExecutionMode('plan')
+    await writeRun.session.prompt('修改设定')
+    await writeRun.session.close()
+
+    expect(writeRun.events.some(e => e.type === 'tool_call_confirm')).toBe(true)
+
+    // 2. 纯读取时自声明为非写操作，计划模式自动放行
+    const readRun = await buildSession({
+      tools: [mockNovelConfigTool] as never,
+      confirmationToolNames: new Set(['novel_config']),
+      responses: [
+        fauxAssistantMessage([fauxToolCall('novel_config', { field: 'coreOutline' })]),
+        fauxAssistantMessage('核心大纲内容'),
+      ],
+    })
+    readRun.session.setExecutionMode('plan')
+    await readRun.session.prompt('查看设定')
+    await readRun.session.close()
+
+    expect(readRun.events.some(e => e.type === 'tool_call_confirm')).toBe(false)
+    expect(readRun.events.some(e => e.type === 'tool_call_complete')).toBe(true)
+  })
 })

@@ -22,12 +22,33 @@ import type { AnyAgentTool } from './tool-types'
 import type { AgentSkillCatalogEntry } from '../../src/shared/agent-skills'
 
 /**
+ * 需要串行执行的工具名单（写操作、环境变动与命令执行）。
+ * 其它纯只读工具默认并行执行。
+ */
+export function sequentialToolNames(): ReadonlySet<string> {
+  return new Set([
+    'write',
+    'edit',
+    'bash',
+    'open_editor',
+    'manage_drafts',
+    'novel_config',
+    'story_architecture',
+    'propose_chapter_blueprint',
+    'manage_characters',
+    'manage_mcp',
+    'manage_skills',
+    'manage_knowledge_base',
+  ])
+}
+
+/**
  * Agent 级执行是并行的，这里只把写入类与 MCP 工具钉成 sequential，
  * 让它们不会互相重叠。结果截断由 Pi 的 afterToolCall 钩子统一处理
  * （见 pi-agent.ts），不再逐个包装 execute。
  */
-function withExecutionMode(tool: AnyAgentTool): AnyAgentTool {
-  const sequential = confirmationToolNames().has(tool.name) || tool.name.startsWith('mcp__')
+export function withExecutionMode<T extends { name: string; executionMode?: 'sequential' | 'parallel' }>(tool: T): T {
+  const sequential = sequentialToolNames().has(tool.name) || tool.name.startsWith('mcp__')
   return sequential ? { ...tool, executionMode: 'sequential' as const } : tool
 }
 

@@ -57,6 +57,21 @@ async function listServers(language: WritingLanguage): Promise<{ content: Array<
   }
 }
 
+/** 判定某次 manage_mcp 调用是否为写入/配置变动操作。 */
+export function isManageMcpWrite(params: Record<string, unknown>): boolean {
+  const rawAction = String(params.action ?? 'list').toLowerCase().trim()
+  return (
+    rawAction === 'add'
+    || rawAction === 'update'
+    || rawAction === 'delete'
+    || rawAction === '添加'
+    || rawAction === '新建'
+    || rawAction === '修改'
+    || rawAction === '更新'
+    || rawAction === '删除'
+  )
+}
+
 /**
  * MCP 服务器管理工具：项目助手可以查看、添加、修改、删除 MCP 服务器。
  *
@@ -76,6 +91,7 @@ export function createManageMcpTool(
     label: 'Manage MCP',
     description,
     parameters: Schema,
+    isWriteOperation: isManageMcpWrite,
     execute: async (_id, params) => {
       const action = (params.action ?? 'list') as ManageMcpAction
       switch (action) {
