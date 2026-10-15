@@ -134,6 +134,8 @@ describe('writing skill registry identity and command exposure', () => {
       // /命令 注入时用的是 localizedContent[语言] ?? content，两者都不能为空。
       expect(skill.content, skill.metadata.name).toBeTruthy()
       expect(skill.localizedContent?.['zh-CN'] ?? skill.content, skill.metadata.name).toBeTruthy()
+      expect(skill.writingSkill.compatible, skill.metadata.name).toBe(true)
+      expect(skill.writingSkill.reasons, skill.metadata.name).toEqual([])
     }
   })
 

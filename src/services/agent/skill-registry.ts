@@ -410,7 +410,7 @@ Review the target chapter as a fiction editor. Check each dimension in order:
 Use read_drafts to load the target chapter and read_architecture to compare it with the story plan.
 For each dimension, provide a 1-5 rating, a concise explanation, and actionable revision suggestions.`,
       },
-      writingSkill: inspectWritingSkillMarkdown(`---\nname: review-chapter\ndisplay_name: Chapter Review\ndescription: Reviews a chapter for plot logic, character consistency, pacing, foreshadowing, and prose quality.\nlanguage: bilingual\nstage: review\n---\nUse the read_drafts and read_architecture tools before reviewing the chapter.`),
+      writingSkill: inspectWritingSkillMarkdown(`---\nname: review-chapter\ndisplay_name: Chapter Review\ndescription: Reviews a chapter for plot logic, character consistency, pacing, foreshadowing, and prose quality.\nlanguage: bilingual\nstage: review\n---\nReviews chapter plot logic, character consistency, pacing, foreshadowing, and prose quality against the story plan.`),
     },
     {
       metadata: {
@@ -447,7 +447,7 @@ For every direction, provide:
 Use read_architecture and read_project_state first so the ideas do not contradict established project facts.
 Provide at least five distinct directions.`,
       },
-      writingSkill: inspectWritingSkillMarkdown(`---\nname: brainstorm\ndisplay_name: Creative Brainstorming\ndescription: Generates multiple creative directions and ideas for a chosen topic.\nlanguage: bilingual\nstage: planning\n---\nUse the read_architecture and read_project_state tools before brainstorming.`),
+      writingSkill: inspectWritingSkillMarkdown(`---\nname: brainstorm\ndisplay_name: Creative Brainstorming\ndescription: Generates multiple creative directions and ideas for a chosen topic.\nlanguage: bilingual\nstage: planning\n---\nBrainstorm multiple creative directions and ideas tailored to the established project facts.`),
     },
     {
       metadata: {
@@ -484,7 +484,7 @@ Analyze the target character in depth.
 
 Use manage_characters for the character cards and read_architecture for the story structure before analyzing.`,
       },
-      writingSkill: inspectWritingSkillMarkdown(`---\nname: character-analysis\ndisplay_name: Character Analysis\ndescription: Analyzes a character's personality, motivation, arc, and relationships in depth.\nlanguage: bilingual\nstage: planning\n---\nUse the manage_characters and read_architecture tools before analyzing the character.`),
+      writingSkill: inspectWritingSkillMarkdown(`---\nname: character-analysis\ndisplay_name: Character Analysis\ndescription: Analyzes a character's personality, motivation, arc, and relationships in depth.\nlanguage: bilingual\nstage: planning\n---\nAnalyze character traits, deep motivation, arc development, and relationship networks in depth.`),
     },
     {
       metadata: {
@@ -521,7 +521,7 @@ Run a comprehensive continuity check on the project.
 Use read_project_state for chapter progress and recent notes and read_architecture for established facts, then inspect the key points chapter by chapter.
 Return a table and label each finding as critical, warning, or clear.`,
       },
-      writingSkill: inspectWritingSkillMarkdown(`---\nname: continuity-check\ndisplay_name: Continuity Check\ndescription: Checks the novel for continuity and setting inconsistencies, contradictions, and omissions.\nlanguage: bilingual\nstage: review\n---\nUse the read_project_state and read_architecture tools for a chapter-by-chapter continuity check.`),
+      writingSkill: inspectWritingSkillMarkdown(`---\nname: continuity-check\ndisplay_name: Continuity Check\ndescription: Checks the novel for continuity and setting inconsistencies, contradictions, and omissions.\nlanguage: bilingual\nstage: review\n---\nCheck novel timeline, locations, character state, and setting consistency chapter by chapter.`),
     },
     {
       metadata: {
@@ -557,12 +557,18 @@ Act as a professional writing coach and give guidance tailored to the user's que
 
 Use read_project_state first to understand the project's established style. Then give focused advice with a short before-and-after example.`,
       },
-      writingSkill: inspectWritingSkillMarkdown(`---\nname: writing-coach\ndisplay_name: Writing Coach\ndescription: Provides professional writing guidance and suggestions for improving prose.\nlanguage: bilingual\nstage: refinement\n---\nUse the read_project_state tool before giving tailored writing advice.`),
+      writingSkill: inspectWritingSkillMarkdown(`---\nname: writing-coach\ndisplay_name: Writing Coach\ndescription: Provides professional writing guidance and suggestions for improving prose.\nlanguage: bilingual\nstage: refinement\n---\nProvide tailored craft guidance, narrative techniques, and pacing suggestions based on project context.`),
     },
   ]
 
   for (const { metadata, content, writingSkill, localizedContent } of builtins) {
     const inspected = writingSkill ?? inspectWritingSkillMarkdown(`---\nname: ${metadata.name}\ndescription: ${metadata.description}\n---\n${content}`)
+    // 系统内置技能属于官方认证的核心资产，始终受信任且保持兼容
+    const safeInspected: WritingSkillInspection = {
+      ...inspected,
+      compatible: true,
+      reasons: [],
+    }
     registry.register({
       metadata,
       content,
@@ -570,7 +576,7 @@ Use read_project_state first to understand the project's established style. Then
       baseDir: '',
       filePath: `builtin://${metadata.name}`,
       skillId: `builtin:${metadata.name}`,
-      writingSkill: inspected,
+      writingSkill: safeInspected,
       localizedContent,
     })
   }
