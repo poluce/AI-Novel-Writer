@@ -1,6 +1,5 @@
 import {
   BaseWorkflowCommand,
-  injectWritingSkillIntoSession,
   type CommandExecuteParams,
   type LLMCompletion,
 } from './base-command'
@@ -558,13 +557,6 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
           ...(generationModelId ? { modelId: generationModelId } : {}),
         })
         cleanDraftText = await runtime.execute(async ({ session }) => {
-          const draftingSession = injectWritingSkillIntoSession(session, context, 'drafting')
-          if (context.writingSkills?.drafting) {
-            callbacks.log(uiText(
-              `本次 drafting 阶段使用已冻结写作 Skill：${context.writingSkills.drafting.name}`,
-              `Using the workflow-start-frozen writing skill for drafting: ${context.writingSkills.drafting.name}`,
-            ))
-          }
           this.assertNotCancelled(context)
           callbacks.setProgress(10)
           const preview = createDraftGeneratingPlaceholder(
@@ -573,7 +565,7 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
           )
           let initialOutcome: GenerationOutcome
           try {
-            initialOutcome = await draftingSession.complete({
+            initialOutcome = await session.complete({
               purpose: 'chapter-draft',
               reasoningStage: 'drafting',
               output: 'visible-text',
@@ -610,7 +602,7 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
           callbacks.setProgress(90)
           this.assertNotCancelled(context)
           const completedDraft = await this.extendDraftIfNeeded({
-            session: draftingSession,
+            session,
             signal: cancellation.signal,
             initialDraft: initialVisibleDraft,
             initialFinishReason: initialCompletion.finishReason,

@@ -21,7 +21,7 @@ import { useLocaleStore } from '../../stores/locale-store'
 import type { Locale } from '../../i18n/types'
 import { ipc } from '../../services/ipc-client'
 import { launchCreativeWorkflow } from '../../services/workflows/creative-workflow-launcher'
-import { PLOT_OUTLINE_RESUME_ERROR_CODE } from '../../services/workflows/commands/architecture.command'
+import { PLOT_OUTLINE_RESUME_ERROR_CODE } from '../../services/workflows/commands/plot-outline-checkpoint'
 import { toast } from '../ui/Toast'
 
 function runText(locale: Locale, zhCNText: string, enUSText: string): string {
@@ -514,7 +514,9 @@ function StepOutputBlock({ step, index, total, isActiveRun, isCurrentStep, local
   const isFailed = step.status === 'failed'
 
   // 防御：step.result 可能不是字符串（如 Command 返回了数组/对象），强制转为字符串
-  const rawText = typeof step.result === 'string' ? step.result : (step.result ? JSON.stringify(step.result) : '')
+  let rawText = ''
+  if (typeof step.result === 'string') rawText = step.result
+  else if (step.result) rawText = JSON.stringify(step.result)
   let thinking = ''
   let content = rawText
 

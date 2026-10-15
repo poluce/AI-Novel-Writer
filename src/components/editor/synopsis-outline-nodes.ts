@@ -290,10 +290,16 @@ export function replaceSynopsisNodeBody(text: string, node: SynopsisNode, body: 
   let replacement: string
   if (trimmed) {
     // 原始切片的首尾空白就是标题行与下一个标题之间的分隔，优先原样保留。
-    const before = leading.includes('\n')
-      ? leading
-      : prefix.endsWith('\n') || prefix === '' ? '' : '\n'
-    const after = trailing.includes('\n') ? trailing : suffix ? '\n\n' : ''
+    let before = leading
+    if (!leading.includes('\n')) {
+      if (prefix.endsWith('\n') || prefix === '') before = ''
+      else before = '\n'
+    }
+    let after = trailing
+    if (!trailing.includes('\n')) {
+      if (suffix) after = '\n\n'
+      else after = ''
+    }
     replacement = `${before}${trimmed}${after}`
   } else {
     // 正文清空时留一个空行，避免相邻标题贴在一起。

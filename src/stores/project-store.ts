@@ -212,10 +212,23 @@ function sameRendererProject(
   if (!left || !right) return left === right
   const leftContext = projectSessionContextFromProject(left)
   const rightContext = projectSessionContextFromProject(right)
-  return leftContext && rightContext
-    ? sameProjectSessionContext(leftContext, rightContext)
-    : sameProjectPathKey(left.path, right.path)
+  if (leftContext && rightContext) {
+    return sameProjectSessionContext(leftContext, rightContext)
+  }
+  return sameProjectPathKey(left.path, right.path)
 }
+
+function matchesExpectedSession(
+  expected: ProjectSessionContext | undefined,
+  project: ProjectData | null | undefined,
+): boolean {
+  if (!expected) return true
+  const actual = projectSessionContextFromProject(project)
+  if (!actual) return false
+  return sameProjectSessionContext(expected, actual)
+}
+
+
 
 async function reconcileStaleProjectResponse(options: {
   getRendererProjectPath: () => string | null
@@ -590,10 +603,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       console.error('[project-store.saveProject] 缺少项目会话，拒绝保存')
       return false
     }
-    if (
-      expectedProjectSession
-      && !sameProjectSessionContext(expectedProjectSession, projectSession)
-    ) {
+    if (!matchesExpectedSession(expectedProjectSession, project)) {
       console.warn('[project-store.saveProject] 项目会话已变化，拒绝保存')
       return false
     }
@@ -636,18 +646,14 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   updateNovelConfig: (config, expectedProjectSession) => {
     const project = get().currentProject
     if (!project) return
-    if (
-      expectedProjectSession
-      && !sameProjectSessionContext(
-        expectedProjectSession,
-        projectSessionContextFromProject(project),
-      )
-    ) return
+    if (!matchesExpectedSession(expectedProjectSession, project)) return
     const nextConfig = { ...project.novelConfig, ...config }
     set({
       currentProject: {
         ...project,
-        novelConfig: nextConfig}})
+        novelConfig: nextConfig,
+      },
+    })
     persistConfigDraftLedger(recordProjectEditorEdit(
       readConfigDraftLedger(),
       project.path,
@@ -692,7 +698,9 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       set({
         currentProject: {
           ...current,
-          novelConfig: nextConfig}})
+          novelConfig: nextConfig,
+      },
+    })
     } catch (err) {
       console.warn('[ProjectStore] reloadNovelConfig 失败:', err)
     }
@@ -734,10 +742,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     ) return
     const projectSession = projectSessionContextFromProject(project)
     if (!projectSession) return
-    if (
-      expectedProjectSession
-      && !sameProjectSessionContext(expectedProjectSession, projectSession)
-    ) return
+    if (!matchesExpectedSession(expectedProjectSession, project)) return
     const projectPath = project.path
     const projectSessionEpoch = expectedProjectSessionEpoch ?? state.projectSessionEpoch
     const requestId = ++refreshFileTreeRequestSequence

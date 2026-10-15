@@ -68,18 +68,69 @@ function formatBytes(bytes: number): string {
   return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KiB`
 }
 
+type LocaleText = (zhCN: string, enUS: string) => string
+
 function skillLabel(skill: LoadedSkill): string {
   return skill.metadata.displayName ?? skill.metadata.name
 }
 
-function localizedSkillLabel(skill: LoadedSkill, text: (zhCN: string, enUS: string) => string): string {
+function localizedSkillLabel(skill: LoadedSkill, text: LocaleText): string {
   const copy = BUILTIN_SKILL_COPY_EN[skill.skillId]
   return copy ? text(skillLabel(skill), copy[0]) : skillLabel(skill)
 }
 
-function localizedSkillDescription(skill: LoadedSkill, text: (zhCN: string, enUS: string) => string): string {
+function localizedSkillDescription(skill: LoadedSkill, text: LocaleText): string {
   const copy = BUILTIN_SKILL_COPY_EN[skill.skillId]
   return copy ? text(skill.metadata.description, copy[1]) : skill.metadata.description
+}
+
+function SourceBadge(props: { source: LoadedSkill['source']; text: LocaleText }) {
+  return (
+    <span className="rounded-full bg-[var(--color-hover)] px-2 py-0.5 text-[0.68rem] text-[var(--color-text-muted)]">
+      {props.text(SOURCE_COPY[props.source][0], SOURCE_COPY[props.source][1])}
+    </span>
+  )
+}
+
+function CompatibleBadge(props: { compatible: boolean; text: LocaleText }) {
+  const className = props.compatible
+    ? 'text-[var(--color-success-text)]'
+    : 'text-[var(--color-warning-text)]'
+  return (
+    <span className={`text-[0.68rem] ${className}`}>
+      {props.compatible ? props.text('兼容', 'Compatible') : props.text('不兼容', 'Incompatible')}
+    </span>
+  )
+}
+
+function SkillMetaChips(props: {
+  skill: LoadedSkill
+  text: LocaleText
+  versionFallback: string
+  showId?: boolean
+}) {
+  const { skill, text, versionFallback, showId } = props
+  return (
+    <>
+      {showId && (
+        <span>
+          {text('技能标识', 'Skill ID')}:{' '}
+          <code className="font-mono text-[0.72rem] text-[var(--color-accent)]">{skill.metadata.name}</code>
+        </span>
+      )}
+      <span>{text('版本', 'Version')}: {skill.metadata.version ?? versionFallback}</span>
+      <span>{text('语言', 'Language')}: {skill.writingSkill.metadata.language}</span>
+      <span>{text('大小', 'Size')}: {formatBytes(skill.writingSkill.utf8Bytes)}</span>
+    </>
+  )
+}
+
+function skillDialogBody(skill: LoadedSkill, locale: 'zh-CN' | 'en-US'): string {
+  if (locale === 'en-US') {
+    const english = skill.localizedContent?.['en-US']
+    if (english) return english
+  }
+  return skill.content
 }
 
 export default function SkillSettings() {
@@ -267,67 +318,58 @@ export default function SkillSettings() {
           <div className="rounded-xl border border-dashed border-[var(--color-border)] py-8 text-center text-xs text-[var(--color-text-muted)]">
             {text('暂无可用 Skill', 'No skills available')}
           </div>
-        ) : skills.map(skill => {
-          return (
-            <div
-              key={skill.skillId}
-              onClick={() => setSelectedSkill(skill)}
-              className="group flex items-start gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-panel)] px-4 py-3 cursor-pointer hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-hover)]/30 transition-all select-none"
-              role="button"
-              tabIndex={0}
-              onKeyDown={event => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault()
-                  setSelectedSkill(skill)
-                }
-              }}
-              aria-label={text(`查看 ${skillLabel(skill)} 完整内容`, `View full content of ${skillLabel(skill)}`)}
-            >
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-medium text-[var(--color-text)] group-hover:text-[var(--color-accent)] transition-colors">
-                    {localizedSkillLabel(skill, text)}
-                  </span>
-                  <span className="rounded-full bg-[var(--color-hover)] px-2 py-0.5 text-[0.68rem] text-[var(--color-text-muted)]">
-                    {text(SOURCE_COPY[skill.source][0], SOURCE_COPY[skill.source][1])}
-                  </span>
-                  <span className={`text-[0.68rem] ${skill.writingSkill.compatible ? 'text-[var(--color-success-text)]' : 'text-[var(--color-warning-text)]'}`}>
-                    {skill.writingSkill.compatible ? text('兼容', 'Compatible') : text('不兼容', 'Incompatible')}
-                  </span>
-                </div>
-                <p className="mt-1 text-xs leading-5 text-[var(--color-text-muted)]">{localizedSkillDescription(skill, text)}</p>
-                <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-[0.7rem] text-[var(--color-text-secondary)]">
-                  <div className="flex flex-wrap gap-x-4">
-                    <span>{text('版本', 'Version')}: {skill.metadata.version ?? '—'}</span>
-                    <span>{text('语言', 'Language')}: {skill.writingSkill.metadata.language}</span>
-                    <span>{text('大小', 'Size')}: {formatBytes(skill.writingSkill.utf8Bytes)}</span>
-                  </div>
-                  <span className="text-[0.68rem] text-[var(--color-text-muted)] group-hover:text-[var(--color-accent)] flex items-center gap-1 transition-colors">
-                    <Eye size={12} />
-                    {text('点击查看完整内容', 'Click to view full content')}
-                  </span>
-                </div>
+        ) : skills.map(skill => (
+          <div
+            key={skill.skillId}
+            onClick={() => setSelectedSkill(skill)}
+            className="group flex items-start gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-panel)] px-4 py-3 cursor-pointer hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-hover)]/30 transition-all select-none"
+            role="button"
+            tabIndex={0}
+            onKeyDown={event => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                setSelectedSkill(skill)
+              }
+            }}
+            aria-label={text(`查看 ${skillLabel(skill)} 完整内容`, `View full content of ${skillLabel(skill)}`)}
+          >
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium text-[var(--color-text)] group-hover:text-[var(--color-accent)] transition-colors">
+                  {localizedSkillLabel(skill, text)}
+                </span>
+                <SourceBadge source={skill.source} text={text} />
+                <CompatibleBadge compatible={skill.writingSkill.compatible} text={text} />
               </div>
-              {skill.source === 'user' && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={event => {
-                    event.stopPropagation()
-                    uninstall(skill)
-                  }}
-                  disabled={busy}
-                  aria-label={text(`卸载 ${skillLabel(skill)}`, `Uninstall ${skillLabel(skill)}`)}
-                >
-                  <Trash2 size={14} />
-                </Button>
-              )}
+              <p className="mt-1 text-xs leading-5 text-[var(--color-text-muted)]">{localizedSkillDescription(skill, text)}</p>
+              <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-[0.7rem] text-[var(--color-text-secondary)]">
+                <div className="flex flex-wrap gap-x-4">
+                  <SkillMetaChips skill={skill} text={text} versionFallback="—" />
+                </div>
+                <span className="text-[0.68rem] text-[var(--color-text-muted)] group-hover:text-[var(--color-accent)] flex items-center gap-1 transition-colors">
+                  <Eye size={12} />
+                  {text('点击查看完整内容', 'Click to view full content')}
+                </span>
+              </div>
             </div>
-          )
-        })}
+            {skill.source === 'user' && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={event => {
+                  event.stopPropagation()
+                  uninstall(skill)
+                }}
+                disabled={busy}
+                aria-label={text(`卸载 ${skillLabel(skill)}`, `Uninstall ${skillLabel(skill)}`)}
+              >
+                <Trash2 size={14} />
+              </Button>
+            )}
+          </div>
+        ))}
       </section>
 
-      {/* 技能详情与完整正文弹窗 */}
       <Dialog open={!!selectedSkill} onOpenChange={open => !open && setSelectedSkill(null)}>
         <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-0">
           <DialogHeader className="px-6 py-4 border-b border-[var(--color-border)]">
@@ -337,12 +379,8 @@ export default function SkillSettings() {
               </DialogTitle>
               {selectedSkill && (
                 <>
-                  <span className="rounded-full bg-[var(--color-hover)] px-2 py-0.5 text-[0.68rem] text-[var(--color-text-muted)]">
-                    {text(SOURCE_COPY[selectedSkill.source][0], SOURCE_COPY[selectedSkill.source][1])}
-                  </span>
-                  <span className={`text-[0.68rem] ${selectedSkill.writingSkill.compatible ? 'text-[var(--color-success-text)]' : 'text-[var(--color-warning-text)]'}`}>
-                    {selectedSkill.writingSkill.compatible ? text('兼容', 'Compatible') : text('不兼容', 'Incompatible')}
-                  </span>
+                  <SourceBadge source={selectedSkill.source} text={text} />
+                  <CompatibleBadge compatible={selectedSkill.writingSkill.compatible} text={text} />
                 </>
               )}
             </div>
@@ -356,10 +394,7 @@ export default function SkillSettings() {
           {selectedSkill && (
             <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
               <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-[var(--color-text-secondary)] bg-[var(--color-panel)] px-3.5 py-2.5 rounded-xl border border-[var(--color-border)]">
-                <span>{text('技能标识', 'Skill ID')}: <code className="font-mono text-[0.72rem] text-[var(--color-accent)]">{selectedSkill.metadata.name}</code></span>
-                <span>{text('版本', 'Version')}: {selectedSkill.metadata.version ?? '1.0.0'}</span>
-                <span>{text('语言', 'Language')}: {selectedSkill.writingSkill.metadata.language}</span>
-                <span>{text('大小', 'Size')}: {formatBytes(selectedSkill.writingSkill.utf8Bytes)}</span>
+                <SkillMetaChips skill={selectedSkill} text={text} versionFallback="1.0.0" showId />
               </div>
 
               <div>
@@ -367,13 +402,7 @@ export default function SkillSettings() {
                   {text('完整指导正文（Prompt 指引）', 'Full Instructions (Prompt Guide)')}
                 </div>
                 <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-4 text-xs font-mono leading-relaxed max-h-[48vh] overflow-y-auto whitespace-pre-wrap select-text">
-                  <MarkdownContent
-                    content={
-                      (locale === 'en-US' && selectedSkill.localizedContent?.['en-US'])
-                        ? selectedSkill.localizedContent['en-US']
-                        : selectedSkill.content
-                    }
-                  />
+                  <MarkdownContent content={skillDialogBody(selectedSkill, locale)} />
                 </div>
               </div>
             </div>

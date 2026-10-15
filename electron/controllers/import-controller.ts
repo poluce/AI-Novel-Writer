@@ -86,7 +86,9 @@ function text(zhCNText: string, enUSText: string): string {
 }
 
 function importText(locale: ImportRunLocale | undefined, zhCNText: string, enUSText: string): string {
-  return locale === 'en-US' ? enUSText : locale === 'zh-CN' ? zhCNText : text(zhCNText, enUSText)
+  if (locale === 'en-US') return enUSText
+  if (locale === 'zh-CN') return zhCNText
+  return text(zhCNText, enUSText)
 }
 
 function importSelectionErrorMessage(

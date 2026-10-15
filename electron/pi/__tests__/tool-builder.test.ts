@@ -33,16 +33,15 @@ describe('buildAgentTools', () => {
       'novel_config', 'story_architecture',
       'read_architecture', 'manage_characters', 'read_blueprint', 'manage_drafts',
       'read_project_state', 'search_knowledge', 'read_file',
-      'install_writing_skill', 'manage_skills', 'open_editor',
+      'manage_skills', 'open_editor',
       'propose_chapter_blueprint', 'manage_mcp',
     ]) {
       expect(names).toContain(projectTool)
     }
-    // 技能检查与 MCP 一起装配。
-    expect(names).toContain('inspect_writing_skill')
     expect(names).toContain('mcp__docs__search')
-    // 渐进式披露的读取端。
-    expect(names).toContain('load_writing_skill')
+    expect(names).not.toContain('load_writing_skill')
+    expect(names).not.toContain('inspect_writing_skill')
+    expect(names).not.toContain('install_writing_skill')
   })
 
   it('marks write and MCP tools sequential so reads can run in parallel', () => {
@@ -83,7 +82,6 @@ describe('buildAgentTools', () => {
       // harness 自带的执行工具同样逐次确认。
       'bash',
       'edit',
-      'install_writing_skill',
       'manage_characters',
       'manage_drafts',
       'manage_knowledge_base',

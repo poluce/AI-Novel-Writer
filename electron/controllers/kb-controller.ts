@@ -1,7 +1,11 @@
 import { app, ipcMain, dialog } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
 import { isProjectSessionContext } from '../../src/shared/project-session-context'
-import { getEmbeddingConfig, hasUsableEmbeddingConfig } from '../services/embedding-config'
+import {
+  getEmbeddingConfig,
+  hasUsableEmbeddingConfig,
+  type EmbeddingConfig,
+} from '../services/embedding-config'
 import type { ImportRunExecutionAuthority } from '../../src/shared/import-run'
 import { knowledgeBaseLoader } from '../services/knowledge-base-loader'
 import { mainText } from '../i18n'
@@ -24,6 +28,7 @@ function text(zhCNText: string, enUSText: string): string {
 }
 
 const MAX_REFERENCE_IMPORT_DISPLAY_CHARACTERS = 160
+const KNOWLEDGE_BASE_GRANT_TTL_MS = 10 * 60 * 1000
 
 function isControlCharacter(character: string): boolean {
   const codePoint = character.codePointAt(0)
@@ -39,17 +44,22 @@ function referenceImportDisplayName(binding: { chapterNumber: number; title: str
   const titleBudget = MAX_REFERENCE_IMPORT_DISPLAY_CHARACTERS
     - Array.from(prefix).length
     - Array.from(suffix).length
-  const safeTitle = Array.from(binding.title)
-    .filter(character => !isControlCharacter(character))
+  const strippedTitle = Array.from(binding.title)
+    .filter((character) => !isControlCharacter(character))
     .join('')
-    .trim() || '无标题'
+    .trim()
+  const safeTitle = strippedTitle || '无标题'
   const boundedTitle = Array.from(safeTitle).slice(0, Math.max(0, titleBudget)).join('')
   return `${prefix}${boundedTitle}${suffix}`
 }
 
-function legacyMigrationBlockedFailure() {
+function legacyMigrationBlockedFailure(): {
+  success: false
+  errorCode: typeof LEGACY_VECTOR_MIGRATION_BLOCKED
+  error: string
+} {
   return {
-    success: false as const,
+    success: false,
     errorCode: LEGACY_VECTOR_MIGRATION_BLOCKED,
     error: text(
       '旧版知识库数据需要先修复后才能继续。请修正项目中的 vectors.json，然后重试。',
@@ -59,19 +69,15 @@ function legacyMigrationBlockedFailure() {
 }
 
 function isLegacyMigrationBlockedError(error: unknown): boolean {
-  return error instanceof LegacyVectorMigrationBlockedError
-    || (!!error
-      && typeof error === 'object'
-      && 'code' in error
-      && (error as { code?: unknown }).code === LEGACY_VECTOR_MIGRATION_BLOCKED)
+  if (error instanceof LegacyVectorMigrationBlockedError) return true
+  if (!error || typeof error !== 'object' || !('code' in error)) return false
+  return (error as { code?: unknown }).code === LEGACY_VECTOR_MIGRATION_BLOCKED
 }
 
 function isLegacyMigrationBlockedResult(value: unknown): boolean {
-  return !!value
-    && typeof value === 'object'
-    && 'success' in value
-    && (value as { success?: unknown }).success === false
-    && 'errorCode' in value
+  if (!value || typeof value !== 'object') return false
+  if (!('success' in value) || !('errorCode' in value)) return false
+  return (value as { success?: unknown }).success === false
     && (value as { errorCode?: unknown }).errorCode === LEGACY_VECTOR_MIGRATION_BLOCKED
 }
 
@@ -80,12 +86,30 @@ function requireProjectPath(expectedProjectPath: string): string {
   return expectedProjectPath
 }
 
+function resolveEmbeddingCallConfig(): {
+  protocol: EmbeddingConfig['protocol']
+  model: EmbeddingConfig['model'] | { baseUrl: string; apiKey: string }
+} {
+  const embConfig = getEmbeddingConfig()
+  if (!embConfig) {
+    return { protocol: 'openai', model: { baseUrl: '', apiKey: '' } }
+  }
+  return { protocol: embConfig.protocol, model: embConfig.model }
+}
+
+function knowledgeBaseMutationResult(
+  success: boolean,
+  failureZh: string,
+  failureEn: string,
+): { success: true } | { success: false; error: string } {
+  if (success) return { success: true }
+  return { success: false, error: text(failureZh, failureEn) }
+}
+
 type KnowledgeBaseHandler<Args extends unknown[] = unknown[]> = (
   event: IpcMainInvokeEvent,
   ...args: Args
 ) => unknown
-
-const KNOWLEDGE_BASE_GRANT_TTL_MS = 10 * 60 * 1000
 
 function registerKnowledgeBaseHandler<Args extends unknown[]>(
   channel: string,
@@ -100,7 +124,8 @@ function registerKnowledgeBaseHandler<Args extends unknown[]>(
     try {
       assertKnowledgeBaseStoragePathSupported(projectSession.rootPath)
       const result = await handler(event, ...(args as Args))
-      return isLegacyMigrationBlockedResult(result) ? legacyMigrationBlockedFailure() : result
+      if (isLegacyMigrationBlockedResult(result)) return legacyMigrationBlockedFailure()
+      return result
     } catch (error) {
       if (isLegacyMigrationBlockedError(error)) return legacyMigrationBlockedFailure()
       const storageFailure = projectStoragePreflightFailure(error)
@@ -110,33 +135,34 @@ function registerKnowledgeBaseHandler<Args extends unknown[]>(
   })
 }
 
-export function registerKBController() {
+export function registerKBController(): void {
   // 所有 kb:* 操作需携带同一冻结会话；选择文件/目录仍是外部授权能力。
-  const ipcMain = { handle: registerKnowledgeBaseHandler }
-  ipcMain.handle('kb:import-text', async (_event, text: string, fileName: string, expectedProjectPath: string) => {
+  registerKnowledgeBaseHandler('kb:import-text', async (_event, text: string, fileName: string, expectedProjectPath: string) => {
     const projectPath = requireProjectPath(expectedProjectPath)
-    const embConfig = getEmbeddingConfig()
-    const protocol = embConfig?.protocol ?? 'openai'
-    const model = embConfig?.model ?? { baseUrl: '', apiKey: '' }
-    return knowledgeBaseLoader.run((kb) => kb.importText(text, fileName, projectPath, protocol, model))
-  })
-
-  ipcMain.handle('kb:import-planning-text', async (_event, text: string, fileName: string, expectedProjectPath: string) => {
-    const projectPath = requireProjectPath(expectedProjectPath)
-    const embConfig = getEmbeddingConfig()
-    const protocol = embConfig?.protocol ?? 'openai'
-    const model = embConfig?.model ?? { baseUrl: '', apiKey: '' }
+    const embedding = resolveEmbeddingCallConfig()
     return knowledgeBaseLoader.run((kb) => kb.importText(
       text,
       fileName,
       projectPath,
-      protocol,
-      model,
+      embedding.protocol,
+      embedding.model,
+    ))
+  })
+
+  registerKnowledgeBaseHandler('kb:import-planning-text', async (_event, text: string, fileName: string, expectedProjectPath: string) => {
+    const projectPath = requireProjectPath(expectedProjectPath)
+    const embedding = resolveEmbeddingCallConfig()
+    return knowledgeBaseLoader.run((kb) => kb.importText(
+      text,
+      fileName,
+      projectPath,
+      embedding.protocol,
+      embedding.model,
       { mode: 'fts-only' },
     ))
   })
 
-  ipcMain.handle('kb:import-reference-text', async (
+  registerKnowledgeBaseHandler('kb:import-reference-text', async (
     _event,
     chapterNumber: number,
     runId: string,
@@ -150,9 +176,7 @@ export function registerKBController() {
       chapterNumber,
     )
     const fileName = referenceImportDisplayName(binding)
-    const embConfig = getEmbeddingConfig()
-    const protocol = embConfig?.protocol ?? 'openai'
-    const model = embConfig?.model ?? { baseUrl: '', apiKey: '' }
+    const embedding = resolveEmbeddingCallConfig()
     return knowledgeBaseLoader.run(async (kb) => {
       const result = await kb.importReferenceText(
         binding.content,
@@ -162,8 +186,8 @@ export function registerKBController() {
         runId,
         executionAuthority,
         projectPath,
-        protocol,
-        model,
+        embedding.protocol,
+        embedding.model,
       )
       if (result.success && result.docId) {
         ImportRunRepository.commitReferenceImportReceipt(
@@ -174,7 +198,7 @@ export function registerKBController() {
     })
   })
 
-  ipcMain.handle('kb:search', async (_event, query: string, topK: number | undefined, expectedProjectPath: string) => {
+  registerKnowledgeBaseHandler('kb:search', async (_event, query: string, topK: number | undefined, expectedProjectPath: string) => {
     const projectPath = requireProjectPath(expectedProjectPath)
     const embConfig = getEmbeddingConfig()
 
@@ -186,7 +210,7 @@ export function registerKBController() {
     })
   })
 
-  ipcMain.handle('kb:search-writing-context', async (_event, query: string, topK: number | undefined, expectedProjectPath: string) => {
+  registerKnowledgeBaseHandler('kb:search-writing-context', async (_event, query: string, topK: number | undefined, expectedProjectPath: string) => {
     const projectPath = requireProjectPath(expectedProjectPath)
     const embConfig = getEmbeddingConfig()
 
@@ -206,47 +230,55 @@ export function registerKBController() {
     })
   })
 
-  ipcMain.handle('kb:list-documents', async (_event, expectedProjectPath: string) => {
+  registerKnowledgeBaseHandler('kb:list-documents', async (_event, expectedProjectPath: string) => {
     const projectPath = requireProjectPath(expectedProjectPath)
     return knowledgeBaseLoader.run((kb) => kb.listDocuments(projectPath))
   })
 
-  ipcMain.handle('kb:remove-document', async (_event, docId: string, expectedProjectPath: string) => {
+  registerKnowledgeBaseHandler('kb:remove-document', async (_event, docId: string, expectedProjectPath: string) => {
     const projectPath = requireProjectPath(expectedProjectPath)
     return knowledgeBaseLoader.run(async (kb) => {
       try {
         const success = await kb.removeDocument(docId, projectPath)
-        return success
-          ? { success: true }
-          : { success: false, error: text('删除知识库文档失败', 'Could not remove the knowledge-base document') }
+        return knowledgeBaseMutationResult(
+          success,
+          '删除知识库文档失败',
+          'Could not remove the knowledge-base document',
+        )
       } catch (error) {
-        // Preserve the controller-wide migration barrier and convert every
-        // ordinary async deletion rejection into a stable public IPC result.
         if (isLegacyMigrationBlockedError(error)) throw error
-        return { success: false, error: text('删除知识库文档失败', 'Could not remove the knowledge-base document') }
+        return knowledgeBaseMutationResult(
+          false,
+          '删除知识库文档失败',
+          'Could not remove the knowledge-base document',
+        )
       }
     })
   })
 
-  ipcMain.handle('kb:clear-all', async (_event, expectedProjectPath: string) => {
+  registerKnowledgeBaseHandler('kb:clear-all', async (_event, expectedProjectPath: string) => {
     const projectPath = requireProjectPath(expectedProjectPath)
     return knowledgeBaseLoader.run(async (kb) => {
       const success = await kb.clearKnowledgeBase(projectPath)
-      return success ? { success: true } : { success: false, error: text('清空知识库失败', 'Could not clear the knowledge base') }
+      return knowledgeBaseMutationResult(
+        success,
+        '清空知识库失败',
+        'Could not clear the knowledge base',
+      )
     })
   })
 
-  ipcMain.handle('kb:stats', async (_event, expectedProjectPath: string) => {
+  registerKnowledgeBaseHandler('kb:stats', async (_event, expectedProjectPath: string) => {
     const projectPath = requireProjectPath(expectedProjectPath)
     return knowledgeBaseLoader.run((kb) => kb.getKnowledgeStats(projectPath))
   })
 
-  ipcMain.handle('kb:get-vectorless-count', async (_event, expectedProjectPath: string) => {
+  registerKnowledgeBaseHandler('kb:get-vectorless-count', async (_event, expectedProjectPath: string) => {
     const projectPath = requireProjectPath(expectedProjectPath)
     return knowledgeBaseLoader.run((kb) => kb.getVectorlessCount(projectPath))
   })
 
-  ipcMain.handle('kb:get-vector-rebuild-status', async (_event, expectedProjectPath: string) => {
+  registerKnowledgeBaseHandler('kb:get-vector-rebuild-status', async (_event, expectedProjectPath: string) => {
     const projectPath = requireProjectPath(expectedProjectPath)
     const embConfig = getEmbeddingConfig()
     // Do not cause a provider request, or even offer the action, until the
@@ -275,14 +307,22 @@ export function registerKBController() {
     })
   })
 
-  ipcMain.handle('kb:backfill-vectors', async (_event, expectedProjectPath: string) => {
+  registerKnowledgeBaseHandler('kb:backfill-vectors', async (_event, expectedProjectPath: string) => {
     const projectPath = requireProjectPath(expectedProjectPath)
     const embConfig = getEmbeddingConfig()
-    if (!hasUsableEmbeddingConfig(embConfig)) return { success: false, processed: 0, failed: 0, errorCode: 'EMBEDDING_MODEL_NOT_CONFIGURED', error: text('未配置 Embedding 模型', 'No embedding model is configured') }
+    if (!hasUsableEmbeddingConfig(embConfig)) {
+      return {
+        success: false,
+        processed: 0,
+        failed: 0,
+        errorCode: 'EMBEDDING_MODEL_NOT_CONFIGURED',
+        error: text('未配置 Embedding 模型', 'No embedding model is configured'),
+      }
+    }
     return knowledgeBaseLoader.run((kb) => kb.backfillVectors(projectPath, embConfig.protocol, embConfig.model))
   })
 
-  ipcMain.handle('dialog:select-knowledge-files', async (event) => {
+  registerKnowledgeBaseHandler('dialog:select-knowledge-files', async (event) => {
     const result = await dialog.showOpenDialog({
       properties: ['openFile', 'multiSelections'],
       title: text('选择要导入的文档', 'Choose documents to import'),
@@ -301,5 +341,4 @@ export function registerKBController() {
       return { grantId: grant.grantId, displayName: filePath.split(/[\\/]/).pop() || filePath }
     })
   })
-
 }

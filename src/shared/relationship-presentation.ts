@@ -233,6 +233,10 @@ export function parseRelationshipEdges(
   options: RelationshipTextOptions = {},
 ): RelationshipEdge[] {
   const structured = parseStructuredRelationships(value)
-  const edges = structured ?? (isJsonValue(value) ? [] : parseTextRelationships(value))
+  let edges = structured
+  if (edges == null) {
+    if (isJsonValue(value)) edges = []
+    else edges = parseTextRelationships(value)
+  }
   return deduplicateEdges(edges.filter((edge) => isAllowedEdge(edge, options)))
 }

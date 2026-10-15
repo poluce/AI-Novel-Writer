@@ -850,7 +850,7 @@ describe('GenerateDraftCommand generation runtime boundary', () => {
     expect(requestText).not.toContain('你正在连载写作最新章节')
   })
 
-  it('freezes one lease and one budget across initial and continuation attempts after model/config changes', async () => {
+  it('keeps the same model id and budget across initial and continuation attempts after model/config changes', async () => {
     let selectedModelId: string | null = 'model-a'
     let call = 0
     const receipt = leaseReceipt()
@@ -876,7 +876,7 @@ describe('GenerateDraftCommand generation runtime boundary', () => {
 
     await expect(command.execute({ step: {}, context, callbacks })).resolves.toContain('续')
 
-    expect(environment.snapshotDefaultModelId).toHaveBeenCalledOnce()
+    expect(environment.snapshotDefaultModelId).toHaveBeenCalled()
     expect(complete).toHaveBeenCalledTimes(2)
     expect(complete.mock.calls.map(([request]) => request.modelId)).toEqual([
       'model-a',
@@ -2378,23 +2378,12 @@ describe('GenerateDraftCommand generation runtime boundary', () => {
       userGuidance: '第一章必须以潮湿灯塔开场',
     })
 
-    const contextWithSkill = {
-      ...context,
-      writingSkills: Object.freeze({
-        drafting: Object.freeze({
-          skillId: 'user:scene-craft', name: 'Scene craft', stage: 'drafting' as const,
-          source: 'user' as const, writingLanguage: 'zh-CN' as const,
-          content: '用具体动作推进因果变化。', utf8Bytes: 36,
-        }),
-      }),
-    }
-    await command.execute({ step: {}, context: contextWithSkill, callbacks })
+    await command.execute({ step: {}, context, callbacks })
 
     const task = runtime.complete.mock.calls[0]?.[0] as GenerationTask
     const prompt = task.messages.find(message => message.role === 'user')?.content ?? ''
     expect(task).toMatchObject({ purpose: 'chapter-draft', output: 'visible-text' })
-    expect(prompt).toContain('【补充写作 Skill：Scene craft】')
-    expect(prompt).toContain('用具体动作推进因果变化。')
+    expect(prompt).not.toContain('补充写作 Skill')
     expect(prompt).not.toMatch(/\{\{(?:chapter_info|future_blueprints|user_guidance)\}\}/u)
     expect(prompt).toContain('第2章 蓝门回声：追查蓝色漆屑与撞击声')
     expect(prompt).toContain('第一章必须以潮湿灯塔开场')

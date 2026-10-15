@@ -222,6 +222,15 @@ export default function AgentInputBox() {
   }
 
   const canSend = hasProject && !generating && (inputText.trim().length > 0 || composerCitations.length > 0)
+  const selectedModelLabel = currentModel?.modelName ?? currentModel?.name
+  let modelTriggerLabel = selectedModelLabel
+  if (!modelTriggerLabel) {
+    if (chatModels.length === 0) {
+      modelTriggerLabel = text('未配置模型', 'No model configured')
+    } else {
+      modelTriggerLabel = text('选择模型', 'Select model')
+    }
+  }
 
   return (
     <div
@@ -328,17 +337,7 @@ export default function AgentInputBox() {
           {/* 模型选择子视图：按渠道分组 */}
           {selectPane === 'model' && (
             <div>
-              <div className="flex items-center gap-1 px-2 py-1.5 border-b border-[var(--color-border)] mb-1">
-                <button
-                  type="button"
-                  onClick={() => setSelectPane('root')}
-                  className="flex items-center gap-0.5 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)] px-1.5 py-0.5 rounded hover:bg-[var(--color-hover)]"
-                >
-                  <ChevronLeft size={13} />
-                  <span>{text('返回', 'Back')}</span>
-                </button>
-                <span className="text-xs font-medium ml-1 text-[var(--color-text)]">{text('选择模型', 'Select model')}</span>
-              </div>
+              <SelectPaneHeader title={text('选择模型', 'Select model')} onBack={() => setSelectPane('root')} />
               {chatModels.length === 0 ? (
                 <div className="px-3 py-2 text-xs text-[var(--color-text-muted)]">
                   {text('请先在设置中配置模型', 'Configure a model in Settings first')}
@@ -384,17 +383,7 @@ export default function AgentInputBox() {
           {/* 思考等级子视图 */}
           {selectPane === 'effort' && (
             <div>
-              <div className="flex items-center gap-1 px-2 py-1.5 border-b border-[var(--color-border)] mb-1">
-                <button
-                  type="button"
-                  onClick={() => setSelectPane('root')}
-                  className="flex items-center gap-0.5 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)] px-1.5 py-0.5 rounded hover:bg-[var(--color-hover)]"
-                >
-                  <ChevronLeft size={13} />
-                  <span>{text('返回', 'Back')}</span>
-                </button>
-                <span className="text-xs font-medium ml-1 text-[var(--color-text)]">{text('思考等级', 'Thinking level')}</span>
-              </div>
+              <SelectPaneHeader title={text('思考等级', 'Thinking level')} onBack={() => setSelectPane('root')} />
               <div className="py-0.5">
                 {[
                   { value: null, label: text('关', 'Off'), desc: text('不启用思考推演', 'Do not enable thinking reasoning') },
@@ -436,16 +425,17 @@ export default function AgentInputBox() {
       {composerCitations.length > 0 && (
         <div className="flex flex-wrap gap-1 px-1.5 pt-1 pb-1">
           {composerCitations.map(citation => {
-            const location = [
-              citation.chapterNumber != null
-                ? text(`第${citation.chapterNumber}章`, `Ch.${citation.chapterNumber}`)
-                : text('草稿', 'Draft'),
-              citation.fromLine > 0
-                ? (citation.toLine > citation.fromLine
-                  ? `L${citation.fromLine}–${citation.toLine}`
-                  : `L${citation.fromLine}`)
-                : '',
-            ].filter(Boolean).join(' · ')
+            const chapterLabel = citation.chapterNumber != null
+              ? text(`第${citation.chapterNumber}章`, `Ch.${citation.chapterNumber}`)
+              : text('草稿', 'Draft')
+            let lineLabel = ''
+            if (citation.fromLine > 0) {
+              lineLabel = `L${citation.fromLine}`
+              if (citation.toLine > citation.fromLine) {
+                lineLabel = `L${citation.fromLine}–${citation.toLine}`
+              }
+            }
+            const location = [chapterLabel, lineLabel].filter(Boolean).join(' · ')
             const quoteText = citation.quote ?? ''
             const preview = quoteText.replace(/\s+/g, ' ').trim()
             return (
@@ -500,7 +490,6 @@ export default function AgentInputBox() {
               overflowY: 'hidden',
               display: 'block'}}
           />
-        {/* 占位文字颜色已通过 tailwind placeholder 设置 */}
       </div>
 
       {/* 底部工具栏 */}
@@ -613,13 +602,8 @@ export default function AgentInputBox() {
               onClick={() => {
                 setShowContextMenu(false)
                 setShowModeMenu(false)
-                if (showModelSelectMenu) {
-                  setShowModelSelectMenu(false)
-                  setSelectPane('root')
-                } else {
-                  setShowModelSelectMenu(true)
-                  setSelectPane('root')
-                }
+                setShowModelSelectMenu(open => !open)
+                setSelectPane('root')
               }}
               className="flex items-center gap-1.5 py-1 px-1.5 rounded-md text-xs min-w-0 transition-colors cursor-pointer max-w-full"
               style={{
@@ -634,12 +618,10 @@ export default function AgentInputBox() {
                 e.currentTarget.style.backgroundColor = 'transparent'
                 e.currentTarget.style.opacity = '0.85'
               }}
-              title={`${currentModel?.modelName ?? currentModel?.name ?? text('选择模型', 'Select model')} · ${thinkingLevelLabel(text, currentThinkingLevel)}`}
+              title={`${selectedModelLabel ?? text('选择模型', 'Select model')} · ${thinkingLevelLabel(text, currentThinkingLevel)}`}
             >
               <span className="truncate select-none font-medium min-w-0">
-                {currentModel?.modelName
-                  ?? currentModel?.name
-                  ?? (chatModels.length === 0 ? text('未配置模型', 'No model configured') : text('选择模型', 'Select model'))}
+                {modelTriggerLabel}
               </span>
               <span
                 className="text-[0.68rem] px-1 rounded shrink-0 select-none font-normal"
@@ -658,21 +640,11 @@ export default function AgentInputBox() {
             className="flex items-center justify-center w-6 h-6 transition-all duration-150 shrink-0"
             style={{
               borderRadius: 'var(--radius-md)',
-              backgroundColor: generating
-                ? 'var(--color-text-secondary)'
-                : canSend
-                ? 'var(--color-accent)'
-                : 'rgba(128,128,128,0.3)',
+              backgroundColor: sendButtonBackground(generating, canSend),
               color: '#ffffff',
               cursor: !generating && !canSend ? 'not-allowed' : 'pointer',
               opacity: !generating && !canSend ? 0.5 : 1}}
-            title={
-              generating
-                ? text('停止生成', 'Stop generation')
-                : !hasProject
-                  ? text('打开项目后可用', 'Open a project to chat')
-                  : text('发送消息', 'Send message')
-            }
+            title={sendButtonTitle(text, generating, hasProject)}
           >
             {generating ? (
               <Square size={10} fill="currentColor" />
@@ -688,7 +660,29 @@ export default function AgentInputBox() {
 
 // ===== 子组件 =====
 
-/** 工具栏图标按钮 */
+function SelectPaneHeader({
+  title,
+  onBack,
+}: {
+  title: string
+  onBack: () => void
+}) {
+  const text = useLocaleStore(s => s.text)
+  return (
+    <div className="flex items-center gap-1 px-2 py-1.5 border-b border-[var(--color-border)] mb-1">
+      <button
+        type="button"
+        onClick={onBack}
+        className="flex items-center gap-0.5 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)] px-1.5 py-0.5 rounded hover:bg-[var(--color-hover)]"
+      >
+        <ChevronLeft size={13} />
+        <span>{text('返回', 'Back')}</span>
+      </button>
+      <span className="text-xs font-medium ml-1 text-[var(--color-text)]">{title}</span>
+    </div>
+  )
+}
+
 function ToolbarIconBtn({
   children,
   title,
@@ -751,7 +745,22 @@ function ContextMenuItem({
   )
 }
 
-/** 思考等级在按钮上的短标签。 */
+function sendButtonBackground(generating: boolean, canSend: boolean): string {
+  if (generating) return 'var(--color-text-secondary)'
+  if (canSend) return 'var(--color-accent)'
+  return 'rgba(128,128,128,0.3)'
+}
+
+function sendButtonTitle(
+  text: (zhCNText: string, enUSText: string) => string,
+  generating: boolean,
+  hasProject: boolean,
+): string {
+  if (generating) return text('停止生成', 'Stop generation')
+  if (!hasProject) return text('打开项目后可用', 'Open a project to chat')
+  return text('发送消息', 'Send message')
+}
+
 function thinkingLevelLabel(
   text: (zhCNText: string, enUSText: string) => string,
   level: AssistantThinkingLevel | null,

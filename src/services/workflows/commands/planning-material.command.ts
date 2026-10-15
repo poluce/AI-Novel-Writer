@@ -19,7 +19,6 @@ import { createStructuredBatchExecutor, type StructuredBatchContract } from '../
 import { requireWorkflowProjectSession, workflowUiText, workflowWritingLanguage } from '../workflow-project-session'
 import {
   BaseWorkflowCommand,
-  injectWritingSkillIntoSession,
   WORKFLOW_GENERATION_BUDGETS,
   type CommandExecuteParams,
   type WorkflowGenerationRuntimeDependencies,
@@ -327,7 +326,7 @@ export class ExtractPlanningMaterialCharactersCommand extends BaseWorkflowComman
     const generation = this.requireGenerationExecution()
     const extraction = await createStructuredBatchExecutor({
       contract,
-      session: injectWritingSkillIntoSession(generation.session, context, 'planning'),
+      session: generation.session,
       writingLanguage,
       onAttempt: receipt => this.reportGenerationPromptBudget(callbacks, receipt),
     }).execute({

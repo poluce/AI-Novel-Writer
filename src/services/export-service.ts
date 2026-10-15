@@ -196,15 +196,24 @@ function exportAuthorityReceipt(
     contentHash}) => ({ draftId, chapterNumber, version, finalizationId, contentHash }))
 }
 
+function chapterHeadingTitle(
+  chapterNumber: number,
+  title: string,
+  writingLanguage: WritingLanguage,
+): string {
+  let heading = `第${chapterNumber}章`
+  if (writingLanguage === 'en-US') heading = `Chapter ${chapterNumber}`
+  if (title) heading = `${heading} ${title}`
+  return heading
+}
+
 function renderMarkdownChapter(
   chapterNumber: number,
   title: string,
   content: string,
   writingLanguage: WritingLanguage,
 ): string {
-  const chapterTitle = writingLanguage === 'en-US'
-    ? `Chapter ${chapterNumber}${title ? ` ${title}` : ''}`
-    : `第${chapterNumber}章${title ? ` ${title}` : ''}`
+  const chapterTitle = chapterHeadingTitle(chapterNumber, title, writingLanguage)
   const heading = `# ${chapterTitle}`
   const firstLineEnd = content.indexOf('\n')
   const firstLine = content
@@ -373,9 +382,11 @@ export async function exportNovel(
         let content = `${project.name}\n${'='.repeat(project.name.length * 2)}\n\n`
 
         for (const ch of chapterContents) {
-          const chapterHeading = project.novelConfig.writingLanguage === 'en-US'
-            ? `Chapter ${ch.chapterNumber}${ch.title ? ` ${ch.title}` : ''}`
-            : `第${ch.chapterNumber}章${ch.title ? ` ${ch.title}` : ''}`
+          const chapterHeading = chapterHeadingTitle(
+            ch.chapterNumber,
+            ch.title,
+            project.novelConfig.writingLanguage,
+          )
           // 简单去除 Markdown 标记
           const plainText = ch.content
             .replace(/^#{1,6}\s+/gm, '')  // 去掉标题标记

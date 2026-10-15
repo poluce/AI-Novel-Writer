@@ -92,7 +92,7 @@ function ChapterCreationDialogSession({ isOpen, onClose, prefill }: Props) {
   const currentProject = useProjectStore(s => s.currentProject)
   const models = useLLMStore(s => s.models)
   const defaultModelId = useLLMStore(s => s.defaultModelId)
-  // ✅ action 用 getState() 获取，不订阅 workflow store 高频更新
+  // action 用 getState() 获取，不订阅 workflow store 高频更新
   const startWorkflow = useWorkflowStore.getState().startWorkflow
   const addLog = useWorkflowStore.getState().addLog
   const [chapterNumber, setChapterNumber] = useState<number | ''>(1)

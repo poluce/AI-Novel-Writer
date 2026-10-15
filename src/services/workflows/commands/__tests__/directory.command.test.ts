@@ -513,8 +513,7 @@ describe('GenerateDirectoryCommand', () => {
 
       const system = task.messages.find(message => message.role === 'system')?.content ?? ''
       const user = task.messages.find(message => message.role === 'user')?.content ?? ''
-      expect(user).toContain('[Supplemental writing skill: Blueprint craft]')
-      expect(user).toContain('Preserve causal structure across chapters.')
+      expect(user).not.toContain('[Supplemental writing skill:')
       expect(task.purpose).toBe('chapter-blueprint-directory:structured-syntax-repair')
       expect(system).toContain('You repair JSON syntax')
       expect(system).not.toContain('你是结构化 JSON 语法修复器')
@@ -535,13 +534,6 @@ describe('GenerateDirectoryCommand', () => {
     const context = {
       ...workflowContext(),
       writingLanguage: 'en-US' as const,
-      writingSkills: Object.freeze({
-        planning: Object.freeze({
-          skillId: 'user:blueprint-craft', name: 'Blueprint craft', stage: 'planning' as const,
-          source: 'user' as const, writingLanguage: 'en-US' as const,
-          content: 'Preserve causal structure across chapters.', utf8Bytes: 42,
-        }),
-      }),
     }
 
     const result = await command.execute({ step: {}, context, callbacks: stepCallbacks() })

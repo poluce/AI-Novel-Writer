@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ChevronLeft, ChevronRight, ExternalLink, GitBranch, Loader2, RefreshCw, Trash2 } from 'lucide-react'
 
 import type { ModelProfile } from '../../shared/ipc-channels'
@@ -29,6 +29,34 @@ interface PlotTreeViewProps {
   onGenerate: () => void
   onClear: () => void
   onOpenSource: (source: PlotTreeSourceReference) => void
+}
+
+function plotTreeActionIcon(busy: boolean, snapshot: PlotTreeSnapshot | null): ReactNode {
+  if (busy) return <Loader2 size={14} className="animate-spin" />
+  if (snapshot) return <RefreshCw size={14} />
+  return <GitBranch size={14} />
+}
+
+function plotTreeActionLabel(
+  busy: boolean,
+  snapshot: PlotTreeSnapshot | null,
+  text: (zhCNText: string, enUSText: string) => string,
+): string {
+  if (busy) return text('生成中...', 'Generating...')
+  if (snapshot) return text('刷新剧情树', 'Refresh plot tree')
+  return text('生成剧情树', 'Generate plot tree')
+}
+
+function plotEventStatusLabel(
+  status: PlotTreeEvent['status'],
+  language: 'zh-CN' | 'en-US',
+): string {
+  if (status === 'occurred') {
+    if (language === 'en-US') return 'Occurred'
+    return '已发生'
+  }
+  if (language === 'en-US') return 'Planned'
+  return '已计划'
 }
 
 function sourceLabel(source: PlotTreeSourceReference, text: (zh: string, en: string) => string): string {
@@ -103,12 +131,8 @@ export default function PlotTreeView({
             </NativeSelect>
           </label>
           <Button variant="ai" onClick={onGenerate} disabled={busy || !selectedModelId || !sourceReady}>
-            {busy ? <Loader2 size={14} className="animate-spin" /> : snapshot ? <RefreshCw size={14} /> : <GitBranch size={14} />}
-            {busy
-              ? text('生成中...', 'Generating...')
-              : snapshot
-                ? text('刷新剧情树', 'Refresh plot tree')
-                 : text('生成剧情树', 'Generate plot tree')}
+            {plotTreeActionIcon(busy, snapshot)}
+            {plotTreeActionLabel(busy, snapshot, text)}
           </Button>
           {snapshot && <Button variant="outline" onClick={onClear} disabled={busy}>
             <Trash2 size={14} />{text('清除剧情树', 'Clear plot tree')}
@@ -241,7 +265,10 @@ export default function PlotTreeView({
         <aside className="rounded-lg border p-4 space-y-2" style={{ borderColor: 'var(--color-border)', background: 'var(--color-panel)' }}>
           <h3 className="font-medium">{selectedEvent.summary}</h3>
           <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-            {text(`第 ${selectedEvent.chapterNumber} 章 · ${selectedEvent.status === 'occurred' ? '已发生' : '已计划'}`, `Chapter ${selectedEvent.chapterNumber} · ${selectedEvent.status === 'occurred' ? 'Occurred' : 'Planned'}`)}
+            {text(
+              `第 ${selectedEvent.chapterNumber} 章 · ${plotEventStatusLabel(selectedEvent.status, 'zh-CN')}`,
+              `Chapter ${selectedEvent.chapterNumber} · ${plotEventStatusLabel(selectedEvent.status, 'en-US')}`,
+            )}
           </p>
           <div className="flex flex-wrap gap-2">
             {selectedEvent.sources.map((source, index) => (

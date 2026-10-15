@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, type ReactElement } from 'react'
 import { ChevronDown, ChevronRight, Globe, FolderOpen, RotateCcw, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react'
 import {
   BUILTIN_PROMPTS,
@@ -14,7 +14,8 @@ import {
   clearProjectCustomPrompts,
   loadCustomPrompts,
   loadProjectCustomPrompts,
-  type PromptTemplate} from '../../services/prompt-templates'
+  type PromptTemplate,
+} from '../../services/prompt-templates'
 import { resolveWritingLanguage, type WritingLanguage } from '../../shared/writing-language'
 import { useProjectStore } from '../../stores/project-store'
 import type { ProjectSessionContext } from '../../shared/ipc-channels'
@@ -23,12 +24,13 @@ import { Button } from '../ui/Button'
 import { cn } from '../../lib/utils'
 import { useLocaleStore } from '../../stores/locale-store'
 
-// ==================== 来源标签配置 ====================
-
 const SOURCE_CONFIG = {
   builtin: { label: '内置', labelEn: 'Built-in', color: 'var(--color-text-muted)', bg: 'var(--color-hover)' },
   global: { label: '全局', labelEn: 'Global', color: 'var(--color-info)', bg: 'color-mix(in srgb, var(--color-info) 10%, transparent)' },
-  project: { label: '项目', labelEn: 'Project', color: 'var(--color-success-text)', bg: 'color-mix(in srgb, var(--color-success) 10%, transparent)' }} as const
+  project: { label: '项目', labelEn: 'Project', color: 'var(--color-success-text)', bg: 'color-mix(in srgb, var(--color-success) 10%, transparent)' },
+} as const
+
+type PromptSource = keyof typeof SOURCE_CONFIG
 
 const PROMPT_META_EN: Record<string, { name: string; description: string }> = {
   assistant_writing_identity: { name: 'AI writing assistant identity', description: 'Define the creative role and working guidance for the writing assistant' },
@@ -52,12 +54,36 @@ const PROMPT_META_EN: Record<string, { name: string; description: string }> = {
   infer_novel_config: { name: 'Infer novel configuration', description: 'Infer a configuration from imported prose' },
   extract_initial_characters: { name: 'Extract initial characters', description: 'Extract initial character records from imported material' },
   infer_single_chapter_blueprint: { name: 'Infer chapter blueprint', description: 'Infer a chapter blueprint from existing prose' },
-  infer_novel_config_with_vectors: { name: 'Infer configuration from samples', description: 'Infer a configuration from retrieved source excerpts' }}
+  infer_novel_config_with_vectors: { name: 'Infer configuration from samples', description: 'Infer a configuration from retrieved source excerpts' },
+}
 
-// ==================== 主组件 ====================
+function resolveEditGuidance(template: PromptTemplate, source: PromptSource): string {
+  if (template.taskGuidance != null) {
+    return template.taskGuidance
+  }
+  if (source === 'builtin') {
+    return ''
+  }
+  return template.content
+}
 
-/** 提示词模板设置面板 */
-export default function PromptSettings() {
+function buildEditedTemplate(
+  builtinTemplate: PromptTemplate,
+  writingLanguage: WritingLanguage,
+  systemRole: string,
+  taskGuidance: string,
+): PromptTemplate {
+  const template: PromptTemplate = {
+    ...builtinTemplate,
+    writingLanguage,
+    systemRole,
+    taskGuidance,
+  }
+  delete (template as Partial<PromptTemplate>).systemSuffix
+  return template
+}
+
+export default function PromptSettings(): ReactElement {
   const text = useLocaleStore(s => s.text)
   const project = useProjectStore((s) => s.currentProject)
   const projectId = project?.id ?? null
@@ -95,7 +121,6 @@ export default function PromptSettings() {
     return () => { disposed = true }
   }, [editingLanguage, text])
 
-  // 项目变更时重新加载项目级覆盖
   useEffect(() => {
     const session = projectId && projectPath
       ? captureProjectSession({ id: projectId, path: projectPath })
@@ -116,22 +141,24 @@ export default function PromptSettings() {
       if (!disposed && isProjectSessionCurrent(session)) {
         setProjectLoadError({
           projectId: session.projectId,
-          message: text('项目提示词加载失败，创作流程已停止使用未确认的配置', 'Project prompts could not be loaded; generation will not use an unverified configuration')})
+          message: text('项目提示词加载失败，创作流程已停止使用未确认的配置', 'Project prompts could not be loaded; generation will not use an unverified configuration'),
+        })
       }
     })
     return () => { disposed = true }
   }, [editingLanguage, projectId, projectPath, text])
 
-  // 获取可编辑的模板列表
   const editableTemplates = BUILTIN_PROMPTS
     .filter((template) => EDITABLE_PROMPT_KEYS.includes(template.key))
     .map((template) => getBuiltinPromptTemplate(template.key, editingLanguage) ?? template)
 
-  const handleToggle = (key: string) => {
+  function handleToggle(key: string): void {
     setExpandedKey((prev) => (prev === key ? null : key))
   }
 
-  const triggerRefresh = useCallback(() => setRefreshKey((k) => k + 1), [])
+  function triggerRefresh(): void {
+    setRefreshKey((k) => k + 1)
+  }
 
   return (
     <div className="space-y-2" key={refreshKey}>
@@ -148,7 +175,6 @@ export default function PromptSettings() {
           {projectLoadError.message}
         </div>
       )}
-      {/* 说明 */}
       <div
         className="flex items-start gap-2 px-3 py-2.5 rounded-lg text-xs mb-4"
         style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text-muted)' }}
@@ -172,7 +198,8 @@ export default function PromptSettings() {
           value={editingLanguage}
           onChange={(event) => setLanguageSelection({
             projectId: projectId ?? null,
-            writingLanguage: event.target.value as WritingLanguage})}
+            writingLanguage: event.target.value as WritingLanguage,
+          })}
           className="rounded-md px-2.5 py-1.5 text-xs bg-[var(--color-panel)] text-[var(--color-text)] border border-[var(--color-border)]"
           aria-label={text('编辑的写作语言', 'Writing language to edit')}
         >
@@ -204,8 +231,6 @@ export default function PromptSettings() {
   )
 }
 
-// ==================== 单个模板条目 ====================
-
 function TemplateItem({
   builtinTemplate,
   currentTemplate,
@@ -214,21 +239,20 @@ function TemplateItem({
   onToggle,
   projectSession,
   writingLanguage,
-  onSaved}: {
+  onSaved,
+}: {
   builtinTemplate: PromptTemplate
   currentTemplate: PromptTemplate
-  source: 'builtin' | 'global' | 'project'
+  source: PromptSource
   isExpanded: boolean
   onToggle: () => void
   projectSession: ProjectSessionContext | null
   writingLanguage: WritingLanguage
   onSaved: () => void
-}) {
+}): ReactElement {
   const text = useLocaleStore(s => s.text)
   const [editRole, setEditRole] = useState(currentTemplate.systemRole ?? '')
-  const [editGuidance, setEditGuidance] = useState(
-    currentTemplate.taskGuidance ?? (source === 'builtin' ? '' : currentTemplate.content),
-  )
+  const [editGuidance, setEditGuidance] = useState(resolveEditGuidance(currentTemplate, source))
   const [saving, setSaving] = useState(false)
   const [saveResult, setSaveResult] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -240,7 +264,7 @@ function TemplateItem({
   if (isExpanded !== prevExpanded || currentTemplate.content !== prevContent) {
     if (isExpanded) {
       setEditRole(currentTemplate.systemRole ?? '')
-      setEditGuidance(currentTemplate.taskGuidance ?? (source === 'builtin' ? '' : currentTemplate.content))
+      setEditGuidance(resolveEditGuidance(currentTemplate, source))
       setSaveResult(null)
     }
     setPrevExpanded(isExpanded)
@@ -249,32 +273,24 @@ function TemplateItem({
 
   const sourceConf = SOURCE_CONFIG[source]
 
-  // 插入变量到光标位置
-  const insertVariable = (varName: string) => {
+  function insertVariable(varName: string): void {
     const textarea = textareaRef.current
     if (!textarea) return
     const start = textarea.selectionStart
     const end = textarea.selectionEnd
-    const text = `{{${varName}}}`
-    const newContent = editGuidance.slice(0, start) + text + editGuidance.slice(end)
+    const snippet = `{{${varName}}}`
+    const newContent = editGuidance.slice(0, start) + snippet + editGuidance.slice(end)
     setEditGuidance(newContent)
-    // 恢复光标
     requestAnimationFrame(() => {
       textarea.focus()
-      textarea.setSelectionRange(start + text.length, start + text.length)
+      textarea.setSelectionRange(start + snippet.length, start + snippet.length)
     })
   }
 
-  // 保存到全局
-  const handleSaveGlobal = async () => {
+  async function handleSaveGlobal(): Promise<void> {
     setSaving(true)
     setSaveResult(null)
-    const template: PromptTemplate = {
-      ...builtinTemplate,
-      writingLanguage,
-      systemRole: editRole,
-      taskGuidance: editGuidance}
-    delete (template as Partial<PromptTemplate>).systemSuffix
+    const template = buildEditedTemplate(builtinTemplate, writingLanguage, editRole, editGuidance)
     const ok = await saveCustomPrompt(template)
     setSaving(false)
     setSaveResult(ok ? { type: 'success', msg: text('已保存到全局配置', 'Saved to global settings') } : { type: 'error', msg: text('保存失败', 'Save failed') })
@@ -282,18 +298,12 @@ function TemplateItem({
     setTimeout(() => setSaveResult(null), 3000)
   }
 
-  // 保存到项目
-  const handleSaveProject = async () => {
+  async function handleSaveProject(): Promise<void> {
     if (!projectSession || !isProjectSessionCurrent(projectSession)) return
     const operationSession = projectSession
     setSaving(true)
     setSaveResult(null)
-    const template: PromptTemplate = {
-      ...builtinTemplate,
-      writingLanguage,
-      systemRole: editRole,
-      taskGuidance: editGuidance}
-    delete (template as Partial<PromptTemplate>).systemSuffix
+    const template = buildEditedTemplate(builtinTemplate, writingLanguage, editRole, editGuidance)
     const ok = await saveProjectCustomPrompt(operationSession, template)
     if (!isProjectSessionCurrent(operationSession)) return
     if (ok) await loadProjectCustomPrompts(operationSession, writingLanguage)
@@ -304,12 +314,10 @@ function TemplateItem({
     setTimeout(() => setSaveResult(null), 3000)
   }
 
-  // 恢复默认
-  const handleReset = async () => {
+  async function handleReset(): Promise<void> {
     const operationSession = projectSession
     setSaving(true)
     setSaveResult(null)
-    // 依次删除项目级和全局级覆盖
     if (operationSession) {
       if (!isProjectSessionCurrent(operationSession)) return
       const projectDeleted = await deleteProjectCustomPrompt(operationSession, builtinTemplate.key, writingLanguage)
@@ -344,9 +352,9 @@ function TemplateItem({
       className="rounded-xl overflow-hidden transition-colors"
       style={{
         border: `1px solid ${isExpanded ? 'var(--color-accent)' : 'var(--color-border)'}`,
-        backgroundColor: 'var(--color-panel)'}}
+        backgroundColor: 'var(--color-panel)',
+      }}
     >
-      {/* 折叠头部 */}
       <button
         className="w-full flex items-center gap-2.5 px-4 py-3 text-left transition-colors hover:bg-[var(--color-hover)] outline-none focus:outline-none"
         onClick={onToggle}
@@ -374,10 +382,8 @@ function TemplateItem({
         </div>
       </button>
 
-      {/* 展开编辑区 */}
       {isExpanded && (
         <div className="px-4 pb-4 space-y-3" style={{ borderTop: '1px solid var(--color-border)' }}>
-          {/* 变量标签栏 */}
           <div className="pt-3">
             <p className="text-[0.68rem] font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>
               {text('可用变量（点击插入到光标位置）', 'Available variables (click to insert)')}
@@ -394,7 +400,8 @@ function TemplateItem({
                     style={{
                       backgroundColor: 'var(--color-hover)',
                       color: 'var(--color-text-secondary)',
-                      border: '1px solid var(--color-border)'}}
+                      border: '1px solid var(--color-border)',
+                    }}
                   >
                     <code className="font-mono">{`{{${varName}}}`}</code>
                     <span className="opacity-60 max-w-[120px] truncate">{text(desc, englishDescription)}</span>
@@ -417,7 +424,8 @@ function TemplateItem({
                 color: 'var(--color-text)',
                 border: '1px solid var(--color-border)',
                 minHeight: '84px',
-                lineHeight: 1.6}}
+                lineHeight: 1.6,
+              }}
               spellCheck={false}
             />
           </label>
@@ -441,15 +449,14 @@ function TemplateItem({
                 minHeight: '140px',
                 maxHeight: '500px',
                 lineHeight: 1.6,
-                transition: 'border-color 0.15s ease'}}
+                transition: 'border-color 0.15s ease',
+              }}
               onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--color-accent)' }}
               onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)' }}
               spellCheck={false}
             />
           </div>
 
-
-          {/* 操作按钮 */}
           <div className="flex items-center gap-2 pt-1">
             <Button
               variant="outline"
@@ -483,7 +490,6 @@ function TemplateItem({
             </Button>
           </div>
 
-          {/* 保存结果反馈 */}
           {saveResult && (
             <div
               className={cn(

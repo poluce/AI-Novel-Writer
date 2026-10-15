@@ -4,7 +4,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 
 import { setActiveProjectSessionContext } from '../../../shared/project-session-context'
-import { synopsisFactsFingerprint } from '../../../services/workflows/commands/architecture.command'
+import { synopsisFactsFingerprint } from '../../../services/workflows/commands/plot-outline-checkpoint'
 import { useLocaleStore } from '../../../stores/locale-store'
 import { useProjectStore } from '../../../stores/project-store'
 import { useWorkflowStore } from '../../../stores/workflow-store'

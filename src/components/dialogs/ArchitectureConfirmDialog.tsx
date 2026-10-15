@@ -28,6 +28,16 @@ const ARCH_FILES: Array<{
   { key: 'worldbuilding', fileName: 'worldbuilding.md', label: '环境', labelEn: 'World building', iconName: 'globe', desc: '核心规则、阶层断层、深层危机', descEn: 'Core rules, social fault lines, and hidden crises' },
 ]
 
+function architectureFileActionLabel(
+  exists: boolean,
+  isChecked: boolean,
+  text: (zhCNText: string, enUSText: string) => string,
+): string {
+  if (!exists) return text('待生成', 'New')
+  if (isChecked) return text('将覆盖', 'Overwrite')
+  return text('保留', 'Keep')
+}
+
 interface Props {
   isOpen: boolean
   onClose: () => void
@@ -227,7 +237,7 @@ export default function ArchitectureConfirmDialog({
                         : 'bg-[rgba(var(--color-accent-rgb),0.1)] text-[var(--color-accent)]'
                     }`}
                   >
-                    {exists ? (isChecked ? text('将覆盖', 'Overwrite') : text('保留', 'Keep')) : text('待生成', 'New')}
+                    {architectureFileActionLabel(exists, isChecked, text)}
                   </span>
                 </label>
               )

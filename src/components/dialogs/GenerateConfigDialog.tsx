@@ -14,9 +14,17 @@ import {
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Textarea } from '../ui/Textarea'
-import type { NovelConfig } from '../../shared/ipc-channels'
+import type { ModelProfile, NovelConfig } from '../../shared/ipc-channels'
 import { useLocaleStore } from '../../stores/locale-store'
 import { captureProjectSession, isProjectSessionCurrent } from '../project-session-gate'
+
+function firstGenerationModelId(models: ModelProfile[]): string | undefined {
+  const model = models.find((candidate) => {
+    if (!Array.isArray(candidate.purposes)) return true
+    return candidate.purposes.includes('generation')
+  })
+  return model?.id
+}
 
 interface Props {
   isOpen: boolean
@@ -29,7 +37,7 @@ interface Props {
 export default function GenerateConfigDialog({ isOpen, onClose, onGenerated }: Props) {
   const text = useLocaleStore(s => s.text)
   const defaultModelId = useLLMStore(s => s.defaultModelId)
-  // ✅ 用 getState() 获取 action，不订阅 workflow store 的 globalLogs 高频更新
+  // 用 getState() 获取 action，不订阅 workflow store 的 globalLogs 高频更新
   const addLog = useWorkflowStore.getState().addLog
   const startWorkflow = useWorkflowStore.getState().startWorkflow
   const currentProject = useProjectStore(s => s.currentProject)
@@ -73,7 +81,7 @@ export default function GenerateConfigDialog({ isOpen, onClose, onGenerated }: P
     const projectSession = captureProjectSession(currentProject)
     if (!projectSession) return
     const models = useLLMStore.getState().models
-    const effectiveModelId = defaultModelId ?? models.find(m => Array.isArray(m.purposes) ? m.purposes.includes('generation') : true)?.id
+    const effectiveModelId = defaultModelId ?? firstGenerationModelId(models)
     if (!effectiveModelId) {
       toast.warning(text('请先在「设置 → AI 生成模型」中配置默认模型', 'Configure an AI model in Settings first.'))
       useLayoutStore.getState().openSettings('llm')

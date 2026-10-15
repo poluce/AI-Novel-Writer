@@ -23,7 +23,6 @@ import {
   type BoundedCompletionMode,
 } from '../bounded-completion'
 import { workflowUiText, workflowWritingLanguage } from '../workflow-project-session'
-import type { WritingSkillStage } from '../../../shared/writing-skills'
 import type { SubmitToolName } from '../../../shared/submit-contract'
 
 export interface CommandExecuteParams {
@@ -44,59 +43,8 @@ type WorkflowLLMOptions = {
   purpose?: string
   reasoningStage?: GenerationReasoningStage
   promptBudget?: PromptBudgetPolicy
-  /** Explicit workflow-writing stage. Reasoning strategy never selects a writing skill. */
-  writingSkillStage?: WritingSkillStage
   /** One-shot submit_* contract; omitted means legacy visible-text completion. */
   submitTool?: SubmitToolName
-}
-
-export function injectWritingSkillIntoTask(
-  task: GenerationTask,
-  context: WorkflowContext,
-  stage: WritingSkillStage,
-): { task: GenerationTask; skillName?: string } {
-  const skill = context.writingSkills?.[stage]
-  if (!skill) return { task }
-  const userMessageIndex = task.messages.findIndex(message => message.role === 'user')
-  if (userMessageIndex < 0) return { task }
-  const writingLanguage = workflowWritingLanguage(context)
-  const block = writingLanguage === 'en-US'
-    ? `[Supplemental writing skill: ${skill.name}]\nThis guidance may improve craft, but author facts, the project writing language, and the output contract below always take priority.\n${skill.content}`
-    : `【补充写作 Skill：${skill.name}】\n以下内容只能补充创作方法；作者事实、项目写作语言和后续输出合同始终优先。\n${skill.content}`
-  const messages = task.messages.map((message, index) => index === userMessageIndex
-    ? { ...message, content: `${block}\n\n${message.content}` }
-    : message)
-  const promptBudget = {
-    limitUtf8Bytes: task.promptBudget?.limitUtf8Bytes
-      ?? new TextEncoder().encode(messages.map(message => message.content).join('')).byteLength,
-    sections: [
-      {
-        sectionName: 'writing-skill',
-        displayName: skill.name,
-        messageIndex: userMessageIndex,
-        finalText: block,
-      },
-      ...(task.promptBudget?.sections ?? []),
-    ],
-  }
-  return {
-    task: { ...task, messages, promptBudget },
-    skillName: skill.name,
-  }
-}
-
-export function injectWritingSkillIntoSession(
-  session: GenerationSession,
-  context: WorkflowContext,
-  stage: WritingSkillStage,
-): GenerationSession {
-  return {
-    budget: session.budget,
-    complete: (task, options) => session.complete(
-      injectWritingSkillIntoTask(task, context, stage).task,
-      options,
-    ),
-  }
 }
 
 export type WorkflowGenerationIntent = 'structured' | 'text' | 'character-architecture'
@@ -140,7 +88,6 @@ interface ActiveGenerationExecution {
   context: WorkflowContext
   session: GenerationSession
   signal: AbortSignal
-  loggedWritingSkillStages: Set<WritingSkillStage>
 }
 
 function observeWorkflowCancellation(context: WorkflowContext): {
@@ -201,7 +148,6 @@ export abstract class BaseWorkflowCommand<TResult = string> {
           context: params.context,
           session,
           signal: cancellation.signal,
-          loggedWritingSkillStages: new Set(),
         }
         try {
           this.assertNotCancelled(params.context)
@@ -425,8 +371,7 @@ export abstract class BaseWorkflowCommand<TResult = string> {
     }
     callbacks.setProgress(10)
     try {
-      const writingSkillStage = options?.writingSkillStage
-      const baseTask: GenerationTask = {
+      const task: GenerationTask = {
         purpose: options?.purpose ?? 'workflow',
         reasoningStage: options?.reasoningStage,
         output: options?.responseFormat ? 'structured-data' : 'visible-text',
@@ -437,18 +382,7 @@ export abstract class BaseWorkflowCommand<TResult = string> {
         ...(options?.promptBudget ? { promptBudget: options.promptBudget } : {}),
         ...(options?.submitTool ? { submitTool: options.submitTool } : {}),
       }
-      const injection = writingSkillStage && context
-        ? injectWritingSkillIntoTask(baseTask, context, writingSkillStage)
-        : { task: baseTask }
-      if (injection.skillName && writingSkillStage && !execution.loggedWritingSkillStages.has(writingSkillStage)) {
-        execution.loggedWritingSkillStages.add(writingSkillStage)
-        callbacks.log(workflowUiText(
-          execution.context,
-          `本次 ${writingSkillStage} 阶段使用已冻结写作 Skill：${injection.skillName}`,
-          `Using the workflow-start-frozen writing skill for ${writingSkillStage}: ${injection.skillName}`,
-        ))
-      }
-      const outcome = await execution.session.complete(injection.task, { signal: execution.signal })
+      const outcome = await execution.session.complete(task, { signal: execution.signal })
       this.reportGenerationPromptBudget(callbacks, outcome.receipt)
       this.assertNotCancelled(context)
       const content = outcome.content

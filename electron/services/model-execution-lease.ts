@@ -22,6 +22,16 @@ export class ModelExecutionLeaseError extends Error {
   }
 }
 
+function capabilityEvidenceSource(
+  verified: unknown,
+  verifiedSource: ModelExecutionCapabilityEvidenceSource,
+  explicit: unknown,
+): ModelExecutionCapabilityEvidenceSource {
+  if (verified) return verifiedSource
+  if (explicit) return 'user-operational-cap'
+  return 'unknown'
+}
+
 function sha256(value: unknown): string {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex')
 }
@@ -160,25 +170,18 @@ export function resolveModelExecutionCapabilityEvidence(
     throw new ModelExecutionLeaseError('INVALID_OUTPUT_CAPABILITY', '模型输出上限无效')
   }
 
-  const maxOutputSource: ModelExecutionCapabilityEvidenceSource = verifiedOutputLimit === maxOutputTokens
-    ? (verified ? verifiedSource : 'verified-provider-preset')
-    : (explicitOutputCap
-      ? 'user-operational-cap'
-      : 'legacy-profile')
+  let maxOutputSource: ModelExecutionCapabilityEvidenceSource = 'legacy-profile'
+  if (verifiedOutputLimit === maxOutputTokens) {
+    maxOutputSource = verified ? verifiedSource : 'verified-provider-preset'
+  } else if (explicitOutputCap) {
+    maxOutputSource = 'user-operational-cap'
+  }
 
   return {
     source: {
-      contextWindowTokens: verified
-        ? verifiedSource
-        : explicitContextWindow
-          ? 'user-operational-cap'
-          : 'unknown',
+      contextWindowTokens: capabilityEvidenceSource(verified, verifiedSource, explicitContextWindow),
       maxOutputTokens: maxOutputSource,
-      featureFlags: verified
-        ? verifiedSource
-        : model.capabilities
-          ? 'user-operational-cap'
-          : 'unknown',
+      featureFlags: capabilityEvidenceSource(verified, verifiedSource, model.capabilities),
     },
     subjectFingerprint,
     contextWindowTokens: contextWindowTokens ?? null,

@@ -27,6 +27,12 @@ interface DiffSegment {
   hunk?: Hunk
 }
 
+function mergeColumnPad(oLen: number, mLen: number): { leftPad: number; rightPad: number } {
+  const left = oLen > 0 ? oLen : 1
+  const right = mLen > 0 ? mLen : 1
+  return { leftPad: Math.max(0, right - left), rightPad: Math.max(0, left - right) }
+}
+
 interface ThreeWayMergeProps {
   originalContent: string
   modifiedContent: string
@@ -361,11 +367,6 @@ export default function ThreeWayMerge({
 
   const processedCount = Object.values(applied).filter(Boolean).length
 
-  const getPad = (oLen: number, mLen: number) => {
-    const lV = oLen > 0 ? oLen : 1, rV = mLen > 0 ? mLen : 1
-    return { leftPad: Math.max(0, rV - lV), rightPad: Math.max(0, lV - rV) }
-  }
-
   return (
     <div className="three-way-merge">
       <div className="twm-toolbar">
@@ -408,7 +409,7 @@ export default function ThreeWayMerge({
             // hunk 行
             const hunk = seg.hunk!
             const isApplied = applied[hunk.index]
-            const { leftPad, rightPad } = getPad(hunk.originalLines.length, hunk.modifiedLines.length)
+            const { leftPad, rightPad } = mergeColumnPad(hunk.originalLines.length, hunk.modifiedLines.length)
 
             return (
               <React.Fragment key={idx}>

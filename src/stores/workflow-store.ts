@@ -27,9 +27,6 @@ import {
   workflowResourceClaimsConflict,
   type WorkflowResourceKind,
 } from '../shared/workflow-resource-claims'
-import type { FrozenWritingSkillSnapshot } from '../services/agent/writing-skill-bindings'
-import { freezeWritingSkillsSnapshot } from '../services/agent/writing-skill-bindings'
-import type { WritingSkillStage } from '../shared/writing-skills'
 
 // ===== 工作流数据模型 =====
 
@@ -88,14 +85,6 @@ export interface WorkflowRun {
   writingLanguage: WritingLanguage
   /** Visible interface locale frozen when the workflow starts. */
   uiLocale: Locale
-  /** Safe display metadata for workflow-start-frozen writing skills. */
-  writingSkills?: ReadonlyArray<{
-    stage: WritingSkillStage
-    skillId: string
-    name: string
-    source: 'builtin' | 'user' | 'project'
-    utf8Bytes: number
-  }>
   type: WorkflowType
   title: string
   status: WorkflowStatus
@@ -148,8 +137,6 @@ export interface WorkflowContext {
   writingLanguage: WritingLanguage
   /** Visible interface locale frozen when the workflow starts. */
   uiLocale: Locale
-  /** Full immutable content frozen once before the first workflow step starts. */
-  writingSkills?: FrozenWritingSkillSnapshot
   /** 步骤间传递的数据 */
   data: Record<string, unknown>
   /** 是否已取消 */
@@ -557,47 +544,6 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
       }
     })
 
-    let writingSkills: FrozenWritingSkillSnapshot = Object.freeze({})
-    try {
-      writingSkills = await freezeWritingSkillsSnapshot(projectSession, writingLanguage)
-    } catch {
-      // 阶段绑定已废除，技能纯粹作为工具按需调用；此处安全兜底为空快照，绝不阻断工作流
-      writingSkills = Object.freeze({})
-    }
-    if (!sameProjectSessionContext(
-      projectSession,
-      readActiveProjectSession(),
-    )) {
-      updateRunById(set, run.id, {
-        status: 'failed',
-        completedAt: new Date().toISOString(),
-        error: uiText(
-          uiLocale,
-          '写作 Skill 快照加载期间项目已切换，工作流未启动',
-          'The project changed while writing skills were being frozen, so the workflow was not started.',
-        ),
-      })
-      set(s => {
-        const failedRun = s.activeRuns.find(active => active.id === run.id)
-        const newRuns = s.activeRuns.filter(active => active.id !== run.id)
-        return {
-          activeRuns: newRuns,
-          history: failedRun ? prependRunHistory(s.history, failedRun) : s.history,
-          ...computeCompat(newRuns, s.waitingRuns),
-        }
-      })
-      return runId
-    }
-    const writingSkillSummaries = Object.values(writingSkills).map(skill => ({
-      stage: skill.stage,
-      skillId: skill.skillId,
-      name: skill.name,
-      source: skill.source,
-      utf8Bytes: skill.utf8Bytes,
-    }))
-    if (writingSkillSummaries.length) {
-      updateRunById(set, run.id, { writingSkills: Object.freeze(writingSkillSummaries) })
-    }
     get().addLog('info', uiText(
       uiLocale,
       `[开始] 工作流「${definition.title}」已启动`,
@@ -613,7 +559,6 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
       projectSession,
       writingLanguage,
       uiLocale,
-      writingSkills,
       ...(generationModelId ? { generationModelId } : {}),
       ...(chapterWordsTarget ? { chapterWordsTarget } : {}),
       data: {},
@@ -771,8 +716,11 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
         }
       } catch (error) {
         const promptBudgetFailure = promptBudgetFailureFromError(error, context.uiLocale)
-        const errorMsg = promptBudgetFailure?.message
-          ?? (error instanceof Error ? error.message : String(error))
+        let errorMsg = promptBudgetFailure?.message
+        if (errorMsg == null) {
+          if (error instanceof Error) errorMsg = error.message
+          else errorMsg = String(error)
+        }
         const failureCode = getBoundedCompletionFailureCode(error)
           ?? promptBudgetFailure?.failureCode
         const errorCode = errorCodeFromUnknown(error)

@@ -115,8 +115,18 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
         projectSession.projectPath,
       )
       if (cancelled || !isProjectSessionCurrent(projectSession)) return
-      const bp = Array.isArray(bps) ? bps.find((b: unknown) => (b as { chapterNumber?: number }).chapterNumber === m.chapterNumber) : null
-      setMeta({ ...m, chapterTitle: bp ? (bp as { title?: string }).title : undefined, filePath, fileName: `v${m.version}`, createdAt: m.updatedAt ?? m.createdAt })
+      const bp = Array.isArray(bps)
+        ? bps.find((b: unknown) => (b as { chapterNumber?: number }).chapterNumber === m.chapterNumber)
+        : null
+      let chapterTitle: string | undefined
+      if (bp) chapterTitle = (bp as { title?: string }).title
+      setMeta({
+        ...m,
+        chapterTitle,
+        filePath,
+        fileName: `v${m.version}`,
+        createdAt: m.updatedAt ?? m.createdAt,
+      })
       // 使用 DB 化的虚拟 chapterDir（用于 draft-index 兼容层解析章节号）
       const chapterDir = `vela://draft/ch${m.chapterNumber}`
       // 检查待合并修稿
@@ -139,7 +149,7 @@ function DraftEditorSession({ tabId, filePath, content, projectKey }: Props) {
   const isReadonly = status === 'finalized' || status === 'archived'
 
   // 检查是否有相关章节工作流正在运行
-  // ✅ 只订阅 activeRuns，不订阅 globalLogs 等高频更新字段
+  // 只订阅 activeRuns，不订阅 globalLogs 等高频更新字段
   const activeRuns = useWorkflowStore(s => s.activeRuns)
   const activeChapterRun = activeRuns.find(r =>
     r.projectPath === projectKey

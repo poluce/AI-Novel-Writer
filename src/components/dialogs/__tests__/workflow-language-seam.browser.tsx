@@ -13,7 +13,7 @@ import { useWorkflowStore } from '../../../stores/workflow-store'
 import {
   isUsableSynopsisCheckpoint,
   synopsisFactsFingerprint,
-} from '../../../services/workflows/commands/architecture.command'
+} from '../../../services/workflows/commands/plot-outline-checkpoint'
 import SynopsisEditor from '../../editor/SynopsisEditor'
 import WorldBuildingEditor from '../../editor/WorldBuildingEditor'
 

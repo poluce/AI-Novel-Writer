@@ -504,13 +504,6 @@ describe('InferGlobalSettingsCommand', () => {
     const context = createContext()
     context.writingLanguage = 'en-US'
     context.uiLocale = 'en-US'
-    context.writingSkills = Object.freeze({
-      planning: Object.freeze({
-        skillId: 'user:import-planning', name: 'Import planning', stage: 'planning' as const,
-        source: 'user' as const, writingLanguage: 'en-US' as const,
-        content: 'Preserve imported causal facts.', utf8Bytes: 31,
-      }),
-    })
     context.data.chapters = [{
       number: 1,
       title: 'Night Café 夜航',
@@ -522,8 +515,8 @@ describe('InferGlobalSettingsCommand', () => {
 
     expect(observed).toHaveLength(2)
     expect(observed[0]?.[0]?.content).toContain('senior fiction editor')
-    expect(observed[0]?.[1]?.content).toContain('[Supplemental writing skill: Import planning]')
-    expect(observed[1]?.[1]?.content).toContain('[Supplemental writing skill: Import planning]')
+    expect(observed[0]?.[1]?.content).not.toContain('[Supplemental writing skill:')
+    expect(observed[1]?.[1]?.content).not.toContain('[Supplemental writing skill:')
     expect(observed[0]?.[1]?.content).toContain(importedText)
     expect(observed[0]?.map(message => message.content).join('\n')).not.toContain('【小说全文采样】')
     expect(observed[1]?.[0]?.content).toContain('You repair JSON syntax only')

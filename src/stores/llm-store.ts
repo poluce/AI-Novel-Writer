@@ -6,9 +6,12 @@ import type {
   CreationTaskKey,
   GlobalConfig,
   LLMFinishReason,
+  LLMRequest,
+  LLMStreamEvents,
   ModelDiscoveryResult,
   ModelDiscoveryRequest,
   ModelProfile,
+  ProjectSessionContext,
   TaskModelConfig,
   TaskModelRouting,
   TokenUsage,
@@ -18,7 +21,7 @@ import type { SubmitToolName } from '../shared/submit-contract'
 import { readActiveProject, readActiveProjectSession } from '../services/active-project'
 import { normalizeModelProfiles } from '../shared/model-profile'
 
-/** 一次性生成的回调（正文不再流式：主进程只在完成时回一次） */
+/** 一次性生成回调：主进程只在完成时回一次。 */
 interface StreamCallbacks {
   onDone?: (
     fullText: string,
@@ -29,172 +32,225 @@ interface StreamCallbacks {
   onError?: (error: string) => void
 }
 
+interface GenerateStreamOptions {
+  responseFormat?: { type: string }
+  maxTokens?: number
+  purpose?: string
+  projectSession?: ProjectSessionContext
+  creativeStrategy?: CreativeStrategy
+  reasoningStage?: GenerationReasoningStage
+  taskKey?: CreationTaskKey
+  reasoningEffort?: ReasoningEffort
+  submitTool?: SubmitToolName
+}
+
+type StreamMessage = { role: 'system' | 'user' | 'assistant'; content: string }
+type ActiveRequest = { status: 'running' | 'done' | 'error'; text: string }
+type DefaultModelChannel = 'llm:set-default-model' | 'llm:set-default-embedding-model'
+
 interface LLMState {
-  /** 已配置的模型列表 */
   models: ModelProfile[]
-  /** 当前默认生成模型 ID */
   defaultModelId: string | null
-  /** 当前默认向量模型 ID */
   defaultEmbeddingModelId: string | null
-  /** 全局默认思考强度 */
   defaultThinkingLevel: ReasoningEffort
-  /** 各创作环节专属模型与思考调度矩阵 */
   taskModelRouting: TaskModelRouting
-  /** 正在进行的活跃请求 */
-  activeRequests: Map<string, { status: 'running' | 'done' | 'error'; text: string }>
-  /** 是否已加载模型配置 */
+  activeRequests: Map<string, ActiveRequest>
   loaded: boolean
 
-  // ===== Actions =====
-  /** 初始化（加载模型列表 + 默认模型 ID + 任务模型调度） */
   init: () => Promise<void>
-  /** 加载模型列表 */
   loadModels: () => Promise<void>
-  /** 保存模型 */
   saveModel: (model: ModelProfile) => Promise<boolean>
-  /** 删除模型 */
   deleteModel: (modelId: string) => Promise<boolean>
-  /** 设置默认生成模型（持久化到 ~/.vela/config.json） */
+  /** 设置默认生成模型（立即持久化到 ~/.vela/config.json） */
   setDefaultModel: (modelId: string) => Promise<boolean>
-  /** 设置默认向量模型（持久化到 ~/.vela/config.json） */
+  /** 设置默认向量模型（立即持久化到 ~/.vela/config.json） */
   setDefaultEmbeddingModel: (modelId: string) => Promise<boolean>
-  /** 设置全局默认思考强度（持久化到 ~/.vela/config.json） */
+  /** 设置全局默认思考强度（立即持久化到 ~/.vela/config.json） */
   setDefaultThinkingLevel: (level: ReasoningEffort) => Promise<boolean>
-  /** 解析指定任务应该使用的模型 ID（优先专属配置，优雅回退默认模型） */
   resolveTaskModelId: (taskKey: CreationTaskKey) => string | null
-  /** 解析指定任务应该使用的思考强度 */
   resolveTaskThinkingLevel: (taskKey: CreationTaskKey) => ReasoningEffort
-  /** 设置指定任务的模型与思考配置（自动持久化到 config.json） */
+  /** 设置指定任务的模型与思考配置（立即持久化到 config.json） */
   setTaskConfig: (taskKey: CreationTaskKey, config: TaskModelConfig) => Promise<boolean>
-  /** 重置所有任务调度为默认 */
   resetTaskModelRouting: () => Promise<boolean>
-  /** 流式生成 */
   generateStream: (
-    messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+    messages: StreamMessage[],
     callbacks: StreamCallbacks,
     modelId?: string,
-    options?: {
-      responseFormat?: { type: string }
-      maxTokens?: number
-      purpose?: string
-      projectSession?: import('../shared/ipc-channels').ProjectSessionContext
-      creativeStrategy?: CreativeStrategy
-      reasoningStage?: GenerationReasoningStage
-      taskKey?: CreationTaskKey
-      reasoningEffort?: ReasoningEffort
-      submitTool?: SubmitToolName
-    }
+    options?: GenerateStreamOptions,
   ) => Promise<string>
-  /** 取消生成 */
   cancelGeneration: (requestId: string) => Promise<void>
-  /** 测试模型连接 */
   testConnection: (model: ModelProfile) => Promise<{ success: boolean; error?: string }>
-  /** 以当前表单中的端点和凭据主动发现 provider 模型。 */
   discoverModels: (request: ModelDiscoveryRequest) => Promise<ModelDiscoveryResult>
 }
 
 let initializationFlight: Promise<void> | null = null
 
-export const useLLMStore = create<LLMState>()((set, get) => ({
-  models: [],
-  defaultModelId: null,
-  defaultEmbeddingModelId: null,
-  defaultThinkingLevel: 'low',
-  taskModelRouting: {},
-  activeRequests: new Map(),
-  loaded: false,
+function firstGenerationModelId(models: ModelProfile[]): string | null {
+  return models.find((model) => model.purposes?.includes('generation'))?.id ?? null
+}
 
-  init: () => {
+async function persistTaskRouting(routing: TaskModelRouting): Promise<boolean> {
+  if (!ipc.isElectron) return true
+  try {
+    await ipc.invoke('config:set', { taskModelRouting: routing })
+    return true
+  } catch (error) {
+    console.error('[LLMStore] Failed to save task model routing:', error)
+    return false
+  }
+}
+
+async function persistDefaultModelId(
+  channel: DefaultModelChannel,
+  modelId: string,
+  action: string,
+): Promise<boolean> {
+  try {
+    requireIpcSuccess(await ipc.invoke(channel, modelId), action)
+    return true
+  } catch (error) {
+    alertError(String(error), { title: '模型设置保存失败' })
+    return false
+  }
+}
+
+function notifyStreamDone(
+  callbacks: StreamCallbacks,
+  data: LLMStreamEvents['llm:stream-done'],
+): void {
+  const finishReason = data.finishReason ?? 'unknown'
+  if (data.artifact !== undefined) {
+    callbacks.onDone?.(data.fullText, data.usage, finishReason, data.artifact)
+    return
+  }
+  callbacks.onDone?.(data.fullText, data.usage, finishReason)
+}
+
+function resolveStreamReasoningStage(
+  options: GenerateStreamOptions | undefined,
+): GenerationReasoningStage {
+  if (options?.reasoningStage) return options.reasoningStage
+  if (options?.responseFormat) return 'planning'
+  return 'drafting'
+}
+
+function buildStreamRequest(
+  modelId: string,
+  messages: StreamMessage[],
+  options: GenerateStreamOptions | undefined,
+  extras: {
+    creativeStrategy: CreativeStrategy
+    projectSession: ProjectSessionContext | undefined
+    taskKey: CreationTaskKey | undefined
+    reasoningEffort: ReasoningEffort | undefined
+  },
+): LLMRequest {
+  const request: LLMRequest = {
+    modelId,
+    purpose: options?.purpose ?? 'generation',
+    creativeStrategy: extras.creativeStrategy,
+    reasoningStage: resolveStreamReasoningStage(options),
+    taskKey: extras.taskKey,
+    reasoningEffort: extras.reasoningEffort,
+    projectSession: extras.projectSession,
+    messages,
+    stream: true,
+    responseFormat: options?.responseFormat as { type: 'json_object' | 'text' } | undefined,
+    maxTokens: options?.maxTokens,
+  }
+  if (options?.submitTool) {
+    request.submitTool = options.submitTool
+  }
+  return request
+}
+
+export const useLLMStore = create<LLMState>()((set, get) => {
+  function patchActiveRequests(mutate: (requests: Map<string, ActiveRequest>) => void): void {
+    const requests = new Map(get().activeRequests)
+    mutate(requests)
+    set({ activeRequests: requests })
+  }
+
+  async function loadInitialState(): Promise<void> {
+    if (!ipc.isElectron) {
+      set({ loaded: true })
+      return
+    }
+    const [rawModels, defaultModelId, defaultEmbeddingModelId, config] = await Promise.all([
+      ipc.invoke('llm:list-models'),
+      ipc.invoke('llm:get-default-model'),
+      ipc.invoke('llm:get-default-embedding-model'),
+      ipc.invoke('config:get').catch(() => null),
+    ])
+    const models = normalizeModelProfiles(rawModels)
+    const configObj = config as GlobalConfig | null
+    set({
+      models,
+      defaultModelId: defaultModelId ?? firstGenerationModelId(models),
+      defaultEmbeddingModelId,
+      defaultThinkingLevel: configObj?.defaultThinkingLevel ?? 'low',
+      taskModelRouting: configObj?.taskModelRouting ?? {},
+      loaded: true,
+    })
+  }
+
+  function init(): Promise<void> {
     if (get().loaded) return Promise.resolve()
     if (initializationFlight) return initializationFlight
-
-    const flight = (async () => {
-      if (!ipc.isElectron) {
-        set({ loaded: true })
-        return
-      }
-      const [rawModels, defaultModelId, defaultEmbeddingModelId, config] = await Promise.all([
-        ipc.invoke('llm:list-models'),
-        ipc.invoke('llm:get-default-model'),
-        ipc.invoke('llm:get-default-embedding-model'),
-        ipc.invoke('config:get').catch(() => null),
-      ])
-      const models = normalizeModelProfiles(rawModels)
-      const resolvedDefaultModelId = defaultModelId
-        ?? models.find(m => m.purposes.includes('generation'))?.id
-        ?? null
-      const configObj = config as GlobalConfig | null
-      set({
-        models,
-        defaultModelId: resolvedDefaultModelId,
-        defaultEmbeddingModelId,
-        defaultThinkingLevel: configObj?.defaultThinkingLevel ?? 'low',
-        taskModelRouting: configObj?.taskModelRouting ?? {},
-        loaded: true,
-      })
-    })().finally(() => {
+    const flight = loadInitialState().finally(() => {
       if (initializationFlight === flight) initializationFlight = null
     })
     initializationFlight = flight
     return flight
-  },
+  }
 
-  loadModels: async () => {
+  async function loadModels(): Promise<void> {
     if (!ipc.isElectron) return
     const rawModels = await ipc.invoke('llm:list-models')
     set({ models: normalizeModelProfiles(rawModels) })
-  },
+  }
 
-  saveModel: async (model) => {
+  async function saveModel(model: ModelProfile): Promise<boolean> {
     const result = await ipc.invoke('llm:save-model', model)
     if (result.success) {
-      await get().loadModels()
+      await loadModels()
     } else {
       alertError('保存模型失败', { title: '模型设置保存失败' })
     }
     return result.success
-  },
+  }
 
-  deleteModel: async (modelId) => {
+  async function deleteModel(modelId: string): Promise<boolean> {
     const result = await ipc.invoke('llm:delete-model', modelId)
     if (!result.success) {
       alertError(result.error || '删除模型失败', { title: '模型删除失败' })
       return false
     }
-    await get().loadModels()
+    await loadModels()
     set({
       defaultModelId: result.defaultModelId ?? null,
       defaultEmbeddingModelId: result.defaultEmbeddingModelId ?? null,
     })
     return true
-  },
+  }
 
-  setDefaultModel: async (modelId) => {
-    try {
-      requireIpcSuccess(await ipc.invoke('llm:set-default-model', modelId), '保存默认模型')
-      set({ defaultModelId: modelId })
-      return true
-    } catch (error) {
-      alertError(String(error), { title: '模型设置保存失败' })
-      return false
-    }
-  },
+  async function setDefaultModel(modelId: string): Promise<boolean> {
+    const persisted = await persistDefaultModelId('llm:set-default-model', modelId, '保存默认模型')
+    if (persisted) set({ defaultModelId: modelId })
+    return persisted
+  }
 
-  setDefaultEmbeddingModel: async (modelId) => {
-    try {
-      requireIpcSuccess(
-        await ipc.invoke('llm:set-default-embedding-model', modelId),
-        '保存默认向量模型',
-      )
-      set({ defaultEmbeddingModelId: modelId })
-      return true
-    } catch (error) {
-      alertError(String(error), { title: '模型设置保存失败' })
-      return false
-    }
-  },
+  async function setDefaultEmbeddingModel(modelId: string): Promise<boolean> {
+    const persisted = await persistDefaultModelId(
+      'llm:set-default-embedding-model',
+      modelId,
+      '保存默认向量模型',
+    )
+    if (persisted) set({ defaultEmbeddingModelId: modelId })
+    return persisted
+  }
 
-  setDefaultThinkingLevel: async (level) => {
+  async function setDefaultThinkingLevel(level: ReasoningEffort): Promise<boolean> {
     try {
       set({ defaultThinkingLevel: level })
       if (ipc.isElectron) {
@@ -205,9 +261,9 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
       alertError(String(error), { title: '思考强度设置保存失败' })
       return false
     }
-  },
+  }
 
-  resolveTaskModelId: (taskKey: CreationTaskKey) => {
+  function resolveTaskModelId(taskKey: CreationTaskKey): string | null {
     const routing = get().taskModelRouting
     const candidateId = routing[taskKey]?.modelId?.trim()
     if (candidateId) {
@@ -217,61 +273,56 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
     return get().defaultModelId
       ?? get().models.find(m => m.purposes?.includes('generation'))?.id
       ?? null
-  },
+  }
 
-  resolveTaskThinkingLevel: (taskKey: CreationTaskKey) => {
+  function resolveTaskThinkingLevel(taskKey: CreationTaskKey): ReasoningEffort {
     const configured = get().taskModelRouting[taskKey]?.thinkingLevel
     if (configured && configured !== 'auto') {
       return configured
     }
     return get().defaultThinkingLevel ?? 'low'
-  },
+  }
 
-  setTaskConfig: async (taskKey: CreationTaskKey, taskConfig: TaskModelConfig) => {
-    const currentRouting = get().taskModelRouting
+  async function setTaskConfig(
+    taskKey: CreationTaskKey,
+    taskConfig: TaskModelConfig,
+  ): Promise<boolean> {
     const nextRouting: TaskModelRouting = {
-      ...currentRouting,
+      ...get().taskModelRouting,
       [taskKey]: taskConfig,
     }
     set({ taskModelRouting: nextRouting })
-    if (ipc.isElectron) {
-      try {
-        await ipc.invoke('config:set', { taskModelRouting: nextRouting })
-        return true
-      } catch (err) {
-        console.error('[LLMStore] Failed to save task model routing:', err)
-        return false
-      }
-    }
-    return true
-  },
+    return persistTaskRouting(nextRouting)
+  }
 
-  resetTaskModelRouting: async () => {
+  async function resetTaskModelRouting(): Promise<boolean> {
     set({ taskModelRouting: {} })
-    if (ipc.isElectron) {
-      try {
-        await ipc.invoke('config:set', { taskModelRouting: {} })
-        return true
-      } catch (err) {
-        console.error('[LLMStore] Failed to reset task model routing:', err)
-        return false
-      }
-    }
-    return true
-  },
+    return persistTaskRouting({})
+  }
 
-  generateStream: async (messages, callbacks, modelId, options) => {
+  async function generateStream(
+    messages: StreamMessage[],
+    callbacks: StreamCallbacks,
+    modelId?: string,
+    options?: GenerateStreamOptions,
+  ): Promise<string> {
     const taskKey = options?.taskKey
-    const taskModelId = taskKey ? get().resolveTaskModelId(taskKey) : null
+    const taskModelId = taskKey ? resolveTaskModelId(taskKey) : null
     const mid = modelId ?? taskModelId ?? get().defaultModelId
     if (!mid) {
       callbacks.onError?.('未配置默认模型')
       return ''
     }
 
-    const taskThinking = options?.reasoningEffort ?? (taskKey ? get().resolveTaskThinkingLevel(taskKey) : 'auto')
+    let taskThinking: ReasoningEffort | 'auto'
+    if (options?.reasoningEffort != null) {
+      taskThinking = options.reasoningEffort
+    } else if (taskKey) {
+      taskThinking = resolveTaskThinkingLevel(taskKey)
+    } else {
+      taskThinking = 'auto'
+    }
     const effectiveEffort = taskThinking === 'auto' ? undefined : taskThinking
-
     const requestId = crypto.randomUUID()
     const projectSession = options?.projectSession
       ?? readActiveProjectSession()
@@ -280,56 +331,44 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
       ?? readActiveProject()?.novelConfig.creativeStrategy
       ?? 'auto'
 
-    // 注册完成/失败事件监听
-    const unsubDone = ipc.on('llm:stream-done', (data) => {
-      if (data.requestId === requestId) {
-        if (data.artifact !== undefined) {
-          callbacks.onDone?.(data.fullText, data.usage, data.finishReason ?? 'unknown', data.artifact)
-        } else {
-          callbacks.onDone?.(data.fullText, data.usage, data.finishReason ?? 'unknown')
-        }
-        cleanup()
-      }
-    })
+    let unsubDone = (): void => {}
+    let unsubError = (): void => {}
 
-    const unsubError = ipc.on('llm:stream-error', (data) => {
-      if (data.requestId === requestId) {
-        callbacks.onError?.(data.error)
-        cleanup()
-      }
-    })
-
-    const cleanup = () => {
+    function cleanup(): void {
       unsubDone()
       unsubError()
-      const reqs = new Map(get().activeRequests)
-      reqs.delete(requestId)
-      set({ activeRequests: reqs })
+      patchActiveRequests((requests) => {
+        requests.delete(requestId)
+      })
     }
 
-    // 标记活跃请求
-    const reqs = new Map(get().activeRequests)
-    reqs.set(requestId, { status: 'running', text: '' })
-    set({ activeRequests: reqs })
+    unsubDone = ipc.on('llm:stream-done', (data) => {
+      if (data.requestId !== requestId) return
+      notifyStreamDone(callbacks, data)
+      cleanup()
+    })
+    unsubError = ipc.on('llm:stream-error', (data) => {
+      if (data.requestId !== requestId) return
+      callbacks.onError?.(data.error)
+      cleanup()
+    })
 
-    // 发起流式请求
+    patchActiveRequests((requests) => {
+      requests.set(requestId, { status: 'running', text: '' })
+    })
+
     let started: { requestId: string; started: boolean; error?: string }
     try {
-      started = await ipc.invoke('llm:generate-stream', requestId, {
-        modelId: mid,
-        purpose: options?.purpose ?? 'generation',
-        creativeStrategy,
-        reasoningStage: options?.reasoningStage
-          ?? (options?.responseFormat ? 'planning' : 'drafting'),
-        taskKey,
-        reasoningEffort: effectiveEffort,
-        projectSession,
-        messages,
-        stream: true,
-        responseFormat: options?.responseFormat as { type: 'json_object' | 'text' } | undefined,
-        maxTokens: options?.maxTokens,
-        ...(options?.submitTool ? { submitTool: options.submitTool } : {}),
-      })
+      started = await ipc.invoke(
+        'llm:generate-stream',
+        requestId,
+        buildStreamRequest(mid, messages, options, {
+          creativeStrategy,
+          projectSession,
+          taskKey,
+          reasoningEffort: effectiveEffort,
+        }),
+      )
     } catch (error) {
       cleanup()
       callbacks.onError?.(String(error))
@@ -343,19 +382,48 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
     }
 
     return requestId
-  },
+  }
 
-  cancelGeneration: async (requestId) => {
+  async function cancelGeneration(requestId: string): Promise<void> {
     await ipc.invoke('llm:cancel', requestId)
-  },
+  }
 
-  testConnection: async (model) => {
+  function testConnection(
+    model: ModelProfile,
+  ): Promise<{ success: boolean; error?: string }> {
     return ipc.invoke(
       'llm:test-connection',
       model,
       readActiveProject()?.novelConfig.creativeStrategy ?? 'auto',
     )
-  },
+  }
 
-  discoverModels: async (request) => ipc.invoke('llm:discover-models', request),
-}))
+  function discoverModels(request: ModelDiscoveryRequest): Promise<ModelDiscoveryResult> {
+    return ipc.invoke('llm:discover-models', request)
+  }
+
+  return {
+    models: [],
+    defaultModelId: null,
+    defaultEmbeddingModelId: null,
+    defaultThinkingLevel: 'low',
+    taskModelRouting: {},
+    activeRequests: new Map(),
+    loaded: false,
+    init,
+    loadModels,
+    saveModel,
+    deleteModel,
+    setDefaultModel,
+    setDefaultEmbeddingModel,
+    setDefaultThinkingLevel,
+    resolveTaskModelId,
+    resolveTaskThinkingLevel,
+    setTaskConfig,
+    resetTaskModelRouting,
+    generateStream,
+    cancelGeneration,
+    testConnection,
+    discoverModels,
+  }
+})

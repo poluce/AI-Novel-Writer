@@ -1176,13 +1176,6 @@ describe('GenerateCharactersCommand structured roster seam', () => {
       ...context,
       uiLocale: 'en-US' as const,
       data: { stepGuidance: { characters: '必须塑造八名群像角色，覆盖不同立场且关系闭合。' } },
-      writingSkills: Object.freeze({
-        planning: Object.freeze({
-          skillId: 'user:character-planning', name: 'Character causality', stage: 'planning' as const,
-          source: 'user' as const, writingLanguage: 'zh-CN' as const,
-          content: '每个角色的选择必须产生可追踪的代价。', utf8Bytes: 57,
-        }),
-      }),
       cancelled: false,
     }
     const stepCallbacks = callbacks
@@ -1197,7 +1190,7 @@ describe('GenerateCharactersCommand structured roster seam', () => {
     const manifestPrompt = manifestMessages?.map(message => message.content).join('\n') ?? ''
     expect(manifestPrompt).not.toMatch(/appearance|currentState|"?entries"?/u)
     expect(manifestPrompt).toContain('自定义角色规划定位：重视人物选择与代价。')
-    expect(manifestPrompt).toContain('【补充写作 Skill：Character causality】')
+    expect(manifestPrompt).not.toContain('【补充写作 Skill：')
     expect(manifestPrompt).toContain('自定义角色指导：每个角色必须有独立欲望。')
     expect(manifestPrompt).toContain('{"slots":[...]}')
     expect(manifestPrompt).toContain('至少一个 protagonist')
@@ -1208,9 +1201,7 @@ describe('GenerateCharactersCommand structured roster seam', () => {
     const detailSystem = generateStream.mock.calls[1]?.[0].find(message => message.role === 'system')?.content ?? ''
     expect(detailSystem).toContain('自定义角色规划定位：重视人物选择与代价。')
     expect(detailPrompt).toContain('自定义角色指导：每个角色必须有独立欲望。')
-    expect(detailPrompt).toContain('【补充写作 Skill：Character causality】')
-    expect(detailPrompt.indexOf('每个角色的选择必须产生可追踪的代价。'))
-      .toBeLessThan(detailPrompt.indexOf('【不可变角色详情 JSON 合同】'))
+    expect(detailPrompt).not.toContain('【补充写作 Skill：')
     expect(detailPrompt).toContain('【不可变角色详情 JSON 合同】')
     expect(detailPrompt).not.toContain('## 核心角色档案')
     expect(detailPrompt).toContain('保持每个字段具体、紧凑且与叙事有关')

@@ -11,9 +11,6 @@ import { createReadProjectStateTool } from './tools/read-project-state.tool'
 import { createSearchKnowledgeTool } from './tools/search-knowledge.tool'
 import { createManageKnowledgeBaseTool } from './tools/manage-knowledge-base.tool'
 import { createReadFileTool } from './tools/read-file.tool'
-import { createInspectWritingSkillTool } from './tools/inspect-writing-skill.tool'
-import { createLoadWritingSkillTool } from './tools/load-writing-skill.tool'
-import { createInstallWritingSkillTool } from './tools/install-writing-skill.tool'
 import { createManageSkillsTool } from './tools/manage-skills.tool'
 import { createOpenEditorTool } from './tools/open-editor.tool'
 import { createProposeChapterBlueprintTool } from './tools/propose-chapter-blueprint.tool'
@@ -56,17 +53,12 @@ export function buildAgentTools(
     createSearchKnowledgeTool(language),
     createManageKnowledgeBaseTool(language),
     createReadFileTool(language),
-    createInstallWritingSkillTool(language),
     createOpenEditorTool(language, rendererAction),
     createProposeChapterBlueprintTool(language),
     createManageCharactersTool(language, rendererAction),
     createManageMcpTool(language),
     createWebFetchTool(language),
-    createInspectWritingSkillTool(language),
-    // 统一技能管理（全生命周期：增删改查、读取正文、阶段绑定、远程安装）
     createManageSkillsTool(language, skills, skillRoots),
-    // 渐进式披露兼容入口：目录进提示词，正文由模型按需取。
-    createLoadWritingSkillTool(language, skills, skillRoots),
     ...buildMcpAgentTools(language),
   ].map(withExecutionMode)
 }
@@ -91,6 +83,5 @@ export function confirmationToolNames(): ReadonlySet<string> {
     'manage_mcp',
     'manage_skills',
     'manage_knowledge_base',
-    'install_writing_skill',
   ])
 }

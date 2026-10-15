@@ -8,7 +8,7 @@ import {
 } from '@earendil-works/pi-agent-core'
 import { NodeExecutionEnv } from '@earendil-works/pi-agent-core/harness/env/nodejs'
 
-import { inspectWritingSkillMarkdown } from '../../src/shared/writing-skills'
+import { inspectWritingSkillMarkdown, type WritingSkillInspection } from '../../src/shared/writing-skills'
 import type {
   WritingSkillCatalog,
   WritingSkillCatalogRecord,
@@ -50,8 +50,7 @@ export function projectSkillsRoot(projectPath: string): string {
  * 走 `loadSourcedSkills` 而不是自家扫描，是为了拿到规范的行为：YAML
  * frontmatter、忽略文件（`.gitignore` / `.ignore` / `.fdignore`）、跳过点目录
  * 与 `node_modules`、技能根目录下直接放 `.md`、以及逐条诊断（名字不符规范、
- * 描述超长等）。应用扩展字段（`display_name` / `version` / `language` /
- * `stage`）与写作技能的兼容性判定仍由 `inspectWritingSkillMarkdown` 补上。
+ * 描述超长等）。应用扩展字段与写作技能兼容性仍由 `inspectWritingSkillMarkdown` 补上。
  */
 export async function loadWritingSkillCatalog(options: {
   projectPath?: string | null
@@ -134,7 +133,7 @@ function toCatalogRecord(skill: Skill, source: WritingSkillCatalogSource): Writi
   }
 }
 
-function readInspection(filePath: string) {
+function readInspection(filePath: string): WritingSkillInspection | null {
   try {
     return inspectWritingSkillMarkdown(fs.readFileSync(filePath, 'utf8'))
   } catch (error) {

@@ -34,7 +34,7 @@ export interface GenerationCompletionRequest {
   submitTool?: SubmitToolName
 }
 
-/** Renderer adapter for the authoritative main-process model lease seam. */
+/** Renderer adapter that resolves the current model id and runs completions. */
 export interface GenerationRuntimeEnvironment {
   snapshotDefaultModelId(taskKey?: CreationTaskKey): string | null
   snapshotCreativeStrategy?(): CreativeStrategy
@@ -57,7 +57,7 @@ export interface CreateGenerationRuntimeOptions {
   modelId?: string
   /** Optional creation task key to route stage-specific models. */
   taskKey?: CreationTaskKey
-  /** Project identity captured by the caller before any asynchronous lease work. */
+  /** Project identity captured by the caller before asynchronous preparation. */
   projectSession?: ProjectSessionContext
   /** Project writing policy captured by the caller before asynchronous preparation. */
   creativeStrategy?: CreativeStrategy
@@ -148,12 +148,7 @@ function createDefaultEnvironment(): GenerationRuntimeEnvironment {
           return
         }
 
-        const effectiveTaskKey = request.taskKey
-          ?? (request.reasoningStage === 'drafting' ? 'drafting'
-              : request.reasoningStage === 'review' ? 'review'
-              : request.reasoningStage === 'general' ? 'assistant'
-              : request.purpose.includes('field') || request.purpose.includes('core-seed') || request.purpose.includes('world-building') ? 'outline'
-              : 'planning')
+        const effectiveTaskKey = resolveEffectiveTaskKey(request)
 
         llmStore.generateStream(
           [...request.messages],
@@ -179,6 +174,21 @@ function createDefaultEnvironment(): GenerationRuntimeEnvironment {
       })
     },
   }
+}
+
+function resolveEffectiveTaskKey(request: GenerationCompletionRequest): CreationTaskKey {
+  if (request.taskKey) return request.taskKey
+  if (request.reasoningStage === 'drafting') return 'drafting'
+  if (request.reasoningStage === 'review') return 'review'
+  if (request.reasoningStage === 'general') return 'assistant'
+  if (
+    request.purpose.includes('field')
+    || request.purpose.includes('core-seed')
+    || request.purpose.includes('world-building')
+  ) {
+    return 'outline'
+  }
+  return 'planning'
 }
 
 function freezeBudget(budget: GenerationRuntimeBudget): Readonly<GenerationRuntimeBudget> {

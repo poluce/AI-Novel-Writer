@@ -49,7 +49,7 @@ function arrangeConfigGenerationJourney(responses: Array<{ content: string; fini
   const generateStream = vi.fn(async (
     _messages: Array<{ content: string }>,
     callbacks: { onDone?: (content: string, usage: undefined, finishReason: 'length' | 'stop') => void },
-    ...execution: [modelId?: string, options?: Record<string, unknown>]
+    ...execution: [modelId?: string, options?: object]
   ) => {
     void execution
     const response = responses.shift()

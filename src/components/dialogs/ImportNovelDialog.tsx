@@ -30,6 +30,32 @@ interface ImportNovelDialogProps {
   onClose: () => void
 }
 
+function importConfirmLabel(
+  importing: boolean,
+  purpose: ImportPurpose,
+  targetMode: 'new' | 'current',
+  chapterCount: number,
+  text: (zhCNText: string, enUSText: string) => string,
+): string {
+  if (importing) {
+    if (purpose === 'author-manuscript') return text('导入中...', 'Importing...')
+    return text('拆解中...', 'Analyzing...')
+  }
+  if (purpose === 'author-manuscript') {
+    return text(`确认导入（${chapterCount} 章）`, `Confirm import (${chapterCount} chapters)`)
+  }
+  if (targetMode === 'current') {
+    return text(
+      `导入当前项目（${chapterCount} 章）`,
+      `Import into current project (${chapterCount} chapters)`,
+    )
+  }
+  return text(
+    `开始拆解仿写（${chapterCount} 章）`,
+    `Start analysis (${chapterCount} chapters)`,
+  )
+}
+
 /** 小说拆解与仿写向导对话框 */
 export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogProps) {
   const createProject = useProjectStore((s) => s.createProject)
@@ -910,13 +936,13 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
             }
           >
             <FileUp size={14} />
-            {importing
-              ? (purpose === 'author-manuscript' ? text('导入中...', 'Importing...') : text('拆解中...', 'Analyzing...'))
-              : purpose === 'author-manuscript'
-                ? text(`确认导入（${inspection?.chapterCount ?? 0} 章）`, `Confirm import (${inspection?.chapterCount ?? 0} chapters)`)
-              : targetMode === 'current'
-                ? text(`导入当前项目（${inspection?.chapterCount ?? 0} 章）`, `Import into current project (${inspection?.chapterCount ?? 0} chapters)`)
-                : text(`开始拆解仿写（${inspection?.chapterCount ?? 0} 章）`, `Start analysis (${inspection?.chapterCount ?? 0} chapters)`)}
+            {importConfirmLabel(
+              importing,
+              purpose,
+              targetMode,
+              inspection?.chapterCount ?? 0,
+              text,
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

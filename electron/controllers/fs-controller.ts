@@ -49,11 +49,10 @@ function text(zhCNText: string, enUSText: string): string {
 }
 
 function isMissingFileError(error: unknown): boolean {
-  const code = typeof error === 'object'
-    && error !== null
-    && 'code' in error
-    ? (error as { code?: unknown }).code
-    : undefined
+  let code: unknown
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    code = error.code
+  }
   const message = error instanceof Error ? error.message : ''
   return code === 'ENOENT'
     || code === 'SECURE_FS_NOT_FOUND'
@@ -115,10 +114,17 @@ function projectFilesystemFailure(
     channel === 'fs:write-file'
     || channel === 'fs:mkdir'
     || channel === 'fs:write-json'
-  ) return {
-    success: false,
-    ...(channel === 'fs:write-file' ? { commitState } : {}),
-    error: accessMessage ?? text('无法写入项目文件。', 'Could not write the project file.'),
+  ) {
+    const failure: {
+      success: false
+      error: string
+      commitState?: FileWriteCommitState
+    } = {
+      success: false,
+      error: accessMessage ?? text('无法写入项目文件。', 'Could not write the project file.'),
+    }
+    if (channel === 'fs:write-file') failure.commitState = commitState
+    return failure
   }
   throw error
 }
@@ -212,7 +218,7 @@ async function readDirRecursive(
 
 export function registerFSController(
   fileSystem: WindowsSafeFileSystem = windowsSafeFileSystem,
-) {
+): void {
   // 所有项目 fs:* 通道统一以当前租约与 canonical 项目根为权限边界。
   const ipcMain = { handle: registerFilesystemHandler }
   // 安全的异步读取

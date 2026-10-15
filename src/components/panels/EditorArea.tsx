@@ -39,6 +39,23 @@ import {
 import { savePhysicalChapterForSession } from './editor-area-physical-save'
 import '../editor/novel-editor.css'
 
+function batchCloseConfirmDescription(
+  tabIds: string[] | null,
+  tabs: EditorTab[],
+  text: (zhCNText: string, enUSText: string) => string,
+): string {
+  const ids = tabIds ?? []
+  const dirtyCount = ids.filter(id => tabs.find(tab => tab.id === id)?.dirty).length
+  const total = ids.length
+  if (dirtyCount > 0) {
+    return text(
+      `即将关闭 ${total} 个文件，其中 ${dirtyCount} 个有未保存的修改。是否放弃修改并全部关闭？`,
+      `Close ${total} files? ${dirtyCount} have unsaved changes that will be discarded.`,
+    )
+  }
+  return text(`即将关闭 ${total} 个文件。`, `Close ${total} files.`)
+}
+
 // ─── 正文章节编辑器包装层（含字数信息栏） ─────────────────────────────────────────────
 function ProseEditorWrapper({
   tab,
@@ -923,15 +940,7 @@ export default function EditorArea() {
           <DialogHeader>
             <DialogTitle>{text('关闭多个文件', 'Close multiple files')}</DialogTitle>
             <DialogDescription>
-              {(() => {
-                const dirtyCount = (batchCloseConfirm ?? []).filter(
-                  id => tabs.find(t => t.id === id)?.dirty
-                ).length
-                const total = (batchCloseConfirm ?? []).length
-                return dirtyCount > 0
-                  ? text(`即将关闭 ${total} 个文件，其中 ${dirtyCount} 个有未保存的修改。是否放弃修改并全部关闭？`, `Close ${total} files? ${dirtyCount} have unsaved changes that will be discarded.`)
-                  : text(`即将关闭 ${total} 个文件。`, `Close ${total} files.`)
-              })()}
+              {batchCloseConfirmDescription(batchCloseConfirm, tabs, text)}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">

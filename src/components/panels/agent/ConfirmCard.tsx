@@ -215,16 +215,37 @@ function generateDescription(
         `Will edit file: ${args.path ?? 'Unknown path'} (${edits.length} change(s))\n"${preview(String(first.oldText ?? ''))}"\n→ "${preview(String(first.newText ?? ''))}"`,
       )
     }
-    case 'install_writing_skill':
+    case 'manage_skills': {
+      const action = String(args.action ?? '')
+      if (action === 'install' || args.source_url) {
+        return text(
+          `将安装写作技能：${args.source_url ?? '未知来源'}`,
+          `Will install writing skill: ${args.source_url ?? 'Unknown source'}`,
+        )
+      }
+      if (action === 'delete') {
+        return text(
+          `将删除写作技能：${args.name ?? '未知技能'}`,
+          `Will delete writing skill: ${args.name ?? 'Unknown skill'}`,
+        )
+      }
+      if (action === 'create') {
+        return text(
+          `将创建写作技能：${args.name ?? '未知技能'}`,
+          `Will create writing skill: ${args.name ?? 'Unknown skill'}`,
+        )
+      }
+      if (action === 'update') {
+        return text(
+          `将更新写作技能：${args.name ?? '未知技能'}`,
+          `Will update writing skill: ${args.name ?? 'Unknown skill'}`,
+        )
+      }
       return text(
-        `将安装写作技能：${args.source_url ?? '未知来源'}`,
-        `Will install writing skill: ${args.source_url ?? 'Unknown source'}`,
+        `将执行技能操作：${action || 'manage_skills'}`,
+        `Will run skill operation: ${action || 'manage_skills'}`,
       )
-    case 'bind_writing_skill':
-      return text(
-        `将把技能绑定到工作流阶段：${args.skill_id ?? '未知技能'} → ${args.stage ?? '未知阶段'}`,
-        `Will bind a skill to a workflow stage: ${args.skill_id ?? 'Unknown skill'} → ${args.stage ?? 'Unknown stage'}`,
-      )
+    }
     case 'replace_draft_excerpt': {
       return text(
         `将替换第 ${args.chapter_number ?? '？'} 章草稿中的一段原文`,

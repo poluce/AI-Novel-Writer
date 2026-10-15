@@ -367,10 +367,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     })
     set(state => {
       const filtered = state.conversations.filter(c => c.id !== id)
-      // 如果删除的是当前会话，激活下一条或 null
-      const nextId = state.activeConversationId === id
-        ? (filtered[0]?.id ?? null)
-        : state.activeConversationId
+      let nextId = state.activeConversationId
+      if (nextId === id) nextId = filtered[0]?.id ?? null
       return { conversations: filtered, activeConversationId: nextId }
     })
   },
@@ -595,7 +593,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       const skill = skillInvocation.skill
       const displayName = skillDisplayName(skill, executionContext.writingLanguage)
       const inputStr = skillInvocation.input ? `\n${modelText('输入参数：', 'Arguments: ')}${skillInvocation.input}` : ''
-      content = `${modelText('[用户请求调用技能：', '[The user invoked skill: ')}${skill.metadata.name} (${displayName})]${inputStr}\n\n${modelText('请根据需要通过 load_writing_skill 加载并执行该技能要求。', 'Please load and execute this skill via load_writing_skill as appropriate.')}`
+      content = `${modelText('[用户请求调用技能：', '[The user invoked skill: ')}${skill.metadata.name} (${displayName})]${inputStr}\n\n${modelText('请根据需要通过 manage_skills（action: "load"）加载并执行该技能要求。', 'Please load and execute this skill via manage_skills (action: "load") as appropriate.')}`
     }
 
     // 构建用户消息
@@ -764,11 +762,15 @@ function updateInflightAssistantMsg(
   const msgId = inflightTurns.get(conversationId)?.assistantMsgId
   if (!msgId) return
   useAgentStore.setState(state => ({
-    conversations: state.conversations.map(c =>
-      c.id === conversationId
-        ? { ...c, messages: c.messages.map(m => m.id === msgId ? updater(m) : m) }
-        : c
-    ),
+    conversations: state.conversations.map(conversation => {
+      if (conversation.id !== conversationId) return conversation
+      return {
+        ...conversation,
+        messages: conversation.messages.map(message => (
+          message.id === msgId ? updater(message) : message
+        )),
+      }
+    }),
   }))
 }
 
@@ -780,7 +782,6 @@ export function handleAgentEvent({ conversationId, event }: {
   conversationId: string
   event: PiAgentEvent
 }): void {
-  {
     if (!inflightTurns.has(conversationId)) return
     switch (event.type) {
       case 'text_delta':
@@ -842,7 +843,6 @@ export function handleAgentEvent({ conversationId, event }: {
         useAgentStore.setState({ activeRequestId: null })
         break
     }
-  }
 }
 
 if (typeof window !== 'undefined') {

@@ -27,6 +27,29 @@ import {
 
 type ManuscriptFileNode = FileNode & { chapterTitle?: string }
 
+function manuscriptCleanupLabel(
+  operation: ChapterDeletionOperation,
+  requiresLegacyConfirmation: boolean,
+  text: (zhCNText: string, enUSText: string) => string,
+): string {
+  if (requiresLegacyConfirmation) {
+    return text(
+      `第${operation.chapterNumber}章待人工确认知识投影`,
+      `Chapter ${operation.chapterNumber} awaits knowledge-projection confirmation`,
+    )
+  }
+  if (operation.status === 'failed') {
+    return text(
+      `第${operation.chapterNumber}章清理失败`,
+      `Chapter ${operation.chapterNumber} cleanup failed`,
+    )
+  }
+  return text(
+    `第${operation.chapterNumber}章清理待完成`,
+    `Chapter ${operation.chapterNumber} cleanup pending`,
+  )
+}
+
 /**
  * 已定稿 metadata 优先；旧定稿再 fallback 到蓝图；两者都没有就用界面兜底名。
  *
@@ -295,9 +318,7 @@ export default function ManuscriptGroup({ files, projectPath }: { files: Manuscr
               >
                 <AlertTriangle size={11} style={{ flexShrink: 0 }} />
                 <span className="text-xs flex-1 truncate">
-                  {requiresLegacyConfirmation
-                    ? text(`第${operation.chapterNumber}章待人工确认知识投影`, `Chapter ${operation.chapterNumber} awaits knowledge-projection confirmation`)
-                    : text(`第${operation.chapterNumber}章清理${operation.status === 'failed' ? '失败' : '待完成'}`, `Chapter ${operation.chapterNumber} cleanup ${operation.status === 'failed' ? 'failed' : 'pending'}`)}
+                  {manuscriptCleanupLabel(operation, requiresLegacyConfirmation, text)}
                 </span>
                 <button
                   type="button"

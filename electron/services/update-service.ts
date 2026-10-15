@@ -210,8 +210,12 @@ export class UpdateService {
     const reminderState = availableUpdate
       ? this.reminderStateFor(availableUpdate.version)
       : { reminderUntil: undefined, isReminderDeferred: false }
+    let status: UpdateStatus = 'disabled'
+    if (options.isPackaged) {
+      status = availableUpdate ? 'available' : 'idle'
+    }
     this.state = {
-      status: options.isPackaged ? (availableUpdate ? 'available' : 'idle') : 'disabled',
+      status,
       currentVersion: options.currentVersion,
       ...(availableUpdate ? {
         availableVersion: availableUpdate.version,

@@ -4,6 +4,10 @@ import { describe, expect, it } from 'vitest'
 
 const brandingSources = [
   'src/components/settings/SettingsModal.tsx',
+  'src/components/settings/GenerationModelSettings.tsx',
+  'src/components/settings/ProxySettings.tsx',
+  'src/components/settings/EditorSettings.tsx',
+  'src/components/settings/AboutSettings.tsx',
   'electron/main.ts',
   'package.json',
   'pnpm-lock.yaml',
@@ -13,6 +17,10 @@ const brandingSources = [
 
 const visibleSettingsSources = [
   'src/components/settings/SettingsModal.tsx',
+  'src/components/settings/GenerationModelSettings.tsx',
+  'src/components/settings/ProxySettings.tsx',
+  'src/components/settings/EditorSettings.tsx',
+  'src/components/settings/AboutSettings.tsx',
   'src/components/settings/PromptSettings.tsx',
 ]
 

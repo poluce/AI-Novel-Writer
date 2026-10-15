@@ -19,6 +19,22 @@ export const MANAGE_KNOWLEDGE_BASE_ACTIONS = [
 
 export type ManageKnowledgeBaseAction = typeof MANAGE_KNOWLEDGE_BASE_ACTIONS[number]
 
+type LanguageText = (zhCN: string, enUS: string) => string
+
+type ManageKnowledgeBaseParams = {
+  action?: ManageKnowledgeBaseAction
+  query?: string
+  top_k?: number
+  file_name?: string
+  text?: string
+  doc_id?: string
+}
+
+type ToolOutput = {
+  content: Array<{ type: 'text'; text: string }>
+  details: unknown
+}
+
 const Schema = Type.Object({
   action: Type.Optional(StringEnum(MANAGE_KNOWLEDGE_BASE_ACTIONS, {
     description: '知识库操作类型：' +
@@ -60,11 +76,210 @@ function extractErrorMessage(result: unknown): string {
   return 'Unknown error'
 }
 
-function formatVectorStatus(dimension: number, text: (zh: string, en: string) => string): string {
+function formatVectorStatus(dimension: number, text: LanguageText): string {
   if (dimension > 0) {
     return text(`已启用（维度: ${dimension}）`, `Enabled (dimension: ${dimension})`)
   }
   return text('未配置（当前为 BM25 全文检索模式）', 'Not configured (currently in BM25 FTS mode)')
+}
+
+function textOutput(body: string, details: unknown): ToolOutput {
+  return {
+    content: [{ type: 'text', text: body }],
+    details,
+  }
+}
+
+function requireProjectPath(text: LanguageText): string {
+  const projectPath = getCurrentProjectPath()
+  if (!projectPath) {
+    throw new Error(text('未打开小说项目', 'No novel project is open'))
+  }
+  return projectPath
+}
+
+function resolveAction(params: ManageKnowledgeBaseParams): ManageKnowledgeBaseAction {
+  if (params.action) return params.action
+  if (params.query) return 'search'
+  if (params.text || params.file_name) return 'add_text'
+  return 'list'
+}
+
+async function handleSearch(
+  params: ManageKnowledgeBaseParams,
+  projectPath: string,
+  text: LanguageText,
+): Promise<ToolOutput> {
+  const query = params.query?.trim()
+  if (!query) {
+    throw new Error(text('缺少 query 参数（搜索词或问题）', 'The query parameter is required for search'))
+  }
+  const topK = params.top_k ?? 5
+
+  const embConfig = getEmbeddingConfig()
+  const results = await knowledgeBaseLoader.run((kb) => {
+    if (embConfig) {
+      return kb.searchKnowledge(query, projectPath, embConfig.protocol, embConfig.model, topK)
+    }
+    return kb.searchKnowledgeFTS(query, projectPath, topK)
+  })
+
+  if (!Array.isArray(results)) {
+    throw new Error(text('知识库搜索模块暂不可用', 'Knowledge base module is currently unavailable'))
+  }
+
+  if (results.length === 0) {
+    return textOutput(
+      text(
+        '知识库中未找到相关内容。可尝试更换搜索词，或使用 action: "list" 查看已收录的参考文档。',
+        'No relevant results found in knowledge base. Try different keywords, or use action: "list" to check stored documents.',
+      ),
+      { total: 0 },
+    )
+  }
+
+  const formatted = results.map((r, i) => text(
+    `### 结果 ${i + 1} (相似度: ${r.score.toFixed(2)})\n**来源**: ${r.fileName}\n\n${r.text}`,
+    `### Result ${i + 1} (Score: ${r.score.toFixed(2)})\n**Source**: ${r.fileName}\n\n${r.text}`,
+  )).join('\n\n---\n\n')
+
+  return textOutput(
+    `${text(`## 知识库检索结果（共 ${results.length} 条）：`, `## Knowledge Base Search Results (${results.length} items):`)}\n\n${formatted}`,
+    { total: results.length, results },
+  )
+}
+
+async function handleList(projectPath: string, text: LanguageText): Promise<ToolOutput> {
+  const docs = await knowledgeBaseLoader.run((kb) => kb.listDocuments(projectPath))
+  if (!Array.isArray(docs)) {
+    throw new Error(text('知识库模块暂不可用', 'Knowledge base module is currently unavailable'))
+  }
+
+  if (docs.length === 0) {
+    return textOutput(
+      text(
+        '当前知识库为空，暂未导入任何参考资料。可使用 action: "add_text" 将考据设定保存入库。',
+        'Knowledge base is currently empty. Use action: "add_text" to store reference documents.',
+      ),
+      { total: 0, documents: [] },
+    )
+  }
+
+  const rows = docs.map((doc, idx) => {
+    const dateStr = doc.importedAt ? new Date(doc.importedAt).toLocaleDateString() : ''
+    return text(
+      `${idx + 1}. **${doc.fileName}** (ID: \`${doc.id}\` · ${doc.chunkCount} 个切块${dateStr ? ` · 导入于 ${dateStr}` : ''})`,
+      `${idx + 1}. **${doc.fileName}** (ID: \`${doc.id}\` · ${doc.chunkCount} chunks${dateStr ? ` · ${dateStr}` : ''})`,
+    )
+  })
+
+  return textOutput(
+    `${text(`## 项目知识库文档清单（共 ${docs.length} 篇）：`, `## Knowledge Base Documents (${docs.length} total):`)}\n\n${rows.join('\n')}`,
+    { total: docs.length, documents: docs },
+  )
+}
+
+async function handleAddText(
+  params: ManageKnowledgeBaseParams,
+  projectPath: string,
+  text: LanguageText,
+): Promise<ToolOutput> {
+  if (!params.file_name?.trim()) {
+    throw new Error(text('缺少 file_name 参数（如 "历史考据.md"）', 'The file_name parameter is required'))
+  }
+  const fileName = ensureTextFileName(params.file_name)
+
+  const rawText = params.text?.trim()
+  if (!rawText) {
+    throw new Error(text('缺少 text 参数（要存入知识库的文本内容）', 'The text parameter is required'))
+  }
+
+  const embConfig = getEmbeddingConfig()
+  const result = await knowledgeBaseLoader.run((kb) => {
+    return kb.importText(
+      rawText,
+      fileName,
+      projectPath,
+      embConfig?.protocol ?? 'openai',
+      embConfig?.model ?? { baseUrl: '', apiKey: '', modelName: '' },
+    )
+  })
+
+  if (!result || typeof result !== 'object' || !('success' in result) || !result.success) {
+    const err = extractErrorMessage(result)
+    throw new Error(text(`存入知识库失败: ${err}`, `Failed to store into knowledge base: ${err}`))
+  }
+
+  return textOutput(
+    text(
+      `成功将参考文档“${fileName}”存入项目知识库（切分为 ${result.chunkCount ?? 0} 个知识切块，文档 ID: \`${result.docId}\`）。后续可通过语义检索随时调取。`,
+      `Successfully stored document "${fileName}" into knowledge base (${result.chunkCount ?? 0} chunks, Doc ID: \`${result.docId}\`).`,
+    ),
+    { fileName, docId: result.docId, chunkCount: result.chunkCount },
+  )
+}
+
+async function handleDelete(
+  params: ManageKnowledgeBaseParams,
+  projectPath: string,
+  text: LanguageText,
+): Promise<ToolOutput> {
+  let targetDocId = params.doc_id?.trim()
+  let targetFileName = params.file_name?.trim()
+
+  if (!targetDocId && targetFileName) {
+    const fileName = targetFileName
+    const docs = await knowledgeBaseLoader.run((kb) => kb.listDocuments(projectPath))
+    if (Array.isArray(docs)) {
+      const matched = docs.find((d) => d.fileName === fileName || d.fileName.startsWith(fileName))
+      if (matched) {
+        targetDocId = matched.id
+        targetFileName = matched.fileName
+      }
+    }
+  }
+
+  if (!targetDocId) {
+    throw new Error(text(
+      '缺少 doc_id 或有效的 file_name 参数（无法确定要删除的文档）',
+      'The doc_id or valid file_name parameter is required to delete a document',
+    ))
+  }
+
+  const removeRes = await knowledgeBaseLoader.run((kb) => kb.removeDocument(targetDocId, projectPath))
+  if (removeRes !== true) {
+    throw new Error(text(`删除文档失败（Doc ID: ${targetDocId}）`, `Failed to delete document (Doc ID: ${targetDocId})`))
+  }
+
+  return textOutput(
+    text(
+      `已成功从知识库中删除文档（${targetFileName ? `“${targetFileName}”，` : ''}ID: \`${targetDocId}\`）。`,
+      `Successfully deleted document from knowledge base (${targetFileName ? `"${targetFileName}", ` : ''}ID: \`${targetDocId}\`).`,
+    ),
+    { docId: targetDocId, fileName: targetFileName },
+  )
+}
+
+async function handleStats(projectPath: string, text: LanguageText): Promise<ToolOutput> {
+  const stats = await knowledgeBaseLoader.run((kb) => kb.getKnowledgeStats(projectPath))
+  if (!stats || typeof stats !== 'object' || !('documentCount' in stats)) {
+    throw new Error(text('无法获取知识库统计信息', 'Failed to retrieve knowledge base stats'))
+  }
+
+  const embConfig = getEmbeddingConfig()
+  const vectorStatus = formatVectorStatus(stats.vectorDimension, text)
+  const embeddingLine = embConfig
+    ? `- ${text('当前嵌入模型', 'Embedding model')}: \`${embConfig.model.modelName}\` (${embConfig.protocol})\n`
+    : ''
+
+  return textOutput(
+    `${text('## 项目知识库统计信息：', '## Knowledge Base Statistics:')}\n` +
+      `- ${text('文档总数', 'Document count')}: **${stats.documentCount}**\n` +
+      `- ${text('切块总数', 'Total chunks')}: **${stats.totalChunks}**\n` +
+      `- ${text('向量检索状态', 'Vector status')}: ${vectorStatus}\n` +
+      embeddingLine,
+    { stats, embConfig: embConfig ? { protocol: embConfig.protocol, model: embConfig.model.modelName } : null },
+  )
 }
 
 /**
@@ -83,7 +298,9 @@ function formatVectorStatus(dimension: number, text: (zh: string, en: string) =>
 export function createManageKnowledgeBaseTool(
   language: WritingLanguage,
 ): AgentTool<typeof Schema, unknown> {
-  const text = (zhCN: string, enUS: string) => writingLanguageText(language, zhCN, enUS)
+  function text(zhCN: string, enUS: string): string {
+    return writingLanguageText(language, zhCN, enUS)
+  }
 
   return {
     name: 'manage_knowledge_base',
@@ -94,212 +311,20 @@ export function createManageKnowledgeBaseTool(
     ),
     parameters: Schema,
     execute: async (_id, params) => {
-      const projectPath = getCurrentProjectPath()
-      if (!projectPath) {
-        throw new Error(text('未打开小说项目', 'No novel project is open'))
-      }
-
-      // 智能识别默认动作
-      let action = params.action as ManageKnowledgeBaseAction | undefined
-      if (!action) {
-        if (params.query) {
-          action = 'search'
-        } else if (params.text || params.file_name) {
-          action = 'add_text'
-        } else {
-          action = 'list'
-        }
-      }
+      const projectPath = requireProjectPath(text)
+      const action = resolveAction(params)
 
       switch (action) {
-        // ===== 1. 混合检索（语义 + 全文） =====
-        case 'search': {
-          const query = params.query?.trim()
-          if (!query) {
-            throw new Error(text('缺少 query 参数（搜索词或问题）', 'The query parameter is required for search'))
-          }
-          const topK = params.top_k ?? 5
-
-          const embConfig = getEmbeddingConfig()
-          const results = await knowledgeBaseLoader.run((kb) => {
-            if (embConfig) {
-              return kb.searchKnowledge(query, projectPath, embConfig.protocol, embConfig.model, topK)
-            }
-            return kb.searchKnowledgeFTS(query, projectPath, topK)
-          })
-
-          if (!Array.isArray(results)) {
-            throw new Error(text('知识库搜索模块暂不可用', 'Knowledge base module is currently unavailable'))
-          }
-
-          if (results.length === 0) {
-            return {
-              content: [{
-                type: 'text',
-                text: text(
-                  '知识库中未找到相关内容。可尝试更换搜索词，或使用 action: "list" 查看已收录的参考文档。',
-                  'No relevant results found in knowledge base. Try different keywords, or use action: "list" to check stored documents.',
-                ),
-              }],
-              details: { total: 0 },
-            }
-          }
-
-          const formatted = results.map((r, i) => text(
-            `### 结果 ${i + 1} (相似度: ${r.score.toFixed(2)})\n**来源**: ${r.fileName}\n\n${r.text}`,
-            `### Result ${i + 1} (Score: ${r.score.toFixed(2)})\n**Source**: ${r.fileName}\n\n${r.text}`,
-          )).join('\n\n---\n\n')
-
-          return {
-            content: [{
-              type: 'text',
-              text: `${text(`## 知识库检索结果（共 ${results.length} 条）：`, `## Knowledge Base Search Results (${results.length} items):`)}\n\n${formatted}`,
-            }],
-            details: { total: results.length, results },
-          }
-        }
-
-        // ===== 2. 列出所有文档 =====
-        case 'list': {
-          const docs = await knowledgeBaseLoader.run((kb) => kb.listDocuments(projectPath))
-          if (!Array.isArray(docs)) {
-            throw new Error(text('知识库模块暂不可用', 'Knowledge base module is currently unavailable'))
-          }
-
-          if (docs.length === 0) {
-            return {
-              content: [{
-                type: 'text',
-                text: text(
-                  '当前知识库为空，暂未导入任何参考资料。可使用 action: "add_text" 将考据设定保存入库。',
-                  'Knowledge base is currently empty. Use action: "add_text" to store reference documents.',
-                ),
-              }],
-              details: { total: 0, documents: [] },
-            }
-          }
-
-          const rows = docs.map((doc, idx) => {
-            const dateStr = doc.importedAt ? new Date(doc.importedAt).toLocaleDateString() : ''
-            return text(
-              `${idx + 1}. **${doc.fileName}** (ID: \`${doc.id}\` · ${doc.chunkCount} 个切块${dateStr ? ` · 导入于 ${dateStr}` : ''})`,
-              `${idx + 1}. **${doc.fileName}** (ID: \`${doc.id}\` · ${doc.chunkCount} chunks${dateStr ? ` · ${dateStr}` : ''})`,
-            )
-          })
-
-          return {
-            content: [{
-              type: 'text',
-              text: `${text(`## 项目知识库文档清单（共 ${docs.length} 篇）：`, `## Knowledge Base Documents (${docs.length} total):`)}\n\n${rows.join('\n')}`,
-            }],
-            details: { total: docs.length, documents: docs },
-          }
-        }
-
-        // ===== 3. 将资料或设定存入知识库 =====
-        case 'add_text': {
-          if (!params.file_name?.trim()) {
-            throw new Error(text('缺少 file_name 参数（如 "历史考据.md"）', 'The file_name parameter is required'))
-          }
-          const fileName = ensureTextFileName(params.file_name)
-
-          const rawText = params.text?.trim()
-          if (!rawText) {
-            throw new Error(text('缺少 text 参数（要存入知识库的文本内容）', 'The text parameter is required'))
-          }
-
-          const embConfig = getEmbeddingConfig()
-          const result = await knowledgeBaseLoader.run((kb) => {
-            return kb.importText(
-              rawText,
-              fileName,
-              projectPath,
-              embConfig?.protocol ?? 'openai',
-              embConfig?.model ?? { baseUrl: '', apiKey: '', modelName: '' },
-            )
-          })
-
-          if (!result || typeof result !== 'object' || !('success' in result) || !result.success) {
-            const err = extractErrorMessage(result)
-            throw new Error(text(`存入知识库失败: ${err}`, `Failed to store into knowledge base: ${err}`))
-          }
-
-          return {
-            content: [{
-              type: 'text',
-              text: text(
-                `成功将参考文档“${fileName}”存入项目知识库（切分为 ${result.chunkCount ?? 0} 个知识切块，文档 ID: \`${result.docId}\`）。后续可通过语义检索随时调取。`,
-                `Successfully stored document "${fileName}" into knowledge base (${result.chunkCount ?? 0} chunks, Doc ID: \`${result.docId}\`).`,
-              ),
-            }],
-            details: { fileName, docId: result.docId, chunkCount: result.chunkCount },
-          }
-        }
-
-        // ===== 4. 删除指定文档 =====
-        case 'delete': {
-          let targetDocId = params.doc_id?.trim()
-          let targetFileName = params.file_name?.trim()
-
-          // 若未直接提供 doc_id 但提供了 file_name，在文档列表中检索匹配 ID
-          if (!targetDocId && targetFileName) {
-            const docs = await knowledgeBaseLoader.run((kb) => kb.listDocuments(projectPath))
-            if (Array.isArray(docs)) {
-              const matched = docs.find(d => d.fileName === targetFileName || d.fileName.startsWith(targetFileName!))
-              if (matched) {
-                targetDocId = matched.id
-                targetFileName = matched.fileName
-              }
-            }
-          }
-
-          if (!targetDocId) {
-            throw new Error(text(
-              '缺少 doc_id 或有效的 file_name 参数（无法确定要删除的文档）',
-              'The doc_id or valid file_name parameter is required to delete a document',
-            ))
-          }
-
-          const removeRes = await knowledgeBaseLoader.run((kb) => kb.removeDocument(targetDocId!, projectPath))
-          if (removeRes !== true) {
-            throw new Error(text(`删除文档失败（Doc ID: ${targetDocId}）`, `Failed to delete document (Doc ID: ${targetDocId})`))
-          }
-
-          return {
-            content: [{
-              type: 'text',
-              text: text(
-                `已成功从知识库中删除文档（${targetFileName ? `“${targetFileName}”，` : ''}ID: \`${targetDocId}\`）。`,
-                `Successfully deleted document from knowledge base (${targetFileName ? `"${targetFileName}", ` : ''}ID: \`${targetDocId}\`).`,
-              ),
-            }],
-            details: { docId: targetDocId, fileName: targetFileName },
-          }
-        }
-
-        // ===== 5. 统计信息 =====
-        case 'stats': {
-          const stats = await knowledgeBaseLoader.run((kb) => kb.getKnowledgeStats(projectPath))
-          if (!stats || typeof stats !== 'object' || !('documentCount' in stats)) {
-            throw new Error(text('无法获取知识库统计信息', 'Failed to retrieve knowledge base stats'))
-          }
-
-          const embConfig = getEmbeddingConfig()
-          const vectorStatus = formatVectorStatus(stats.vectorDimension, text)
-
-          return {
-            content: [{
-              type: 'text',
-              text: `${text('## 项目知识库统计信息：', '## Knowledge Base Statistics:')}\n` +
-                `- ${text('文档总数', 'Document count')}: **${stats.documentCount}**\n` +
-                `- ${text('切块总数', 'Total chunks')}: **${stats.totalChunks}**\n` +
-                `- ${text('向量检索状态', 'Vector status')}: ${vectorStatus}\n` +
-                (embConfig ? `- ${text('当前嵌入模型', 'Embedding model')}: \`${embConfig.model.modelName}\` (${embConfig.protocol})\n` : ''),
-            }],
-            details: { stats, embConfig: embConfig ? { protocol: embConfig.protocol, model: embConfig.model.modelName } : null },
-          }
-        }
-
+        case 'search':
+          return handleSearch(params, projectPath, text)
+        case 'list':
+          return handleList(projectPath, text)
+        case 'add_text':
+          return handleAddText(params, projectPath, text)
+        case 'delete':
+          return handleDelete(params, projectPath, text)
+        case 'stats':
+          return handleStats(projectPath, text)
         default:
           throw new Error(text(`不支持的操作类型: ${action}`, `Unsupported action: ${action}`))
       }

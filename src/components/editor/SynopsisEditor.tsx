@@ -37,7 +37,7 @@ import {
   hasVisiblePartialSynopsisMarker,
   isRecoverableSynopsisCheckpoint,
   isUsableSynopsisCheckpoint,
-} from '../../services/workflows/commands/architecture.command'
+} from '../../services/workflows/commands/plot-outline-checkpoint'
 
 /** 续批按钮默认的每批章数上限（可在范围内调整，避免一次请求剩余全部章节）。 */
 const CONTINUATION_BATCH_SPAN = 20

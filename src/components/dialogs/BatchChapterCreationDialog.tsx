@@ -31,6 +31,28 @@ import {
   CHAPTER_WORDS_TARGET_MIN,
   normalizeChapterWordsTarget} from '../../services/workflows/chapter-creation-parameters'
 
+function completionModeOptionStyle(
+  selected: boolean,
+  accent: 'accent' | 'warning',
+): { borderColor: string; backgroundColor: string } {
+  if (!selected) {
+    return {
+      borderColor: 'var(--color-border)',
+      backgroundColor: 'transparent',
+    }
+  }
+  if (accent === 'warning') {
+    return {
+      borderColor: 'var(--color-warning)',
+      backgroundColor: 'color-mix(in srgb, var(--color-warning) 8%, transparent)',
+    }
+  }
+  return {
+    borderColor: 'var(--color-accent)',
+    backgroundColor: 'color-mix(in srgb, var(--color-accent) 8%, transparent)',
+  }
+}
+
 interface Props {
   isOpen: boolean
   startChapterNumber: number | null
@@ -354,7 +376,7 @@ function BatchChapterCreationDialogSession({ isOpen, startChapterNumber, onClose
               {text('完成模式', 'Completion mode')}
             </legend>
             <div className="grid grid-cols-2 gap-2">
-              <label className="flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 text-xs" style={{ borderColor: completionMode === 'draft_review' ? 'var(--color-accent)' : 'var(--color-border)', backgroundColor: completionMode === 'draft_review' ? 'color-mix(in srgb, var(--color-accent) 8%, transparent)' : 'transparent' }}>
+              <label className="flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 text-xs" style={completionModeOptionStyle(completionMode === 'draft_review', 'accent')}>
                 <input
                   type="radio"
                   name="batch-completion-mode"
@@ -374,7 +396,7 @@ function BatchChapterCreationDialogSession({ isOpen, startChapterNumber, onClose
                   </span>
                 </span>
               </label>
-              <label className="flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 text-xs" style={{ borderColor: completionMode === 'auto_finalize' ? 'var(--color-warning)' : 'var(--color-border)', backgroundColor: completionMode === 'auto_finalize' ? 'color-mix(in srgb, var(--color-warning) 8%, transparent)' : 'transparent' }}>
+              <label className="flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 text-xs" style={completionModeOptionStyle(completionMode === 'auto_finalize', 'warning')}>
                 <input
                   type="radio"
                   name="batch-completion-mode"

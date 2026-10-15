@@ -20,13 +20,26 @@ import {
 const FACT_CATEGORIES = new Set(['character-state', 'timeline', 'open-thread', 'plot'])
 const CHARACTER_STATE_FIELDS = new Set<string>(CHARACTER_STATE_TEXT_FIELDS)
 
+function continuitySourceStatus(
+  hasBoundSource: boolean,
+  sourceCurrent: boolean,
+  invalidated: boolean,
+): 'legacy' | 'current' | 'stale' {
+  if (!hasBoundSource) return 'legacy'
+  if (sourceCurrent && !invalidated) return 'current'
+  return 'stale'
+}
+
 function normalizedFacts(value: unknown, chapterNumber: number): FinalizedContinuityFact[] {
   if (!Array.isArray(value) || value.length > 12) throw new Error('连续性事实参数无效')
   return value.map((input) => {
     if (!input || typeof input !== 'object') throw new Error('连续性事实参数无效')
     const fact = input as Record<string, unknown>
     const entities = Array.isArray(fact.entities)
-      ? fact.entities.map(entity => typeof entity === 'string' ? entity.trim() : '')
+      ? fact.entities.map((entity) => {
+        if (typeof entity === 'string') return entity.trim()
+        return ''
+      })
       : []
     const statement = typeof fact.statement === 'string' ? fact.statement.trim() : ''
     const evidence = typeof fact.evidence === 'string' ? fact.evidence.trim() : ''
@@ -384,7 +397,7 @@ export class SummaryRepository {
             contentHash: row.sourceContentHash,
           },
         } : {}),
-        sourceStatus: !hasBoundSource ? 'legacy' : sourceCurrent && !invalidated ? 'current' : 'stale',
+        sourceStatus: continuitySourceStatus(hasBoundSource, sourceCurrent, invalidated),
       }
     })
   }

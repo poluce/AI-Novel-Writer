@@ -14,6 +14,14 @@ import { discardChangesThenRequestInstall } from './update-install-discard'
 import { UpdateStatusCard } from './UpdateStatusCard'
 import { useUpdateState } from './use-update-state'
 
+function updateCheckButtonLabel(
+  checking: boolean,
+  text: (zhCNText: string, enUSText: string) => string,
+): string {
+  if (checking) return text('正在检查', 'Checking')
+  return text('检查更新', 'Check for updates')
+}
+
 /** 欢迎页中的更新入口与非阻断状态卡。 */
 export function UpdateSection() {
   const text = useLocaleStore(s => s.text)
@@ -83,7 +91,8 @@ export function UpdateSection() {
           <ExternalLink size={15} aria-hidden="true" />{text('官方主页', 'Official Website')}
         </Button>
         <Button type="button" size="lg" onClick={() => void checkForUpdates()} disabled={!presentation.canCheck} className="text-sm" title={presentation.kind === 'disabled' ? text('请在已安装的 Windows 应用中检查更新', 'Check for updates in the installed Windows app') : text('立即检查正式版更新', 'Check for stable updates now')}>
-          <RefreshCw size={15} className={presentation.kind === 'checking' ? 'animate-spin' : undefined} />{presentation.kind === 'checking' ? text('正在检查', 'Checking') : text('检查更新', 'Check for updates')}
+          <RefreshCw size={15} className={presentation.kind === 'checking' ? 'animate-spin' : undefined} />
+          {updateCheckButtonLabel(presentation.kind === 'checking', text)}
         </Button>
       </div>
     </div>

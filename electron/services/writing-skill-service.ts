@@ -8,7 +8,6 @@ import {
   parseGitHubWritingSkillUrl,
   type InstalledWritingSkill,
   type RemoteWritingSkillInspection,
-  type WritingSkillStage,
 } from '../../src/shared/writing-skills'
 import { mainText } from '../i18n'
 import { VELA_HOME } from '../utils/config-utils'
@@ -50,41 +49,45 @@ function isContainedPath(rootPath: string, candidatePath: string): boolean {
   )
 }
 
+function assertContainedPath(rootPath: string, candidatePath: string, zhCNText: string, enUSText: string): void {
+  if (!isContainedPath(rootPath, candidatePath)) {
+    throw new Error(text(zhCNText, enUSText))
+  }
+}
+
+function assertUnlinkedKind(targetPath: string, kind: 'directory' | 'file', zhCNText: string, enUSText: string): void {
+  const info = fs.lstatSync(targetPath)
+  const matches = kind === 'directory' ? info.isDirectory() : info.isFile()
+  if (info.isSymbolicLink() || !matches) {
+    throw new Error(text(zhCNText, enUSText))
+  }
+}
+
 function writingSkillDirectory(name: string): string {
   if (!WRITING_SKILL_NAME.test(name) || name === '.' || name === '..') {
     throw new Error(text('写作 Skill 名称无效', 'The writing skill name is invalid'))
   }
   const root = path.join(VELA_HOME, 'skills')
   const candidate = path.resolve(root, name)
-  if (!isContainedPath(root, candidate)) {
-    throw new Error(text('写作 Skill 目标超出应用目录', 'The writing skill target is outside the app directory'))
-  }
+  assertContainedPath(root, candidate, '写作 Skill 目标超出应用目录', 'The writing skill target is outside the app directory')
   return candidate
 }
 
 function ensureOwnedSkillsRoot(): string {
   if (fs.existsSync(VELA_HOME)) {
-    const homeInfo = fs.lstatSync(VELA_HOME)
-    if (homeInfo.isSymbolicLink() || !homeInfo.isDirectory()) {
-      throw new Error(text('应用数据目录不是受信任的本地目录', 'The app data root is not a trusted local directory'))
-    }
+    assertUnlinkedKind(VELA_HOME, 'directory', '应用数据目录不是受信任的本地目录', 'The app data root is not a trusted local directory')
   } else {
     fs.mkdirSync(VELA_HOME, { recursive: true })
   }
   const canonicalVelaHome = fs.realpathSync.native(VELA_HOME)
   const skillsRoot = path.join(VELA_HOME, 'skills')
   if (fs.existsSync(skillsRoot)) {
-    const rootInfo = fs.lstatSync(skillsRoot)
-    if (rootInfo.isSymbolicLink() || !rootInfo.isDirectory()) {
-      throw new Error(text('用户 Skill 目录不是受信任的本地目录', 'The user skill root is not a trusted local directory'))
-    }
+    assertUnlinkedKind(skillsRoot, 'directory', '用户 Skill 目录不是受信任的本地目录', 'The user skill root is not a trusted local directory')
   } else {
     fs.mkdirSync(skillsRoot)
   }
   const canonicalRoot = fs.realpathSync.native(skillsRoot)
-  if (!isContainedPath(canonicalVelaHome, canonicalRoot)) {
-    throw new Error(text('用户 Skill 目录超出应用目录', 'The user skill root is outside the app directory'))
-  }
+  assertContainedPath(canonicalVelaHome, canonicalRoot, '用户 Skill 目录超出应用目录', 'The user skill root is outside the app directory')
   return canonicalRoot
 }
 
@@ -92,27 +95,17 @@ function ensureOwnedSkillTarget(name: string): { directory: string; filePath: st
   const canonicalRoot = ensureOwnedSkillsRoot()
   const requestedDirectory = writingSkillDirectory(name)
   if (fs.existsSync(requestedDirectory)) {
-    const directoryInfo = fs.lstatSync(requestedDirectory)
-    if (directoryInfo.isSymbolicLink() || !directoryInfo.isDirectory()) {
-      throw new Error(text('拒绝写入链接或非目录 Skill 目标', 'Refusing to write to a linked or non-directory skill target'))
-    }
+    assertUnlinkedKind(requestedDirectory, 'directory', '拒绝写入链接或非目录 Skill 目标', 'Refusing to write to a linked or non-directory skill target')
   } else {
     fs.mkdirSync(requestedDirectory)
   }
   const directory = fs.realpathSync.native(requestedDirectory)
-  if (!isContainedPath(canonicalRoot, directory)) {
-    throw new Error(text('写作 Skill 目标超出应用目录', 'The writing skill target is outside the app directory'))
-  }
+  assertContainedPath(canonicalRoot, directory, '写作 Skill 目标超出应用目录', 'The writing skill target is outside the app directory')
   const filePath = path.join(directory, 'SKILL.md')
   if (fs.existsSync(filePath)) {
-    const fileInfo = fs.lstatSync(filePath)
-    if (fileInfo.isSymbolicLink() || !fileInfo.isFile()) {
-      throw new Error(text('拒绝覆盖链接或非文件 SKILL.md', 'Refusing to overwrite a linked or non-file SKILL.md'))
-    }
+    assertUnlinkedKind(filePath, 'file', '拒绝覆盖链接或非文件 SKILL.md', 'Refusing to overwrite a linked or non-file SKILL.md')
     const canonicalFile = fs.realpathSync.native(filePath)
-    if (!isContainedPath(directory, canonicalFile)) {
-      throw new Error(text('SKILL.md 超出 Skill 目录', 'SKILL.md is outside its skill directory'))
-    }
+    assertContainedPath(directory, canonicalFile, 'SKILL.md 超出 Skill 目录', 'SKILL.md is outside its skill directory')
   }
   return { directory, filePath }
 }
@@ -308,14 +301,17 @@ export async function createCustomWritingSkill(params: {
   content: string
   description?: string
   displayName?: string
-  stage?: WritingSkillStage
   scope?: 'user' | 'project'
   projectPath?: string | null
 }): Promise<WritingSkillInstallResult> {
   try {
     const name = params.name.trim()
     assertSpecSkillName(name)
-    const scope = params.scope ?? (params.projectPath ? 'project' : 'user')
+    let scope = params.scope
+    if (!scope) {
+      if (params.projectPath) scope = 'project'
+      else scope = 'user'
+    }
     let targetDir: string
     if (scope === 'project') {
       const projPath = params.projectPath ?? getCurrentProjectPath()
@@ -336,7 +332,6 @@ export async function createCustomWritingSkill(params: {
       content: params.content,
       description: params.description,
       displayName: params.displayName,
-      stage: params.stage,
     })
     fs.writeFileSync(filePath, raw, { encoding: 'utf8', mode: 0o600 })
     return {
@@ -360,7 +355,6 @@ export async function updateCustomWritingSkill(params: {
   content?: string
   description?: string
   displayName?: string
-  stage?: WritingSkillStage
   projectPath?: string | null
 }): Promise<{ success: boolean; error?: string }> {
   try {
@@ -377,14 +371,13 @@ export async function updateCustomWritingSkill(params: {
     const newContent = params.content ?? (inspected.content || existingRaw)
     const newDesc = params.description ?? inspected.metadata.description
     const newDisplayName = params.displayName ?? inspected.metadata.displayName
-    const newStage = params.stage ?? inspected.metadata.stage
 
     const updatedRaw = formatSkillMarkdown({
       name,
       content: newContent,
       description: newDesc,
       displayName: newDisplayName,
-      stage: newStage,
+      stage: inspected.metadata.stage,
     })
     fs.writeFileSync(location.filePath, updatedRaw, { encoding: 'utf8', mode: 0o600 })
     return { success: true }

@@ -10,10 +10,14 @@ import {
   writingLanguageText,
   type WritingLanguage,
 } from '../../../src/shared/writing-language'
-import type {
-  CharacterRosterEntry,
-  CharacterRosterRelationship,
-  CharacterRosterCharacterState,
+import {
+  CHARACTER_ROSTER_SCHEMA_VERSION,
+  CHARACTER_STATE_TEXT_FIELDS,
+  type CharacterRosterEntry,
+  type CharacterRosterRelationship,
+  type CharacterRosterCharacterState,
+  type CharacterRosterRename,
+  type CharacterRosterSnapshot,
 } from '../../../src/shared/character-roster'
 import {
   normalizeCharacterRole,
@@ -120,7 +124,9 @@ export function createManageCharactersTool(
   rendererAction: RendererActionSink,
 ): AgentTool<typeof Schema> {
   const isEn = language === 'en-US'
-  const text = (zhCN: string, enUS: string) => writingLanguageText(language, zhCN, enUS)
+  function text(zhCN: string, enUS: string): string {
+    return writingLanguageText(language, zhCN, enUS)
+  }
 
   const description = isEn
     ? 'All-in-one Character Management Tool: supports querying character lists, profiles, and chapter-level historical state snapshots; tracking chapter appearances and continuity; creating single or batch characters (sects/factions); partial profile and delta state updates with auto-inheritance; project-wide cascading renames; fine-grained relationship maintenance; and safe deletions.'
@@ -144,9 +150,6 @@ export function createManageCharactersTool(
 
       const rawAction = String(params.action || 'read').toLowerCase().trim()
 
-      // =========================================================================
-      // 1. 出场轨迹与章节在场反查 (track_appearances)
-      // =========================================================================
       if (rawAction === 'track_appearances' || rawAction === '出场追踪' || rawAction === '出场') {
         const charName = (params.character_name || params.name || '').trim()
         const targetChapter = params.chapter_number
@@ -154,26 +157,25 @@ export function createManageCharactersTool(
 
         if (charName) {
           const matchingChapters = allBlueprints
-            .filter(bp => Array.isArray(bp.characters) && bp.characters.some(c => c.toLowerCase() === charName.toLowerCase()))
-            .map(bp => bp.chapterNumber)
+            .filter((bp) => Array.isArray(bp.characters) && bp.characters.some((c) => namesEqual(c, charName)))
+            .map((bp) => bp.chapterNumber)
             .sort((a, b) => a - b)
 
           if (matchingChapters.length === 0) {
-            return {
-              content: [{
-                type: 'text',
-                text: text(
-                  `角色「${charName}」在当前已规划的章节蓝图中尚未有出场记录。`,
-                  `Character "${charName}" has no appearance records in current chapter blueprints.`,
-                ),
-              }],
-              details: { characterName: charName, totalAppearances: 0, chapters: [] },
-            }
+            return textResult(
+              text(
+                `角色「${charName}」在当前已规划的章节蓝图中尚未有出场记录。`,
+                `Character "${charName}" has no appearance records in current chapter blueprints.`,
+              ),
+              { characterName: charName, totalAppearances: 0, chapters: [] },
+            )
           }
 
           const firstChap = matchingChapters[0]
           const latestChap = matchingChapters[matchingChapters.length - 1]
-          const maxPlanned = allBlueprints.length > 0 ? Math.max(...allBlueprints.map(b => b.chapterNumber)) : latestChap
+          const maxPlanned = allBlueprints.length > 0
+            ? Math.max(...allBlueprints.map((b) => b.chapterNumber))
+            : latestChap
           const dormantGap = maxPlanned - latestChap
 
           let analysis = text(
@@ -188,35 +190,31 @@ export function createManageCharactersTool(
             )
           }
 
-          return {
-            content: [{ type: 'text', text: analysis }],
-            details: { characterName: charName, totalAppearances: matchingChapters.length, chapters: matchingChapters, latestChapter: latestChap },
-          }
+          return textResult(analysis, {
+            characterName: charName,
+            totalAppearances: matchingChapters.length,
+            chapters: matchingChapters,
+            latestChapter: latestChap,
+          })
         }
 
         if (targetChapter !== undefined) {
           const bp = BlueprintRepository.getByChapter(targetChapter)
           if (!bp) {
-            return {
-              content: [{
-                type: 'text',
-                text: text(`第 ${targetChapter} 章蓝图尚未创建。`, `Chapter ${targetChapter} blueprint has not been created yet.`),
-              }],
-              details: { chapterNumber: targetChapter, characters: [] },
-            }
+            return textResult(
+              text(`第 ${targetChapter} 章蓝图尚未创建。`, `Chapter ${targetChapter} blueprint has not been created yet.`),
+              { chapterNumber: targetChapter, characters: [] },
+            )
           }
 
           const roster = CharacterRosterRepository.read()
           const charNames = Array.isArray(bp.characters) ? bp.characters : []
 
           if (charNames.length === 0) {
-            return {
-              content: [{
-                type: 'text',
-                text: text(`第 ${targetChapter} 章蓝图目前未安排任何特定角色出场。`, `Chapter ${targetChapter} blueprint currently has no characters assigned.`),
-              }],
-              details: { chapterNumber: targetChapter, characters: [] },
-            }
+            return textResult(
+              text(`第 ${targetChapter} 章蓝图目前未安排任何特定角色出场。`, `Chapter ${targetChapter} blueprint currently has no characters assigned.`),
+              { chapterNumber: targetChapter, characters: [] },
+            )
           }
 
           const blocks: string[] = [
@@ -227,38 +225,32 @@ export function createManageCharactersTool(
           ]
 
           for (const name of charNames) {
-            const entry = roster.entries.find(e => e.name.toLowerCase() === name.toLowerCase())
+            const entry = findEntryByName(roster.entries, name)
             if (!entry) {
               blocks.push(`- **${name}**（未建档角色）`)
               continue
             }
-            const roleText = formatRole(entry.role, isEn)
-            let desc = `- **${entry.name}** [${roleText}]`
+            let desc = `- **${entry.name}** [${formatRole(entry.role, isEn)}]`
             if (entry.currentState) {
+              const state = entry.currentState
               const stateParts: string[] = []
-              if (entry.currentState.location) stateParts.push(text(`位置: ${entry.currentState.location}`, `Location: ${entry.currentState.location}`))
-              if (entry.currentState.powerLevel) stateParts.push(text(`境界: ${entry.currentState.powerLevel}`, `Power: ${entry.currentState.powerLevel}`))
-              if (entry.currentState.physicalState) stateParts.push(text(`状态: ${entry.currentState.physicalState}`, `State: ${entry.currentState.physicalState}`))
-              if (entry.currentState.keyItems) stateParts.push(text(`道具: ${entry.currentState.keyItems}`, `Items: ${entry.currentState.keyItems}`))
+              if (state.location) stateParts.push(text(`位置: ${state.location}`, `Location: ${state.location}`))
+              if (state.powerLevel) stateParts.push(text(`境界: ${state.powerLevel}`, `Power: ${state.powerLevel}`))
+              if (state.physicalState) stateParts.push(text(`状态: ${state.physicalState}`, `State: ${state.physicalState}`))
+              if (state.keyItems) stateParts.push(text(`道具: ${state.keyItems}`, `Items: ${state.keyItems}`))
               if (stateParts.length > 0) {
-                desc += `\n  - 最新状态（第 ${entry.currentState.updatedAtChapter} 章）: ${stateParts.join(' | ')}`
+                desc += `\n  - 最新状态（第 ${state.updatedAtChapter} 章）: ${stateParts.join(' | ')}`
               }
             }
             blocks.push(desc)
           }
 
-          return {
-            content: [{ type: 'text', text: blocks.join('\n') }],
-            details: { chapterNumber: targetChapter, characterNames: charNames },
-          }
+          return textResult(blocks.join('\n'), { chapterNumber: targetChapter, characterNames: charNames })
         }
 
         throw new Error(text('执行出场追踪时，必须提供 character_name（查个人轨迹）或 chapter_number（查单章阵容）', 'Either character_name or chapter_number is required for track_appearances'))
       }
 
-      // =========================================================================
-      // 2. 角色全工程级联改名 (rename)
-      // =========================================================================
       if (rawAction === 'rename' || rawAction === '改名') {
         const originalName = (params.original_name || params.character_name || '').trim()
         const newName = (params.new_name || params.name || '').trim()
@@ -266,63 +258,40 @@ export function createManageCharactersTool(
         if (!originalName || !newName) {
           throw new Error(text('改名必须同时指定原角色名 original_name 与新角色名 new_name', 'Both original_name and new_name are required for rename'))
         }
-        if (originalName.toLowerCase() === newName.toLowerCase()) {
+        if (namesEqual(originalName, newName)) {
           throw new Error(text('原名与新名相同，无需改名', 'The new name is identical to the original name'))
         }
 
         const snapshot = CharacterRosterRepository.read()
-        const targetEntry = snapshot.entries.find(e => e.name.toLowerCase() === originalName.toLowerCase())
+        const targetEntry = findEntryByName(snapshot.entries, originalName)
         if (!targetEntry) {
           throw new Error(text(`角色「${originalName}」不存在，无法改名`, `Character "${originalName}" does not exist`))
         }
-
-        const conflictEntry = snapshot.entries.find(e => e.name.toLowerCase() === newName.toLowerCase())
-        if (conflictEntry) {
+        if (findEntryByName(snapshot.entries, newName)) {
           throw new Error(text(`新角色名「${newName}」已被占用`, `Character name "${newName}" is already taken`))
         }
 
-        // 构建改名后的条目列表
-        const updatedEntries = snapshot.entries.map(entry => {
-          if (entry.name.toLowerCase() === originalName.toLowerCase()) {
-            return {
-              ...entry,
-              name: newName,
-              relationships: entry.relationships.map(rel => rel.target.toLowerCase() === originalName.toLowerCase() ? { ...rel, target: newName } : rel),
-            }
-          }
-          return {
-            ...entry,
-            relationships: entry.relationships.map(rel => rel.target.toLowerCase() === originalName.toLowerCase() ? { ...rel, target: newName } : rel),
-          }
-        })
+        const updatedEntries = snapshot.entries.map((entry) => ({
+          ...entry,
+          name: namesEqual(entry.name, originalName) ? newName : entry.name,
+          relationships: entry.relationships.map((rel) => (
+            namesEqual(rel.target, originalName) ? { ...rel, target: newName } : rel
+          )),
+        }))
 
-        CharacterRosterRepository.commit({
-          operationId: randomUUID(),
-          expectedRevision: snapshot.revision,
-          schemaVersion: 1,
-          intent: 'manual_edit',
-          entries: updatedEntries,
-          renames: [{ originalName: targetEntry.name, newName }],
-        })
-
+        commitRoster(snapshot, updatedEntries, [{ originalName: targetEntry.name, newName }])
         await rendererAction({ type: 'refresh_character_roster' })
         await rendererAction({ type: 'refresh_blueprint' })
 
-        return {
-          content: [{
-            type: 'text',
-            text: text(
-              `角色已成功更名：「${targetEntry.name}」→「${newName}」。\n全书人际关系网及章节蓝图出场名单已完成级联同步。`,
-              `Character renamed: "${targetEntry.name}" → "${newName}". All relationships and chapter blueprints updated.`,
-            ),
-          }],
-          details: { originalName: targetEntry.name, newName },
-        }
+        return textResult(
+          text(
+            `角色已成功更名：「${targetEntry.name}」→「${newName}」。\n全书人际关系网及章节蓝图出场名单已完成级联同步。`,
+            `Character renamed: "${targetEntry.name}" → "${newName}". All relationships and chapter blueprints updated.`,
+          ),
+          { originalName: targetEntry.name, newName },
+        )
       }
 
-      // =========================================================================
-      // 3. 人际关系定向增/改/删 (update_relationship)
-      // =========================================================================
       if (rawAction === 'update_relationship' || rawAction === '关系维护') {
         const sourceName = (params.source_name || params.character_name || '').trim()
         const targetName = (params.target_name || '').trim()
@@ -332,28 +301,28 @@ export function createManageCharactersTool(
         if (!sourceName || !targetName) {
           throw new Error(text('维护人际关系必须同时提供 source_name 与 target_name', 'Both source_name and target_name are required'))
         }
-        if (sourceName.toLowerCase() === targetName.toLowerCase()) {
+        if (namesEqual(sourceName, targetName)) {
           throw new Error(text('不能为角色建立自相关系', 'A character cannot have a relationship with themselves'))
         }
 
         const snapshot = CharacterRosterRepository.read()
-        const sourceEntry = snapshot.entries.find(e => e.name.toLowerCase() === sourceName.toLowerCase())
+        const sourceEntry = findEntryByName(snapshot.entries, sourceName)
         if (!sourceEntry) {
           throw new Error(text(`源角色「${sourceName}」不存在`, `Source character "${sourceName}" does not exist`))
         }
-        const targetEntry = snapshot.entries.find(e => e.name.toLowerCase() === targetName.toLowerCase())
+        const targetEntry = findEntryByName(snapshot.entries, targetName)
         if (!targetEntry) {
           throw new Error(text(`目标角色「${targetName}」不存在`, `Target character "${targetName}" does not exist`))
         }
 
         let nextRelations = [...sourceEntry.relationships]
         if (op === 'remove') {
-          nextRelations = nextRelations.filter(r => r.target.toLowerCase() !== targetName.toLowerCase())
+          nextRelations = nextRelations.filter((r) => !namesEqual(r.target, targetName))
         } else {
           if (!relationText) {
             throw new Error(text('添加或修改关系时必须提供 relation 参数描述具体关系', 'relation description is required for adding or updating relationship'))
           }
-          const existingIdx = nextRelations.findIndex(r => r.target.toLowerCase() === targetName.toLowerCase())
+          const existingIdx = nextRelations.findIndex((r) => namesEqual(r.target, targetName))
           if (existingIdx >= 0) {
             nextRelations[existingIdx] = { target: targetEntry.name, relation: relationText }
           } else {
@@ -361,32 +330,20 @@ export function createManageCharactersTool(
           }
         }
 
-        const updatedEntries = snapshot.entries.map(e => e.name.toLowerCase() === sourceEntry.name.toLowerCase() ? { ...e, relationships: nextRelations } : e)
+        const updatedEntries = snapshot.entries.map((e) => (
+          namesEqual(e.name, sourceEntry.name) ? { ...e, relationships: nextRelations } : e
+        ))
 
-        CharacterRosterRepository.commit({
-          operationId: randomUUID(),
-          expectedRevision: snapshot.revision,
-          schemaVersion: 1,
-          intent: 'manual_edit',
-          entries: updatedEntries,
-        })
-
+        commitRoster(snapshot, updatedEntries)
         await rendererAction({ type: 'refresh_character_roster' })
 
-        return {
-          content: [{
-            type: 'text',
-            text: op === 'remove'
-              ? text(`已移除角色「${sourceEntry.name}」与「${targetEntry.name}」之间的人际关系。`, `Relationship between "${sourceEntry.name}" and "${targetEntry.name}" removed.`)
-              : text(`已更新「${sourceEntry.name}」与「${targetEntry.name}」的关系：${relationText}`, `Relationship between "${sourceEntry.name}" and "${targetEntry.name}" updated: ${relationText}`),
-          }],
-          details: { source: sourceEntry.name, target: targetEntry.name, operation: op },
-        }
+        const message = op === 'remove'
+          ? text(`已移除角色「${sourceEntry.name}」与「${targetEntry.name}」之间的人际关系。`, `Relationship between "${sourceEntry.name}" and "${targetEntry.name}" removed.`)
+          : text(`已更新「${sourceEntry.name}」与「${targetEntry.name}」的关系：${relationText}`, `Relationship between "${sourceEntry.name}" and "${targetEntry.name}" updated: ${relationText}`)
+
+        return textResult(message, { source: sourceEntry.name, target: targetEntry.name, operation: op })
       }
 
-      // =========================================================================
-      // 4. 批量创建角色 (batch_create)
-      // =========================================================================
       if (rawAction === 'batch_create' || rawAction === '批量创建') {
         const batchList = params.characters
         if (!Array.isArray(batchList) || batchList.length === 0) {
@@ -394,7 +351,7 @@ export function createManageCharactersTool(
         }
 
         const snapshot = CharacterRosterRepository.read()
-        const existingNames = new Set(snapshot.entries.map(e => e.name.toLowerCase()))
+        const existingNames = new Set(snapshot.entries.map((e) => e.name.toLowerCase()))
         const newEntries: CharacterRosterEntry[] = []
         const currentBatchNames = new Set<string>()
 
@@ -406,11 +363,9 @@ export function createManageCharactersTool(
             throw new Error(text(`角色名「${name}」重复或已存在`, `Character name "${name}" already exists or is duplicated in batch`))
           }
           currentBatchNames.add(lower)
-
           newEntries.push(normalizeEntryPayload(item))
         }
 
-        // 校验新增条目中关系的合法性
         const allAvailableNames = new Set([...existingNames, ...currentBatchNames])
         for (const entry of newEntries) {
           for (const rel of entry.relationships) {
@@ -420,31 +375,18 @@ export function createManageCharactersTool(
           }
         }
 
-        CharacterRosterRepository.commit({
-          operationId: randomUUID(),
-          expectedRevision: snapshot.revision,
-          schemaVersion: 1,
-          intent: 'manual_edit',
-          entries: [...snapshot.entries, ...newEntries],
-        })
-
+        commitRoster(snapshot, [...snapshot.entries, ...newEntries])
         await rendererAction({ type: 'refresh_character_roster' })
 
-        return {
-          content: [{
-            type: 'text',
-            text: text(
-              `已成功批量创建 ${newEntries.length} 个角色：\n${newEntries.map(e => `- **${e.name}** [${formatRole(e.role, isEn)}]`).join('\n')}`,
-              `Successfully created ${newEntries.length} characters in batch:\n${newEntries.map(e => `- **${e.name}** [${formatRole(e.role, isEn)}]`).join('\n')}`,
-            ),
-          }],
-          details: { createdCount: newEntries.length, names: newEntries.map(e => e.name) },
-        }
+        return textResult(
+          text(
+            `已成功批量创建 ${newEntries.length} 个角色：\n${newEntries.map(e => `- **${e.name}** [${formatRole(e.role, isEn)}]`).join('\n')}`,
+            `Successfully created ${newEntries.length} characters in batch:\n${newEntries.map(e => `- **${e.name}** [${formatRole(e.role, isEn)}]`).join('\n')}`,
+          ),
+          { createdCount: newEntries.length, names: newEntries.map((e) => e.name) },
+        )
       }
 
-      // =========================================================================
-      // 5. 单个创建角色 (create)
-      // =========================================================================
       if (rawAction === 'create' || rawAction === '创建' || rawAction === '新建') {
         const name = (params.name || params.character_name || '').trim()
         if (!name) {
@@ -452,7 +394,7 @@ export function createManageCharactersTool(
         }
 
         const snapshot = CharacterRosterRepository.read()
-        if (snapshot.entries.some(e => e.name.toLowerCase() === name.toLowerCase())) {
+        if (findEntryByName(snapshot.entries, name)) {
           throw new Error(text(`角色「${name}」已存在，如需修改请使用 action: "update"`, `Character "${name}" already exists`))
         }
 
@@ -461,38 +403,24 @@ export function createManageCharactersTool(
           name,
         })
 
-        // 校验关系目标
         for (const rel of newEntry.relationships) {
-          if (!snapshot.entries.some(e => e.name.toLowerCase() === rel.target.toLowerCase())) {
+          if (!findEntryByName(snapshot.entries, rel.target)) {
             throw new Error(text(`关系目标角色「${rel.target}」不存在`, `Relationship target "${rel.target}" does not exist`))
           }
         }
 
-        CharacterRosterRepository.commit({
-          operationId: randomUUID(),
-          expectedRevision: snapshot.revision,
-          schemaVersion: 1,
-          intent: 'manual_edit',
-          entries: [...snapshot.entries, newEntry],
-        })
-
+        commitRoster(snapshot, [...snapshot.entries, newEntry])
         await rendererAction({ type: 'refresh_character_roster' })
 
-        return {
-          content: [{
-            type: 'text',
-            text: text(
-              `已成功创建角色「${newEntry.name}」[${formatRole(newEntry.role, isEn)}]。\n档案与初始状态已同步写入底层数据库并投影到故事架构。`,
-              `Character "${newEntry.name}" created successfully.`,
-            ),
-          }],
-          details: { name: newEntry.name, role: newEntry.role },
-        }
+        return textResult(
+          text(
+            `已成功创建角色「${newEntry.name}」[${formatRole(newEntry.role, isEn)}]。\n档案与初始状态已同步写入底层数据库并投影到故事架构。`,
+            `Character "${newEntry.name}" created successfully.`,
+          ),
+          { name: newEntry.name, role: newEntry.role },
+        )
       }
 
-      // =========================================================================
-      // 6. 删除角色 (delete)
-      // =========================================================================
       if (rawAction === 'delete' || rawAction === '删除') {
         const charName = (params.character_name || params.name || '').trim()
         if (!charName) {
@@ -500,41 +428,27 @@ export function createManageCharactersTool(
         }
 
         const snapshot = CharacterRosterRepository.read()
-        const targetEntry = snapshot.entries.find(e => e.name.toLowerCase() === charName.toLowerCase())
+        const targetEntry = findEntryByName(snapshot.entries, charName)
         if (!targetEntry) {
           throw new Error(text(`未找到角色「${charName}」，无法删除`, `Character "${charName}" not found`))
         }
 
-        // 删除目标角色，并自动清理其他角色中指向该角色的关系
         const updatedEntries = snapshot.entries
-          .filter(e => e.name.toLowerCase() !== charName.toLowerCase())
-          .map(e => ({
+          .filter((e) => !namesEqual(e.name, charName))
+          .map((e) => ({
             ...e,
-            relationships: e.relationships.filter(r => r.target.toLowerCase() !== charName.toLowerCase()),
+            relationships: e.relationships.filter((r) => !namesEqual(r.target, charName)),
           }))
 
-        CharacterRosterRepository.commit({
-          operationId: randomUUID(),
-          expectedRevision: snapshot.revision,
-          schemaVersion: 1,
-          intent: 'manual_edit',
-          entries: updatedEntries,
-        })
-
+        commitRoster(snapshot, updatedEntries)
         await rendererAction({ type: 'refresh_character_roster' })
 
-        return {
-          content: [{
-            type: 'text',
-            text: text(`角色「${targetEntry.name}」已成功删除，所有关联关系已自动清理。`, `Character "${targetEntry.name}" deleted successfully.`),
-          }],
-          details: { deletedName: targetEntry.name },
-        }
+        return textResult(
+          text(`角色「${targetEntry.name}」已成功删除，所有关联关系已自动清理。`, `Character "${targetEntry.name}" deleted successfully.`),
+          { deletedName: targetEntry.name },
+        )
       }
 
-      // =========================================================================
-      // 7. 更新角色档案与增量状态 (update)
-      // =========================================================================
       if (rawAction === 'update' || rawAction === '修改' || rawAction === '更新') {
         const charName = (params.character_name || params.name || '').trim()
         if (!charName) {
@@ -542,7 +456,7 @@ export function createManageCharactersTool(
         }
 
         const snapshot = CharacterRosterRepository.read()
-        const targetIdx = snapshot.entries.findIndex(e => e.name.toLowerCase() === charName.toLowerCase())
+        const targetIdx = snapshot.entries.findIndex((e) => namesEqual(e.name, charName))
         if (targetIdx === -1) {
           throw new Error(text(`未找到角色「${charName}」`, `Character "${charName}" not found`))
         }
@@ -550,7 +464,6 @@ export function createManageCharactersTool(
         const existing = snapshot.entries[targetIdx]
         const updated = { ...existing }
 
-        // 基础档案字段局部覆盖
         if (params.role) updated.role = normalizeCharacterRole(params.role)
         if (params.gender !== undefined) updated.gender = String(params.gender).trim()
         if (params.age !== undefined) updated.age = String(params.age).trim()
@@ -562,13 +475,12 @@ export function createManageCharactersTool(
         if (params.arc !== undefined) updated.arc = String(params.arc).trim()
         if (params.notes !== undefined) updated.notes = String(params.notes).trim()
         if (params.relationships !== undefined) {
-          updated.relationships = params.relationships.map(r => ({ target: r.target.trim(), relation: r.relation.trim() }))
+          updated.relationships = params.relationships.map((r) => ({ target: r.target.trim(), relation: r.relation.trim() }))
         }
 
-        // 状态增量补丁（state_patch 或 currentState）
         const patch = params.state_patch || params.currentState
         if (patch) {
-          const oldState = existing.currentState || {
+          const oldState: CharacterRosterCharacterState = existing.currentState ?? {
             location: '',
             powerLevel: '',
             physicalState: '',
@@ -577,56 +489,44 @@ export function createManageCharactersTool(
             recentEvents: '',
             updatedAtChapter: 0,
           }
-          const nextChapter = patch.updatedAtChapter !== undefined ? patch.updatedAtChapter : (params.chapter_number !== undefined ? params.chapter_number : oldState.updatedAtChapter)
-          updated.currentState = {
-            location: patch.location !== undefined ? String(patch.location).trim() : oldState.location,
-            powerLevel: patch.powerLevel !== undefined ? String(patch.powerLevel).trim() : oldState.powerLevel,
-            physicalState: patch.physicalState !== undefined ? String(patch.physicalState).trim() : oldState.physicalState,
-            mentalState: patch.mentalState !== undefined ? String(patch.mentalState).trim() : oldState.mentalState,
-            keyItems: patch.keyItems !== undefined ? String(patch.keyItems).trim() : oldState.keyItems,
-            recentEvents: patch.recentEvents !== undefined ? String(patch.recentEvents).trim() : oldState.recentEvents,
-            updatedAtChapter: nextChapter,
+          let nextChapter = oldState.updatedAtChapter
+          if (patch.updatedAtChapter !== undefined) {
+            nextChapter = patch.updatedAtChapter
+          } else if (params.chapter_number !== undefined) {
+            nextChapter = params.chapter_number
           }
+          const nextState: CharacterRosterCharacterState = { ...oldState, updatedAtChapter: nextChapter }
+          for (const field of CHARACTER_STATE_TEXT_FIELDS) {
+            if (patch[field] !== undefined) {
+              nextState[field] = String(patch[field]).trim()
+            }
+          }
+          updated.currentState = nextState
         }
 
         const nextEntries = [...snapshot.entries]
         nextEntries[targetIdx] = updated
 
-        CharacterRosterRepository.commit({
-          operationId: randomUUID(),
-          expectedRevision: snapshot.revision,
-          schemaVersion: 1,
-          intent: 'manual_edit',
-          entries: nextEntries,
-        })
-
+        commitRoster(snapshot, nextEntries)
         await rendererAction({ type: 'refresh_character_roster' })
 
-        return {
-          content: [{
-            type: 'text',
-            text: text(`角色「${existing.name}」已成功更新。`, `Character "${existing.name}" updated successfully.`),
-          }],
-          details: { name: existing.name },
-        }
+        return textResult(
+          text(`角色「${existing.name}」已成功更新。`, `Character "${existing.name}" updated successfully.`),
+          { name: existing.name },
+        )
       }
 
-      // =========================================================================
-      // 8. 多维查询与历史章节状态快照回溯 (read - default)
-      // =========================================================================
       const snapshot = CharacterRosterRepository.read()
       let entries = snapshot.entries
 
-      // 角色定位过滤
       if (params.role) {
         const r = normalizeCharacterRole(params.role)
-        entries = entries.filter(e => e.role === r)
+        entries = entries.filter((e) => e.role === r)
       }
 
-      // 关键词过滤
       if (params.keyword) {
         const kw = params.keyword.trim().toLowerCase()
-        entries = entries.filter(e =>
+        entries = entries.filter((e) =>
           e.name.toLowerCase().includes(kw)
           || e.personality.toLowerCase().includes(kw)
           || e.background.toLowerCase().includes(kw)
@@ -636,11 +536,10 @@ export function createManageCharactersTool(
         )
       }
 
-      // 单人精确/模糊匹配
       const targetCharName = (params.character_name || params.name || '').trim()
       if (targetCharName) {
-        const match = entries.find(e => e.name.toLowerCase() === targetCharName.toLowerCase())
-          || entries.find(e => e.name.toLowerCase().includes(targetCharName.toLowerCase()))
+        const match = findEntryByName(entries, targetCharName)
+          || entries.find((e) => e.name.toLowerCase().includes(targetCharName.toLowerCase()))
         if (!match) {
           throw new Error(text(
             `未找到匹配的角色「${targetCharName}」。当前可用角色：${snapshot.entries.map(e => e.name).join('、') || '暂无角色'}`,
@@ -648,7 +547,6 @@ export function createManageCharactersTool(
           ))
         }
 
-        // 若指定了具体章节序号，尝试提取该章节的历史快照或状态
         const histChapter = params.chapter_number
         let stateNote = ''
         if (histChapter !== undefined) {
@@ -666,25 +564,20 @@ export function createManageCharactersTool(
           }
         }
 
-        const formatted = formatSingleCharacter(match, params.scope || 'all', isEn) + stateNote
-        return {
-          content: [{ type: 'text', text: formatted }],
-          details: { total: 1, name: match.name, role: match.role },
-        }
+        return textResult(
+          formatSingleCharacter(match, params.scope || 'all', isEn) + stateNote,
+          { total: 1, name: match.name, role: match.role },
+        )
       }
 
-      // 列表查询截断
       const limit = params.limit || 50
       const visible = entries.slice(0, limit)
 
       if (visible.length === 0) {
-        return {
-          content: [{
-            type: 'text',
-            text: text('当前项目中暂无符合条件的角色。', 'No characters found in current project.'),
-          }],
-          details: { total: 0 },
-        }
+        return textResult(
+          text('当前项目中暂无符合条件的角色。', 'No characters found in current project.'),
+          { total: 0 },
+        )
       }
 
       const listLines: string[] = [
@@ -692,46 +585,88 @@ export function createManageCharactersTool(
       ]
 
       for (const entry of visible) {
-        const roleLabel = formatRole(entry.role, isEn)
-        let line = `- **${entry.name}** [${roleLabel}]`
+        let line = `- **${entry.name}** [${formatRole(entry.role, isEn)}]`
         if (entry.gender || entry.age) line += ` (${[entry.gender, entry.age].filter(Boolean).join(', ')})`
-        if (entry.background) line += ` · 背景: ${entry.background.slice(0, 40)}${entry.background.length > 40 ? '...' : ''}`
+        if (entry.background) {
+          const preview = entry.background.length > 40
+            ? `${entry.background.slice(0, 40)}...`
+            : entry.background
+          line += ` · 背景: ${preview}`
+        }
         if (entry.currentState) {
           line += `\n  - 状态 (第 ${entry.currentState.updatedAtChapter} 章): 位置 [${entry.currentState.location || '未知'}] | 境界 [${entry.currentState.powerLevel || '常规'}] | 身心 [${entry.currentState.physicalState || '良好'}]`
         }
         listLines.push(line)
       }
 
-      return {
-        content: [{ type: 'text', text: listLines.join('\n') }],
-        details: { total: entries.length, returned: visible.length },
-      }
+      return textResult(listLines.join('\n'), { total: entries.length, returned: visible.length })
     },
   }
 }
 
+function namesEqual(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase()
+}
+
+function findEntryByName(
+  entries: CharacterRosterEntry[],
+  name: string,
+): CharacterRosterEntry | undefined {
+  return entries.find((entry) => namesEqual(entry.name, name))
+}
+
+function textResult(
+  body: string,
+  details: Record<string, unknown>,
+): { content: Array<{ type: 'text'; text: string }>; details: Record<string, unknown> } {
+  return {
+    content: [{ type: 'text', text: body }],
+    details,
+  }
+}
+
+function commitRoster(
+  snapshot: CharacterRosterSnapshot,
+  entries: CharacterRosterEntry[],
+  renames?: CharacterRosterRename[],
+): void {
+  CharacterRosterRepository.commit({
+    operationId: randomUUID(),
+    expectedRevision: snapshot.revision,
+    schemaVersion: CHARACTER_ROSTER_SCHEMA_VERSION,
+    intent: 'manual_edit',
+    entries,
+    ...(renames ? { renames } : {}),
+  })
+}
+
 function normalizeEntryPayload(payload: Record<string, unknown>): CharacterRosterEntry {
   const name = String(payload.name || '').trim()
-  const rawRole = String(payload.role || 'supporting')
-  const role: CharacterRole = normalizeCharacterRole(rawRole)
+  const role: CharacterRole = normalizeCharacterRole(String(payload.role || 'supporting'))
 
   const rawRels = Array.isArray(payload.relationships) ? payload.relationships : []
-  const relationships: CharacterRosterRelationship[] = rawRels.map(r => ({
-    target: String((r as Record<string, unknown>).target || '').trim(),
-    relation: String((r as Record<string, unknown>).relation || '').trim(),
-  })).filter(r => Boolean(r.target))
+  const relationships: CharacterRosterRelationship[] = rawRels.map((r) => {
+    const rel = r as Record<string, unknown>
+    return {
+      target: String(rel.target || '').trim(),
+      relation: String(rel.relation || '').trim(),
+    }
+  }).filter((r) => Boolean(r.target))
 
   let currentState: CharacterRosterCharacterState | undefined
   if (payload.currentState && typeof payload.currentState === 'object') {
     const cs = payload.currentState as Record<string, unknown>
     currentState = {
-      location: String(cs.location || '').trim(),
-      powerLevel: String(cs.powerLevel || '').trim(),
-      physicalState: String(cs.physicalState || '').trim(),
-      mentalState: String(cs.mentalState || '').trim(),
-      keyItems: String(cs.keyItems || '').trim(),
-      recentEvents: String(cs.recentEvents || '').trim(),
+      location: '',
+      powerLevel: '',
+      physicalState: '',
+      mentalState: '',
+      keyItems: '',
+      recentEvents: '',
       updatedAtChapter: Number.isSafeInteger(cs.updatedAtChapter) ? Number(cs.updatedAtChapter) : 0,
+    }
+    for (const field of CHARACTER_STATE_TEXT_FIELDS) {
+      currentState[field] = String(cs[field] || '').trim()
     }
   }
 
@@ -762,19 +697,31 @@ function formatRole(role: string, isEn: boolean): string {
   }
 }
 
+function pushLabeled(
+  lines: string[],
+  value: string | undefined,
+  zh: string,
+  en: string,
+  isEn: boolean,
+  prefix = '- ',
+): void {
+  if (!value) return
+  lines.push(`${prefix}${isEn ? en : zh}: ${value}`)
+}
+
 function formatSingleCharacter(entry: CharacterRosterEntry, scope: string, isEn: boolean): string {
   const lines: string[] = [`# ${entry.name} [${formatRole(entry.role, isEn)}]`]
 
   if (scope === 'all' || scope === 'profile') {
-    if (entry.gender) lines.push(`- ${isEn ? 'Gender' : '性别'}: ${entry.gender}`)
-    if (entry.age) lines.push(`- ${isEn ? 'Age' : '年龄'}: ${entry.age}`)
-    if (entry.appearance) lines.push(`- ${isEn ? 'Appearance' : '外貌'}: ${entry.appearance}`)
-    if (entry.personality) lines.push(`- ${isEn ? 'Personality' : '性格'}: ${entry.personality}`)
-    if (entry.background) lines.push(`- ${isEn ? 'Background' : '背景'}: ${entry.background}`)
-    if (entry.abilities) lines.push(`- ${isEn ? 'Abilities' : '能力/功法'}: ${entry.abilities}`)
-    if (entry.motivation) lines.push(`- ${isEn ? 'Motivation' : '核心动机'}: ${entry.motivation}`)
-    if (entry.arc) lines.push(`- ${isEn ? 'Arc' : '人物弧光'}: ${entry.arc}`)
-    if (entry.notes) lines.push(`- ${isEn ? 'Notes' : '备忘录'}: ${entry.notes}`)
+    pushLabeled(lines, entry.gender, '性别', 'Gender', isEn)
+    pushLabeled(lines, entry.age, '年龄', 'Age', isEn)
+    pushLabeled(lines, entry.appearance, '外貌', 'Appearance', isEn)
+    pushLabeled(lines, entry.personality, '性格', 'Personality', isEn)
+    pushLabeled(lines, entry.background, '背景', 'Background', isEn)
+    pushLabeled(lines, entry.abilities, '能力/功法', 'Abilities', isEn)
+    pushLabeled(lines, entry.motivation, '核心动机', 'Motivation', isEn)
+    pushLabeled(lines, entry.arc, '人物弧光', 'Arc', isEn)
+    pushLabeled(lines, entry.notes, '备忘录', 'Notes', isEn)
 
     if (entry.relationships && entry.relationships.length > 0) {
       lines.push(isEn ? '### Relationships:' : '### 人际关系网络:')
@@ -784,22 +731,29 @@ function formatSingleCharacter(entry: CharacterRosterEntry, scope: string, isEn:
     }
   }
 
-  if (scope === 'all' || scope === 'state') {
-    if (entry.currentState) {
-      lines.push(isEn ? `### Current State (Ch. ${entry.currentState.updatedAtChapter}):` : `### 当前动态状态（第 ${entry.currentState.updatedAtChapter} 章）:`)
-      if (entry.currentState.location) lines.push(`  - ${isEn ? 'Location' : '当前位置'}: ${entry.currentState.location}`)
-      if (entry.currentState.powerLevel) lines.push(`  - ${isEn ? 'Power level' : '实力境界'}: ${entry.currentState.powerLevel}`)
-      if (entry.currentState.physicalState) lines.push(`  - ${isEn ? 'Physical state' : '生理状态'}: ${entry.currentState.physicalState}`)
-      if (entry.currentState.mentalState) lines.push(`  - ${isEn ? 'Mental state' : '心理状态'}: ${entry.currentState.mentalState}`)
-      if (entry.currentState.keyItems) lines.push(`  - ${isEn ? 'Key items' : '持有道具'}: ${entry.currentState.keyItems}`)
-      if (entry.currentState.recentEvents) lines.push(`  - ${isEn ? 'Recent events' : '近期经历'}: ${entry.currentState.recentEvents}`)
-    }
+  if ((scope === 'all' || scope === 'state') && entry.currentState) {
+    const state = entry.currentState
+    lines.push(
+      isEn
+        ? `### Current State (Ch. ${state.updatedAtChapter}):`
+        : `### 当前动态状态（第 ${state.updatedAtChapter} 章）:`,
+    )
+    pushLabeled(lines, state.location, '当前位置', 'Location', isEn, '  - ')
+    pushLabeled(lines, state.powerLevel, '实力境界', 'Power level', isEn, '  - ')
+    pushLabeled(lines, state.physicalState, '生理状态', 'Physical state', isEn, '  - ')
+    pushLabeled(lines, state.mentalState, '心理状态', 'Mental state', isEn, '  - ')
+    pushLabeled(lines, state.keyItems, '持有道具', 'Key items', isEn, '  - ')
+    pushLabeled(lines, state.recentEvents, '近期经历', 'Recent events', isEn, '  - ')
   }
 
   return lines.join('\n')
 }
 
-function getChapterStateSnapshot(db: ReturnType<typeof getProjectDb>, chapterNumber: number, charName: string): string | null {
+function getChapterStateSnapshot(
+  db: ReturnType<typeof getProjectDb>,
+  chapterNumber: number,
+  charName: string,
+): string | null {
   if (!db) return null
   try {
     const row = db.prepare(`
@@ -810,14 +764,8 @@ function getChapterStateSnapshot(db: ReturnType<typeof getProjectDb>, chapterNum
       LIMIT 1
     `).get(chapterNumber) as { character_states: string; chapter_number: number } | undefined
 
-    if (!row || !row.character_states) return null
-
-    // 如果存的是文本或 JSON，查找该角色的段落
-    const raw = row.character_states
-    if (raw.includes(charName)) {
-      return `第 ${row.chapter_number} 章快照片段：\n${raw}`
-    }
-    return null
+    if (!row?.character_states?.includes(charName)) return null
+    return `第 ${row.chapter_number} 章快照片段：\n${row.character_states}`
   } catch {
     return null
   }

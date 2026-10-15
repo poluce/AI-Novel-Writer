@@ -325,9 +325,12 @@ export async function generateEmbeddings(
 
   // 批量限制：每次最多 50 条
   // 旧配置未提供 batchSize 时保持原有协议默认值，避免升级后意外改变云端调用。
-  const batchSize = configuredBatchSize === undefined
-    ? (protocol === 'gemini' ? 100 : 50)
-    : normalizeEmbeddingOptions({ batchSize: configuredBatchSize }).batchSize
+  let batchSize = 50
+  if (configuredBatchSize === undefined) {
+    if (protocol === 'gemini') batchSize = 100
+  } else {
+    batchSize = normalizeEmbeddingOptions({ batchSize: configuredBatchSize }).batchSize
+  }
   const results: number[][] = []
 
   for (let i = 0; i < texts.length; i += batchSize) {

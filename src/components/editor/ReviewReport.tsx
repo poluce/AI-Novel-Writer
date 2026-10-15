@@ -69,6 +69,15 @@ interface ReviewJSON {
   summary: string
 }
 
+function chapterGoalStatusLabel(
+  status: string,
+  text: (zhCNText: string, enUSText: string) => string,
+): string {
+  if (status === 'completed') return text('已完成', 'Completed')
+  if (status === 'unmet') return text('未完成', 'Unmet')
+  return text('待核实', 'Needs verification')
+}
+
 interface ReviewReportProps {
   /** 原始审稿报告文本（JSON 或旧版 markdown） */
   reportText: string
@@ -838,7 +847,7 @@ function ReviewReportSession({
                               <div className="space-y-1" aria-label={text('本章目标与证据', 'Chapter goal and evidence')}>
                                 <p className="font-medium">
                                   {text('本章目标：', 'Chapter goal: ')}{goal.text}
-                                  {' — '}{goal.status === 'completed' ? text('已完成', 'Completed') : goal.status === 'unmet' ? text('未完成', 'Unmet') : text('待核实', 'Needs verification')}
+                                  {' — '}{chapterGoalStatusLabel(goal.status, text)}
                                 </p>
                                 {goal.evidence.map((evidence, index) => (
                                   <blockquote key={index} className="border-l-2 border-[var(--color-border)] pl-2">

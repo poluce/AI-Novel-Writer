@@ -40,17 +40,16 @@ export function projectPathKey(projectPath: string | null | undefined): string |
   const isUnc = value.startsWith('\\\\')
   const drive = !isUnc ? /^([A-Za-z]:)(\\|$)/.exec(value) : null
   const isAbsoluteDrive = !!drive && value.slice(2).startsWith('\\')
-  const prefix = isUnc
-    ? '\\\\'
-    : drive
-      ? isAbsoluteDrive ? `${drive[1]}\\` : drive[1]
-      : ''
-  const rawSegments = (isUnc
-    ? value.slice(2)
-    : drive
-      ? value.slice(2).replace(/^\\+/, '')
-      : value
-  ).split('\\')
+  let prefix = ''
+  if (isUnc) prefix = '\\\\'
+  else if (drive) {
+    if (isAbsoluteDrive) prefix = `${drive[1]}\\`
+    else prefix = drive[1]
+  }
+  let remainder = value
+  if (isUnc) remainder = value.slice(2)
+  else if (drive) remainder = value.slice(2).replace(/^\\+/, '')
+  const rawSegments = remainder.split('\\')
   const segments: string[] = []
   // A UNC share root is `\\server\\share`; do not let a lexical `..` escape it.
   const protectedSegments = isUnc ? 2 : 0

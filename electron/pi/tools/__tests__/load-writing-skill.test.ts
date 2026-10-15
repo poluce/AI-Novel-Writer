@@ -5,7 +5,7 @@ import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import type { AgentSkillCatalogEntry } from '../../../../src/shared/agent-skills'
-import { createLoadWritingSkillTool } from '../load-writing-skill.tool'
+import { createManageSkillsTool } from '../manage-skills.tool'
 
 const roots: string[] = []
 
@@ -62,9 +62,9 @@ const skills: AgentSkillCatalogEntry[] = [
   },
 ]
 
-describe('load_writing_skill', () => {
+describe('manage_skills load', () => {
   it('returns the skill body by name', async () => {
-    const tool = createLoadWritingSkillTool('zh-CN', skills)
+    const tool = createManageSkillsTool('zh-CN', skills)
     const result = await tool.execute('c1', { name: 'scene-craft' })
     const first = result.content[0]
     expect(first.type).toBe('text')
@@ -76,17 +76,17 @@ describe('load_writing_skill', () => {
   })
 
   it('trims the name and rejects an unknown skill with the available list', async () => {
-    const tool = createLoadWritingSkillTool('zh-CN', skills)
+    const tool = createManageSkillsTool('zh-CN', skills)
     await expect(tool.execute('c1', { name: 'nope' })).rejects.toThrow(/没有名为“nope”的技能/)
   })
 
   it('never serves a skill the model may not invoke', async () => {
-    const tool = createLoadWritingSkillTool('zh-CN', skills)
+    const tool = createManageSkillsTool('zh-CN', skills)
     await expect(tool.execute('c1', { name: 'hidden' })).rejects.toThrow(/没有名为“hidden”的技能/)
   })
 
   it('reports a skill without a readable body instead of returning nothing', async () => {
-    const tool = createLoadWritingSkillTool('en-US', [{
+    const tool = createManageSkillsTool('en-US', [{
       name: 'empty',
       description: 'Empty skill',
       location: 'builtin://empty',
@@ -96,10 +96,10 @@ describe('load_writing_skill', () => {
   })
 })
 
-describe('load_writing_skill body source', () => {
+describe('manage_skills load body source', () => {
   it('reads the body from disk so later edits win over the catalog snapshot', async () => {
     const { root, entry } = onDiskSkill('磁盘上的新正文。', '目录快照里的旧正文。')
-    const tool = createLoadWritingSkillTool('zh-CN', [entry], [root])
+    const tool = createManageSkillsTool('zh-CN', [entry], [root])
 
     const result = await tool.execute('c1', { name: 'scene-craft' })
     const first = result.content[0]
@@ -109,7 +109,7 @@ describe('load_writing_skill body source', () => {
 
   it('falls back to the snapshot when the file is outside the allowed roots', async () => {
     const { entry } = onDiskSkill('磁盘正文。', '快照正文。')
-    const tool = createLoadWritingSkillTool('zh-CN', [entry], [temporaryDir()])
+    const tool = createManageSkillsTool('zh-CN', [entry], [temporaryDir()])
 
     const result = await tool.execute('c1', { name: 'scene-craft' })
     const first = result.content[0]
@@ -118,7 +118,7 @@ describe('load_writing_skill body source', () => {
 
   it('falls back to the snapshot when no root is configured', async () => {
     const { entry } = onDiskSkill('磁盘正文。', '快照正文。')
-    const tool = createLoadWritingSkillTool('zh-CN', [entry])
+    const tool = createManageSkillsTool('zh-CN', [entry])
 
     const result = await tool.execute('c1', { name: 'scene-craft' })
     const first = result.content[0]
@@ -128,7 +128,7 @@ describe('load_writing_skill body source', () => {
   it('falls back to the snapshot when the file disappeared', async () => {
     const { root, entry } = onDiskSkill('磁盘正文。', '快照正文。')
     fs.rmSync(path.dirname(entry.location), { recursive: true, force: true })
-    const tool = createLoadWritingSkillTool('zh-CN', [entry], [root])
+    const tool = createManageSkillsTool('zh-CN', [entry], [root])
 
     const result = await tool.execute('c1', { name: 'scene-craft' })
     const first = result.content[0]

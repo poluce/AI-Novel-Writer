@@ -164,10 +164,16 @@ export function buildNovelConfigProposal(
   }
   const changes: Record<string, unknown> = {}
   for (const [field, proposed] of Object.entries(candidate)) {
-    const canonicalField = NOVEL_CONFIG_FIELD_ALIASES[field] ?? (field === 'narrativePov' ? 'narrativePOV' : field)
-    let normalizedValue = canonicalField === 'writingLanguage'
-      ? proposed === '简体中文' ? 'zh-CN' : proposed === 'English' ? 'en-US' : proposed
-      : proposed
+    const alias = NOVEL_CONFIG_FIELD_ALIASES[field]
+    let canonicalField: keyof NovelConfig | string
+    if (alias) canonicalField = alias
+    else if (field === 'narrativePov') canonicalField = 'narrativePOV'
+    else canonicalField = field
+    let normalizedValue = proposed
+    if (canonicalField === 'writingLanguage') {
+      if (proposed === '简体中文') normalizedValue = 'zh-CN'
+      else if (proposed === 'English') normalizedValue = 'en-US'
+    }
     if (canonicalField === 'plotStructure' && typeof normalizedValue === 'string') {
       normalizedValue = PLOT_STRUCTURE_VALUE_ALIASES[normalizedValue] ?? normalizedValue
     }

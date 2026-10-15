@@ -55,7 +55,7 @@ const GENERATABLE_STEPS: ArchStepKey[] = ['premise', 'characters', 'worldbuildin
 
 /** 故事架构编辑器 — 三块与小说配置同款设置文档 + 单块 AI 生成（情节大纲已拆为独立页面） */
 export default function WorldBuildingEditor({ projectKey }: { projectKey: string }) {
-  // ✅ 精确订阅，避免 novelConfig 等变化导致不必要的 loadStatus 重建
+  // 精确订阅，避免 novelConfig 等变化导致不必要的 loadStatus 重建
   const currentProject = useProjectStore(s => s.currentProject)
   const text = useLocaleStore(s => s.text)
   const projectMatches = currentProject?.path === projectKey
@@ -121,7 +121,7 @@ export default function WorldBuildingEditor({ projectKey }: { projectKey: string
       characters: rosterSnapshot?.renderedMarkdown ?? '',
     })
     setLoading(false)
-    // ✅ 只依赖 path 字符串，避免 novelConfig 等变化导致 loadStatus 重建
+    // 只依赖 path 字符串，避免 novelConfig 等变化导致 loadStatus 重建
   }, [currentProject, projectKey, projectMatches, rosterSnapshot])
 
   useEffect(() => {

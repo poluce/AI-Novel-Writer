@@ -32,6 +32,12 @@ interface ChapterMeta {
   status: string
 }
 
+function versionHistoryType(status: string): 'final' | 'refined' | 'draft' {
+  if (status === 'finalized') return 'final'
+  if (status === 'revised') return 'refined'
+  return 'draft'
+}
+
 /** 版本历史面板 — 查看章节版本并与当前内容对比 */
 export default function VersionHistory({ projectKey }: { projectKey: string }) {
   const currentProject = useProjectStore(s => s.currentProject)
@@ -90,7 +96,7 @@ export default function VersionHistory({ projectKey }: { projectKey: string }) {
       setVersions(drafts.map(draft => ({
         id: draft.id,
         version: draft.version,
-        type: draft.status === 'finalized' ? 'final' : (draft.status === 'revised' ? 'refined' : 'draft'),
+        type: versionHistoryType(draft.status),
         word_count: draft.wordCount || 0,
         created_at: draft.createdAt,
         dependencies_stale: draft.dependenciesStale,

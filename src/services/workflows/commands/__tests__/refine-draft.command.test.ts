@@ -420,7 +420,7 @@ describe('RefineDraftCommand bounded visible completion', () => {
     expect(result).toBe(expected)
     expect(complete).toHaveBeenCalledTimes(2)
     expect(complete.mock.calls.map(([request]) => request.modelId))
-      .toEqual(['model-lease-refine', 'model-lease-refine'])
+      .toEqual(['model-a', 'model-a'])
     expect(invoke.mock.calls.filter(([channel]) => channel === 'db:revision-replace-pending')).toEqual([
       ['db:revision-replace-pending', expect.objectContaining({ content: expected }), PROJECT_PATH, PROJECT_SESSION],
     ])
@@ -1372,13 +1372,6 @@ describe('ReviewChapterCommand reasoning stage', () => {
 
     const context = {
       ...workflowContext(),
-      writingSkills: Object.freeze({
-        review: Object.freeze({
-          skillId: 'user:review-craft', name: 'Review craft', stage: 'review' as const,
-          source: 'user' as const, writingLanguage: 'zh-CN' as const,
-          content: '检查角色动机与因果连续性。', utf8Bytes: 39,
-        }),
-      }),
     }
     await chapterReviewCommand(complete).execute({
       step: {},
@@ -1390,7 +1383,7 @@ describe('ReviewChapterCommand reasoning stage', () => {
     expect(complete.mock.calls[0]?.[0].reasoningStage).toBe('review')
     expect(complete.mock.calls[0]?.[0].submitTool).toBe('submit_review')
     expect(complete.mock.calls[0]?.[0].messages[1]?.content)
-      .toContain('【补充写作 Skill：Review craft】')
+      .not.toContain('【补充写作 Skill：')
   })
 
   it('consumes structured artifact directly from submit tool without secondary JSON.parse deserialization', async () => {

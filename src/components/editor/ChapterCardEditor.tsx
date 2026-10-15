@@ -12,13 +12,15 @@ import type { ProjectSessionContext } from '../../shared/ipc-channels'
 import {
   projectSessionContextFromProject,
   sameProjectPathKey,
-  sameProjectSessionContext} from '../../shared/project-session-context'
+  sameProjectSessionContext,
+} from '../../shared/project-session-context'
 import {
   loadDirectoryBlueprints,
   saveChapterBlueprint,
   saveAllBlueprints,
   type ChapterBlueprint,
-  type DirectoryWorkflowParams} from '../../services/workflows/directory-workflow'
+  type DirectoryWorkflowParams,
+} from '../../services/workflows/directory-workflow'
 import { launchCreativeWorkflow } from '../../services/workflows/creative-workflow-launcher'
 import { guardDirectoryGeneration } from '../../services/workflow-guards'
 import DirectoryConfigDialog from '../dialogs/DirectoryConfigDialog'
@@ -49,23 +51,37 @@ import {
   reconcileSavedBlueprintSnapshots,
   updateEditableChapterBlueprintField,
   updateChapterCardProjectDraft,
+  type ChapterCardDraftLedger,
   type DraftState,
-  type EditableChapterBlueprintField} from './chapter-card-draft-ledger'
+  type EditableChapterBlueprintField,
+} from './chapter-card-draft-ledger'
 import { LatestRequestGate } from './latest-request-gate'
 import {
   AuthoritativeChapterSequenceError,
-  readAuthoritativeNextChapter} from '../../services/authoritative-chapter-sequence'
+  readAuthoritativeNextChapter,
+} from '../../services/authoritative-chapter-sequence'
 
 const ROLES = ['建置', '铺垫', '发展', '冲突', '高潮', '转折', '收尾']
+
+const ROLE_EN: Record<string, string> = {
+  建置: 'Setup',
+  铺垫: 'Foreshadowing',
+  发展: 'Development',
+  冲突: 'Conflict',
+  高潮: 'Climax',
+  转折: 'Turning point',
+  收尾: 'Resolution',
+}
 
 const ROLE_COLORS: Record<string, string> = {
   高潮: 'bg-red-500/20 text-[var(--color-error-text)]',
   冲突: 'bg-orange-500/20 text-[var(--color-warning-text)]',
   转折: 'bg-purple-500/20 text-[var(--color-category-review-text)]',
   建置: 'bg-blue-500/20 text-[var(--color-category-progress-text)]',
-  收尾: 'bg-green-500/20 text-[var(--color-success-text)]'}
+  收尾: 'bg-green-500/20 text-[var(--color-success-text)]',
+}
 
-function readDraftLedgerFromFixedTab() {
+function readDraftLedgerFromFixedTab(): ChapterCardDraftLedger {
   return parseChapterCardDraftLedger(
     useEditorDraftLedgerStore.getState().draftLedgers[CHAPTER_CARD_TAB_ID],
   )
@@ -75,9 +91,10 @@ function currentProjectSessionForPath(projectKey: string): ProjectSessionContext
   const projectSession = projectSessionContextFromProject(
     useProjectStore.getState().currentProject,
   )
-  return projectSession && sameProjectPathKey(projectSession.projectPath, projectKey)
-    ? projectSession
-    : null
+  if (!projectSession || !sameProjectPathKey(projectSession.projectPath, projectKey)) {
+    return null
+  }
+  return projectSession
 }
 
 function isCurrentProjectSession(projectSession: ProjectSessionContext): boolean {
@@ -87,17 +104,88 @@ function isCurrentProjectSession(projectSession: ProjectSessionContext): boolean
   )
 }
 
+function matchingDataProjectSession(
+  projectKey: string,
+  dataProjectSession: ProjectSessionContext | null,
+): ProjectSessionContext | null {
+  const projectSession = currentProjectSessionForPath(projectKey)
+  if (!projectSession || !sameProjectSessionContext(dataProjectSession, projectSession)) {
+    return null
+  }
+  return projectSession
+}
+
+function isLoadedCurrentSession(
+  projectSession: ProjectSessionContext,
+  dataProjectSession: ProjectSessionContext | null,
+): boolean {
+  return isCurrentProjectSession(projectSession)
+    && sameProjectSessionContext(dataProjectSession, projectSession)
+}
+
+function isRenderableProjectSession(
+  projectSession: ProjectSessionContext | null,
+  projectMatches: boolean,
+  renderedProjectId: string | null,
+  renderedProjectPath: string | null,
+): projectSession is ProjectSessionContext {
+  return projectMatches
+    && projectSession !== null
+    && projectSession.projectId === renderedProjectId
+    && sameProjectPathKey(projectSession.projectPath, renderedProjectPath)
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function recoveryChapterFromSequenceError(error: unknown): number | null {
+  if (!(error instanceof AuthoritativeChapterSequenceError)) return null
+  const gap = error.sequence.firstGapChapterNumber
+  if (gap === undefined || error.sequence.lastChapterNumber <= gap) return null
+  return gap
+}
+
+function createEmptyBlueprint(chapterNumber: number): ChapterBlueprint {
+  return {
+    chapterNumber,
+    title: '',
+    role: '发展',
+    purpose: '',
+    keyEvents: '',
+    characters: [],
+    suspenseHook: '',
+    userGuidance: '',
+    notes: '',
+    notesUpdatedAt: '',
+  }
+}
+
+function emitBlueprintResourceRefresh(
+  projectKey: string,
+  projectSession: ProjectSessionContext,
+): void {
+  globalEventBus.emit('REFRESH_RESOURCE', {
+    resources: ['blueprints', 'fileTree'],
+    projectPath: projectKey,
+    projectSession,
+  })
+}
+
+interface ChapterCardEditorProps {
+  projectKey: string
+  initialChapterNumber?: number
+}
+
 /** 章节蓝图编辑器 — 读写 directory.json */
 export default function ChapterCardEditor({
   projectKey,
-  initialChapterNumber}: {
-  projectKey: string
-  initialChapterNumber?: number
-}) {
+  initialChapterNumber,
+}: ChapterCardEditorProps) {
   const text = useLocaleStore(s => s.text)
   const locale = useLocaleStore(s => s.locale)
   const currentProject = useProjectStore(s => s.currentProject)
-  // ✅ action 用 getState() 获取，不订阅 workflow store 高频更新
+  // action 用 getState() 获取，不订阅 workflow store 高频更新
   const addLog = useWorkflowStore.getState().addLog
   const [blueprints, setBlueprints] = useState<ChapterBlueprint[]>([])
   const [selectedIdx, setSelectedIdx] = useState<number>(0)
@@ -137,16 +225,11 @@ export default function ChapterCardEditor({
     if (targetIndex >= 0) setSelectedIdx(targetIndex)
   }, [initialChapterNumber, loading])
 
-  const roleLabel = (role: string) => text(role, ({
-    建置: 'Setup',
-    铺垫: 'Foreshadowing',
-    发展: 'Development',
-    冲突: 'Conflict',
-    高潮: 'Climax',
-    转折: 'Turning point',
-    收尾: 'Resolution'} as Record<string, string>)[role] ?? role)
+  function roleLabel(role: string): string {
+    return text(role, ROLE_EN[role] ?? role)
+  }
 
-  const applyVisibleDraftState = useCallback((nextBlueprints: ChapterBlueprint[], nextDirty: Set<number>) => {
+  const applyVisibleDraftState = useCallback((nextBlueprints: ChapterBlueprint[], nextDirty: Set<number>): void => {
     blueprintsRef.current = nextBlueprints
     dirtyChapterNumbersRef.current = nextDirty
     setBlueprints(nextBlueprints)
@@ -158,11 +241,8 @@ export default function ChapterCardEditor({
     projectSession: ProjectSessionContext,
     nextBlueprints: ChapterBlueprint[],
     nextDirty: Set<number>,
-  ) => {
-    if (
-      !isCurrentProjectSession(projectSession)
-      || !sameProjectSessionContext(dataProjectSessionRef.current, projectSession)
-    ) return
+  ): void => {
+    if (!isLoadedCurrentSession(projectSession, dataProjectSessionRef.current)) return
     const ledger = updateChapterCardProjectDraft(
       readDraftLedgerFromFixedTab(),
       projectKey,
@@ -177,44 +257,33 @@ export default function ChapterCardEditor({
     projectKey: string,
     projectSession: ProjectSessionContext,
   ): DraftState => {
-    if (
-      isCurrentProjectSession(projectSession)
-      && sameProjectSessionContext(dataProjectSessionRef.current, projectSession)
-    ) {
+    if (isLoadedCurrentSession(projectSession, dataProjectSessionRef.current)) {
       return {
         blueprints: blueprintsRef.current,
-        dirtyChapterNumbers: dirtyChapterNumbersRef.current}
+        dirtyChapterNumbers: dirtyChapterNumbersRef.current,
+      }
     }
     const draft = getChapterCardProjectDraft(readDraftLedgerFromFixedTab(), projectKey)
     return {
       blueprints: draft?.blueprints ?? [],
-      dirtyChapterNumbers: new Set(draft?.dirtyChapterNumbers ?? [])}
+      dirtyChapterNumbers: new Set(draft?.dirtyChapterNumbers ?? []),
+    }
   }, [])
 
   const markChapterDirty = useCallback((
     nextBlueprints: ChapterBlueprint[],
     chapterNumber: number,
-  ) => {
-    const projectSession = currentProjectSessionForPath(projectKey)
-    if (
-      !projectMatches
-      || !projectSession
-      || !sameProjectSessionContext(dataProjectSessionRef.current, projectSession)
-    ) return
+  ): void => {
+    if (!projectMatches) return
+    const projectSession = matchingDataProjectSession(projectKey, dataProjectSessionRef.current)
+    if (!projectSession) return
     const nextDirty = new Set(dirtyChapterNumbersRef.current)
     nextDirty.add(chapterNumber)
     persistProjectDraftState(projectKey, projectSession, nextBlueprints, nextDirty)
   }, [projectKey, projectMatches, persistProjectDraftState])
 
-  const loadBlueprints = useCallback(async () => {
-    const projectSession = currentProjectSessionForPath(projectKey)
-    if (
-      !projectMatches
-      || !projectSession
-      || projectSession.projectId !== renderedProjectId
-      || !sameProjectPathKey(projectSession.projectPath, renderedProjectPath)
-    ) {
-      loadRequestGateRef.current.begin()
+  const loadBlueprints = useCallback(async (): Promise<void> => {
+    function clearLoadedState(): void {
       dataProjectSessionRef.current = null
       setDataProjectSession(null)
       setNextWriteChapter(null)
@@ -222,71 +291,70 @@ export default function ChapterCardEditor({
       setLegacyImportedTextRecoveryChapter(null)
       setSaving(false)
       applyVisibleDraftState([], new Set())
+    }
+
+    const projectSession = currentProjectSessionForPath(projectKey)
+    if (!isRenderableProjectSession(
+      projectSession,
+      projectMatches,
+      renderedProjectId,
+      renderedProjectPath,
+    )) {
+      loadRequestGateRef.current.begin()
+      clearLoadedState()
       setLoading(false)
       return
     }
+    const activeSession: ProjectSessionContext = projectSession
     const requestId = loadRequestGateRef.current.begin()
-    const isLatestProjectRequest = () => (
-      loadRequestGateRef.current.isLatest(requestId)
-      && isCurrentProjectSession(projectSession)
-    )
+    function isLatestProjectRequest(): boolean {
+      return loadRequestGateRef.current.isLatest(requestId)
+        && isCurrentProjectSession(activeSession)
+    }
     setLoading(true)
     setLegacyImportedTextRecoveryChapter(null)
-    if (!sameProjectSessionContext(dataProjectSessionRef.current, projectSession)) {
-      dataProjectSessionRef.current = null
-      setDataProjectSession(null)
-      setNextWriteChapter(null)
-      setAuthorityError(null)
-      setLegacyImportedTextRecoveryChapter(null)
-      setSaving(false)
-      applyVisibleDraftState([], new Set())
+    if (!sameProjectSessionContext(dataProjectSessionRef.current, activeSession)) {
+      clearLoadedState()
     }
     try {
       const restored = await refreshChapterCardDraftFromRemote({
         projectKey,
-        loadRemote: () => loadDirectoryBlueprints(projectKey, projectSession),
+        loadRemote: () => loadDirectoryBlueprints(projectKey, activeSession),
         readLedger: readDraftLedgerFromFixedTab,
         isProjectCurrent: isLatestProjectRequest,
         commit: (state, restoredDraft) => {
-          dataProjectSessionRef.current = projectSession
-          setDataProjectSession(projectSession)
+          dataProjectSessionRef.current = activeSession
+          setDataProjectSession(activeSession)
           if (restoredDraft) {
             persistProjectDraftState(
               projectKey,
-              projectSession,
+              activeSession,
               state.blueprints,
               state.dirtyChapterNumbers,
             )
           } else {
             applyVisibleDraftState(state.blueprints, state.dirtyChapterNumbers)
           }
-        }})
+        },
+      })
       // 项目可能在远端读取期间切换；旧项目结果不会进入 commit。
       if (!restored || !isLatestProjectRequest()) return
-      const data = restored.blueprints
-      if (data.length > 0) setSelectedIdx(0)
+      if (restored.blueprints.length > 0) setSelectedIdx(0)
       try {
-        const nextChapter = await readAuthoritativeNextChapter(projectSession, locale)
+        const nextChapter = await readAuthoritativeNextChapter(activeSession, locale)
         if (!isLatestProjectRequest()) return
         setAuthorityError(null)
         setLegacyImportedTextRecoveryChapter(null)
         setNextWriteChapter(nextChapter)
       } catch (error) {
         if (!isLatestProjectRequest()) return
-        const message = error instanceof Error ? error.message : String(error)
-        const recoveryChapter = error instanceof AuthoritativeChapterSequenceError
-          && error.sequence.firstGapChapterNumber !== undefined
-          && error.sequence.lastChapterNumber > error.sequence.firstGapChapterNumber
-          ? error.sequence.firstGapChapterNumber
-          : null
-        setAuthorityError(message)
-        setLegacyImportedTextRecoveryChapter(recoveryChapter)
+        setAuthorityError(errorMessage(error))
+        setLegacyImportedTextRecoveryChapter(recoveryChapterFromSequenceError(error))
         setNextWriteChapter(null)
       }
     } catch (error) {
       if (isLatestProjectRequest()) {
-        const message = error instanceof Error ? error.message : String(error)
-        setAuthorityError(message)
+        setAuthorityError(errorMessage(error))
         addLog('error', text('读取章节蓝图失败', 'Could not load chapter blueprints'))
       }
     } finally {
@@ -310,68 +378,62 @@ export default function ChapterCardEditor({
     return () => { mounted = false }
   }, [loadBlueprints, projectKey])
 
-  // 监听工作流完成事件，如果蓝图生成完毕则自动刷新
   useEffect(() => {
-    return globalEventBus.on('WORKFLOW_COMPLETE', (payload) => {
-      if (
-        payload.type === 'directory'
-        && sameProjectSessionContext(
-          payload.projectSession,
-          currentProjectSessionForPath(projectKey),
-        )
-      ) {
+    const unsubscribers = [
+      globalEventBus.on('WORKFLOW_COMPLETE', (payload) => {
+        if (
+          payload.type === 'directory'
+          && sameProjectSessionContext(
+            payload.projectSession,
+            currentProjectSessionForPath(projectKey),
+          )
+        ) {
+          loadBlueprints()
+        }
+      }),
+      // 单章或批量定稿后，重新读取连续定稿状态，避免旧版异常记录造成跳章入口。
+      globalEventBus.on('FINALIZE_COMPLETE', ({ projectPath, projectSession }) => {
+        if (
+          !sameProjectPathKey(projectPath, projectKey)
+          || !sameProjectSessionContext(projectSession, currentProjectSessionForPath(projectKey))
+        ) return
         loadBlueprints()
-      }
-    })
-  }, [loadBlueprints, projectKey])
-
-  // 单章或批量定稿后，重新读取连续定稿状态，避免旧版异常记录造成跳章入口。
-  useEffect(() => {
-    return globalEventBus.on('FINALIZE_COMPLETE', ({ projectPath, projectSession }) => {
-      if (
-        !sameProjectPathKey(projectPath, projectKey)
-        || !sameProjectSessionContext(projectSession, currentProjectSessionForPath(projectKey))
-      ) return
-      loadBlueprints()
-    })
-  }, [projectKey, loadBlueprints])
-
-  useEffect(() => {
-    return globalEventBus.on('REFRESH_RESOURCE', (payload) => {
-      if (
-        sameProjectSessionContext(
-          payload.projectSession,
-          currentProjectSessionForPath(projectKey),
-        )
-        && shouldRefreshBlueprints(payload.resources)
-      ) {
-        loadBlueprints()
-      }
-    })
+      }),
+      globalEventBus.on('REFRESH_RESOURCE', (payload) => {
+        if (
+          sameProjectSessionContext(
+            payload.projectSession,
+            currentProjectSessionForPath(projectKey),
+          )
+          && shouldRefreshBlueprints(payload.resources)
+        ) {
+          loadBlueprints()
+        }
+      }),
+    ]
+    return () => {
+      for (const unsubscribe of unsubscribers) unsubscribe()
+    }
   }, [loadBlueprints, projectKey])
 
   const selected = projectDataReady ? blueprints[selectedIdx] ?? null : null
 
-  /** 更新选中章节蓝图的字段 */
-  const updateField = <K extends EditableChapterBlueprintField>(
+  function updateField<K extends EditableChapterBlueprintField>(
     key: K,
     value: ChapterBlueprint[K],
-  ) => {
+  ): void {
     if (!selected) return
-    markChapterDirty(blueprintsRef.current.map((b, i) => (
-      i === selectedIdx ? updateEditableChapterBlueprintField(b, key, value) : b
+    markChapterDirty(blueprintsRef.current.map((blueprint, index) => (
+      index === selectedIdx
+        ? updateEditableChapterBlueprintField(blueprint, key, value)
+        : blueprint
     )), selected.chapterNumber)
   }
 
-  /** 保存当前章节蓝图 */
-  const handleSaveOne = async () => {
-    const projectSession = currentProjectSessionForPath(projectKey)
-    if (
-      !projectMatches
-      || !projectSession
-      || !selected
-      || !sameProjectSessionContext(dataProjectSessionRef.current, projectSession)
-    ) return
+  async function handleSaveOne(): Promise<void> {
+    if (!projectMatches || !selected) return
+    const projectSession = matchingDataProjectSession(projectKey, dataProjectSessionRef.current)
+    if (!projectSession) return
     const savedSnapshots = captureBlueprintSnapshots([selected])
     setSaving(true)
     try {
@@ -384,10 +446,10 @@ export default function ChapterCardEditor({
         savedSnapshots,
       )
       persistProjectDraftState(projectKey, projectSession, current.blueprints, nextDirty)
-    addLog('info', text(`第 ${selected.chapterNumber} 章蓝图已保存`, `Saved blueprint for Chapter ${selected.chapterNumber}`))
+      addLog('info', text(`第 ${selected.chapterNumber} 章蓝图已保存`, `Saved blueprint for Chapter ${selected.chapterNumber}`))
     } catch (err) {
       if (!isCurrentProjectSession(projectSession)) return
-      const message = err instanceof Error ? err.message : String(err)
+      const message = errorMessage(err)
       addLog('error', text(`保存第 ${selected.chapterNumber} 章蓝图失败：${message}`, `Could not save the blueprint for Chapter ${selected.chapterNumber}.`))
       toast.error(text(`保存失败\n\n${message}`, 'Could not save the blueprint.'))
     } finally {
@@ -395,14 +457,10 @@ export default function ChapterCardEditor({
     }
   }
 
-  /** 全量保存到 SQLite */
-  const handleSaveAll = async () => {
-    const projectSession = currentProjectSessionForPath(projectKey)
-    if (
-      !projectMatches
-      || !projectSession
-      || !sameProjectSessionContext(dataProjectSessionRef.current, projectSession)
-    ) return
+  async function handleSaveAll(): Promise<void> {
+    if (!projectMatches) return
+    const projectSession = matchingDataProjectSession(projectKey, dataProjectSessionRef.current)
+    if (!projectSession) return
     const saveInput = blueprintsRef.current
     const savedSnapshots = captureBlueprintSnapshots(saveInput)
     setSaving(true)
@@ -419,7 +477,7 @@ export default function ChapterCardEditor({
       addLog('info', text(`已保存全部 ${saveInput.length} 章蓝图`, `Saved all ${saveInput.length} chapter blueprints`))
     } catch (err) {
       if (!isCurrentProjectSession(projectSession)) return
-      const message = err instanceof Error ? err.message : String(err)
+      const message = errorMessage(err)
       addLog('error', text(`保存全部蓝图失败：${message}`, 'Could not save all chapter blueprints.'))
       toast.error(text(`保存失败\n\n${message}`, 'Could not save the blueprints.'))
     } finally {
@@ -435,16 +493,14 @@ export default function ChapterCardEditor({
     registerEditorExitSaveHandler({
       type: 'chapter-card',
       projectKey,
-      save: () => exitSaveRef.current()})
+      save: () => exitSaveRef.current(),
+    })
   }, [projectKey])
 
-  /** 新建空章节 */
-  const handleAddChapter = () => {
-    const projectSession = currentProjectSessionForPath(projectKey)
+  function handleAddChapter(): void {
     if (
       !projectMatches
-      || !projectSession
-      || !sameProjectSessionContext(dataProjectSessionRef.current, projectSession)
+      || !matchingDataProjectSession(projectKey, dataProjectSessionRef.current)
     ) return
     if (nextWriteChapter === null) {
       toast.warning(authorityError || text(
@@ -457,20 +513,14 @@ export default function ChapterCardEditor({
     const authoritativeBlueprintExists = currentBlueprints.some(
       blueprint => blueprint.chapterNumber === nextWriteChapter,
     )
-    const chapterNumber = authoritativeBlueprintExists
-      ? Math.max(nextWriteChapter, ...currentBlueprints.map(blueprint => blueprint.chapterNumber)) + 1
-      : nextWriteChapter
-    const newBlueprint: ChapterBlueprint = {
-      chapterNumber,
-      title: '',
-      role: '发展',
-      purpose: '',
-      keyEvents: '',
-      characters: [],
-      suspenseHook: '',
-      userGuidance: '',
-      notes: '',
-      notesUpdatedAt: ''}
+    let chapterNumber = nextWriteChapter
+    if (authoritativeBlueprintExists) {
+      chapterNumber = Math.max(
+        nextWriteChapter,
+        ...currentBlueprints.map(blueprint => blueprint.chapterNumber),
+      ) + 1
+    }
+    const newBlueprint = createEmptyBlueprint(chapterNumber)
     markChapterDirty([...currentBlueprints, newBlueprint], newBlueprint.chapterNumber)
     setSelectedIdx(currentBlueprints.length)
     if (authoritativeBlueprintExists) {
@@ -481,15 +531,10 @@ export default function ChapterCardEditor({
     }
   }
 
-  /** 删除选中章节 */
-  const handleDeleteChapter = async () => {
-    const projectSession = currentProjectSessionForPath(projectKey)
-    if (
-      !projectMatches
-      || !projectSession
-      || !selected
-      || !sameProjectSessionContext(dataProjectSessionRef.current, projectSession)
-    ) return
+  async function handleDeleteChapter(): Promise<void> {
+    if (!projectMatches || !selected) return
+    const projectSession = matchingDataProjectSession(projectKey, dataProjectSessionRef.current)
+    if (!projectSession) return
     const deletedSnapshots = captureBlueprintSnapshots([selected])
     const ok = await confirm(text(
       `确认删除第 ${selected.chapterNumber} 章蓝图？\n此操作不可撤销。`,
@@ -497,7 +542,8 @@ export default function ChapterCardEditor({
     ), {
       title: text('删除章节蓝图', 'Delete chapter blueprint'),
       confirmText: text('删除', 'Delete'),
-      danger: true})
+      danger: true,
+    })
     if (!ok || !isCurrentProjectSession(projectSession)) return
     const result = await ipc.invokeWithProjectSession(
       projectSession,
@@ -520,22 +566,14 @@ export default function ChapterCardEditor({
     if (isCurrentProjectSession(projectSession)) {
       setSelectedIdx(index => Math.max(0, Math.min(index, next.blueprints.length - 1)))
     }
-    globalEventBus.emit('REFRESH_RESOURCE', {
-      resources: ['blueprints', 'fileTree'],
-      projectPath: projectKey,
-      projectSession})
+    emitBlueprintResourceRefresh(projectKey, projectSession)
     toast.success(text(`已删除第 ${selected.chapterNumber} 章蓝图`, `Deleted the blueprint for Chapter ${selected.chapterNumber}`))
   }
 
-  /** 清空全部章节蓝图 */
-  const handleClearAllBlueprints = async () => {
-    const projectSession = currentProjectSessionForPath(projectKey)
-    if (
-      !projectMatches
-      || !projectSession
-      || blueprints.length === 0
-      || !sameProjectSessionContext(dataProjectSessionRef.current, projectSession)
-    ) return
+  async function handleClearAllBlueprints(): Promise<void> {
+    if (!projectMatches || blueprints.length === 0) return
+    const projectSession = matchingDataProjectSession(projectKey, dataProjectSessionRef.current)
+    if (!projectSession) return
     const clearedSnapshots = captureBlueprintSnapshots(blueprintsRef.current)
     const ok = await confirm(text(
       `确认清空全部 ${blueprints.length} 章蓝图？\n此操作不可撤销，但不会删除草稿或正文章节。`,
@@ -543,7 +581,8 @@ export default function ChapterCardEditor({
     ), {
       title: text('清空全部蓝图', 'Clear all blueprints'),
       confirmText: text('清空全部', 'Clear all'),
-      danger: true})
+      danger: true,
+    })
     if (!ok || !isCurrentProjectSession(projectSession)) return
 
     const result = await ipc.invokeWithProjectSession(
@@ -560,21 +599,17 @@ export default function ChapterCardEditor({
     const next = reconcileClearedBlueprintSnapshots(current.blueprints, clearedSnapshots)
     persistProjectDraftState(projectKey, projectSession, next.blueprints, next.dirtyChapterNumbers)
     if (isCurrentProjectSession(projectSession)) setSelectedIdx(0)
-    globalEventBus.emit('REFRESH_RESOURCE', {
-      resources: ['blueprints', 'fileTree'],
-      projectPath: projectKey,
-      projectSession})
+    emitBlueprintResourceRefresh(projectKey, projectSession)
     toast.success(text('已清空全部蓝图', 'All chapter blueprints cleared'))
   }
 
-  /** 触发蓝图批量生成（来自 DirectoryConfigDialog 的确认回调） */
-  const handleBatchGenerate = async (params: DirectoryWorkflowParams) => {
+  async function handleBatchGenerate(params: DirectoryWorkflowParams): Promise<void> {
     const projectSession = currentProjectSessionForPath(projectKey)
-    if (!projectMatches || !projectSession) throw new Error(text('项目会话已切换，未启动章节蓝图生成', 'The project changed, so blueprint generation was not started.'))
-    const expectedProjectPath = projectKey
+    if (!projectMatches || !projectSession) {
+      throw new Error(text('项目会话已切换，未启动章节蓝图生成', 'The project changed, so blueprint generation was not started.'))
+    }
 
-    // 前置校验：故事架构是否就绪
-    const guard = await guardDirectoryGeneration(expectedProjectPath, projectSession)
+    const guard = await guardDirectoryGeneration(projectKey, projectSession)
     if (!isCurrentProjectSession(projectSession)) return
     if (!guard.ok) {
       // 校验失败：阻断并提示
@@ -588,7 +623,8 @@ export default function ChapterCardEditor({
         'A precondition warning was reported. Continue generating anyway?',
       ), {
         title: text('前置条件警告', 'Precondition warning'),
-        confirmText: text('继续生成', 'Continue')})
+        confirmText: text('继续生成', 'Continue'),
+      })
       if (!yes) throw new Error(text('已取消启动章节蓝图生成', 'Blueprint generation was cancelled.'))
     }
 
@@ -600,17 +636,8 @@ export default function ChapterCardEditor({
     addLog('info', text('已启动章节蓝图生成', 'Chapter blueprint generation started'))
   }
 
-  /**
-   * 写作此章 — 将当前蓝图信息注入创作弹窗
-   * 支持指定章节（默认为当前选中章）
-   */
-  const handleWriteChapter = (bp: ChapterBlueprint) => {
-    const projectSession = currentProjectSessionForPath(projectKey)
-    if (
-      !projectSession
-      || !sameProjectSessionContext(dataProjectSessionRef.current, projectSession)
-    ) return
-    // 通过 layout-store openChapterCreation 传递预填参数，替代 window.dispatchEvent
+  function handleWriteChapter(bp: ChapterBlueprint): void {
+    if (!matchingDataProjectSession(projectKey, dataProjectSessionRef.current)) return
     useLayoutStore.getState().openChapterCreation({
       chapterNumber: bp.chapterNumber,
       title: bp.title,
@@ -618,20 +645,18 @@ export default function ChapterCardEditor({
       purpose: bp.purpose,
       keyEvents: bp.keyEvents,
       characters: bp.characters.join('、'),
-      userGuidance: bp.userGuidance || ''})
+      userGuidance: bp.userGuidance || '',
+    })
   }
 
   /**
    * 旧版“小说拆解与仿写”曾把参考原文误写为草稿和定稿；此处只给用户一个
    * 明确确认后的恢复入口，不尝试自动判定或删除任何项目内容。
    */
-  const handleClearLegacyImportedText = async () => {
-    const projectSession = currentProjectSessionForPath(projectKey)
-    if (
-      !projectMatches
-      || !projectSession
-      || !sameProjectSessionContext(dataProjectSessionRef.current, projectSession)
-    ) return
+  async function handleClearLegacyImportedText(): Promise<void> {
+    if (!projectMatches) return
+    const projectSession = matchingDataProjectSession(projectKey, dataProjectSessionRef.current)
+    if (!projectSession) return
 
     const ok = await confirm(text(
       '仅当当前草稿和正文来自旧版“小说拆解与仿写”导入时，才继续清除。\n\n此操作会永久清除草稿、定稿、审稿和摘要等正文产物；会保留角色、故事架构、章节蓝图与知识库。若只是尚未生成下一章蓝图，请取消并先补充蓝图。',
@@ -639,7 +664,8 @@ export default function ChapterCardEditor({
     ), {
       title: text('清除误导入正文', 'Clear incorrectly imported text'),
       confirmText: text('清除误导入正文', 'Clear incorrectly imported text'),
-      danger: true})
+      danger: true,
+    })
     if (!ok || !isCurrentProjectSession(projectSession)) return
 
     setRecoveringLegacyImportedText(true)
@@ -654,7 +680,7 @@ export default function ChapterCardEditor({
       ))
     } catch (error) {
       if (!isCurrentProjectSession(projectSession)) return
-      const message = error instanceof Error ? error.message : String(error)
+      const message = errorMessage(error)
       toast.error(text(
         `清除误导入正文失败\n\n${message}`,
         `Could not clear incorrectly imported text.\n\n${message}`,
@@ -780,7 +806,8 @@ export default function ChapterCardEditor({
           className="flex flex-wrap items-center justify-between gap-3 border-b px-3 py-2 text-xs"
           style={{
             borderColor: 'color-mix(in srgb, var(--color-warning) 42%, var(--color-border))',
-            backgroundColor: 'color-mix(in srgb, var(--color-warning) 8%, transparent)'}}
+            backgroundColor: 'color-mix(in srgb, var(--color-warning) 8%, transparent)',
+          }}
         >
           <div className="flex min-w-0 items-start gap-2" style={{ color: 'var(--color-text-secondary)' }}>
             <AlertTriangle size={15} className="mt-0.5 flex-shrink-0" style={{ color: 'var(--color-warning)' }} />
@@ -811,7 +838,8 @@ export default function ChapterCardEditor({
           style={{
             color: 'var(--color-warning-text)',
             borderColor: 'color-mix(in srgb, var(--color-warning) 42%, var(--color-border))',
-            backgroundColor: 'color-mix(in srgb, var(--color-warning) 8%, transparent)'}}
+            backgroundColor: 'color-mix(in srgb, var(--color-warning) 8%, transparent)',
+          }}
         >
           <AlertTriangle size={15} className="mt-0.5 flex-shrink-0" style={{ color: 'var(--color-warning)' }} />
           <p className="leading-5">{authorityError}</p>
@@ -819,17 +847,17 @@ export default function ChapterCardEditor({
       )}
 
       {/* 蓝图生成配置弹窗 */}
-        <DirectoryConfigDialog
+      <DirectoryConfigDialog
         isOpen={showBlueprintDialog}
         onClose={() => setShowBlueprintDialog(false)}
         existingCount={visibleBlueprints.length}
-          onConfirm={handleBatchGenerate}
-        />
-          <BatchChapterCreationDialog
-          isOpen={showBatchCreationDialog}
-          startChapterNumber={nextWritableBlueprint?.chapterNumber ?? null}
-          onClose={() => setShowBatchCreationDialog(false)}
-        />
+        onConfirm={handleBatchGenerate}
+      />
+      <BatchChapterCreationDialog
+        isOpen={showBatchCreationDialog}
+        startChapterNumber={nextWritableBlueprint?.chapterNumber ?? null}
+        onClose={() => setShowBatchCreationDialog(false)}
+      />
 
       {/* 主区域：左侧列表 + 右侧编辑 */}
       <div className="flex-1 flex overflow-hidden">
@@ -1006,7 +1034,8 @@ export default function ChapterCardEditor({
                   className="p-3 rounded-lg border"
                   style={{
                     borderColor: 'var(--color-accent)',
-                    backgroundColor: 'rgba(var(--accent-rgb, 99 102 241), 0.06)'}}
+                    backgroundColor: 'rgba(var(--accent-rgb, 99 102 241), 0.06)',
+                  }}
                 >
                   <Label className="flex items-center gap-1.5">
                     <span>{text('作者微操指导', 'Author guidance')}</span>
@@ -1033,7 +1062,8 @@ export default function ChapterCardEditor({
                   className="p-3 rounded-lg border"
                   style={{
                     borderColor: 'var(--color-border)',
-                    backgroundColor: 'rgba(34,197,94,0.04)'}}
+                    backgroundColor: 'rgba(34,197,94,0.04)',
+                  }}
                 >
                   <Label className="flex items-center gap-1.5">
                     <span>{text('章节要点', 'Chapter notes')}</span>

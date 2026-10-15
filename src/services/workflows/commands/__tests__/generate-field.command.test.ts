@@ -133,7 +133,6 @@ describe('GenerateFieldCommand project identity', () => {
 
     const [prompt, systemPrompt] = callLlm.mock.calls[0]!
     expect(callLlm.mock.calls[0]?.[3]).toMatchObject({
-      writingSkillStage: 'planning',
       submitTool: 'submit_field',
     })
     expect(`${systemPrompt}\n${prompt}`).not.toMatch(/[\u3400-\u9fff]/u)

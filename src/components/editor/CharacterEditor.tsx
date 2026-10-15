@@ -29,6 +29,18 @@ import {
   isProjectSessionPath,
 } from '../project-session-gate'
 
+function characterEditorTitle(
+  viewMode: 'edit' | 'state' | 'graph',
+  selectedCard: CharacterCard | null,
+  text: (zhCNText: string, enUSText: string) => string,
+): string {
+  if (viewMode === 'graph') return text('角色图谱', 'Character graph')
+  if (!selectedCard) return text('角色档案', 'Character profile')
+  const name = selectedCard.name || text('新角色', 'New character')
+  if (viewMode === 'state') return `${name} ${text('— 当前状态', '— Current state')}`
+  return `${name} ${text('— 编辑档案', '— Edit profile')}`
+}
+
 /**
  * 角色卡编辑器 — 纯编辑区域（角色列表已移至侧栏）
  * 从 character-store 读取选中角色，仅渲染编辑表单。
@@ -188,11 +200,7 @@ export default function CharacterEditor({ projectKey }: { projectKey: string }) 
       >
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="text-xs font-medium truncate text-[var(--color-text-secondary)]">
-            {viewMode === 'graph'
-              ? text('角色图谱', 'Character graph')
-              : selectedCard
-                ? `${selectedCard.name || text('新角色', 'New character')} ${viewMode === 'state' ? text('— 当前状态', '— Current state') : text('— 编辑档案', '— Edit profile')}`
-                : text('角色档案', 'Character profile')}
+            {characterEditorTitle(viewMode, selectedCard, text)}
           </span>
         </div>
         

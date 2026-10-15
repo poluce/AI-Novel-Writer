@@ -98,7 +98,9 @@ function decodeEntities(value: string): string {
   return value.replace(/&(#x[\da-f]+|#\d+|[a-z]+);/giu, (entity, body: string) => {
     if (body[0] !== '#') return named[body.toLowerCase()] ?? entity
     const hexadecimal = body[1]?.toLowerCase() === 'x'
-    const codePoint = Number.parseInt(body.slice(hexadecimal ? 2 : 1), hexadecimal ? 16 : 10)
+    let codePoint: number
+    if (hexadecimal) codePoint = Number.parseInt(body.slice(2), 16)
+    else codePoint = Number.parseInt(body.slice(1), 10)
     if (!Number.isSafeInteger(codePoint) || codePoint < 0 || codePoint > 0x10ffff) return entity
     try {
       return String.fromCodePoint(codePoint)

@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { createInspectWritingSkillTool } from '../inspect-writing-skill.tool'
-import { createInstallWritingSkillTool } from '../install-writing-skill.tool'
+import { createManageSkillsTool } from '../manage-skills.tool'
 
 vi.mock('../../../services/writing-skill-service', () => ({
   inspectWritingSkill: vi.fn(),
   installWritingSkill: vi.fn(),
+  createCustomWritingSkill: vi.fn(),
+  updateCustomWritingSkill: vi.fn(),
+  deleteCustomWritingSkill: vi.fn(),
 }))
 
 import { inspectWritingSkill, installWritingSkill } from '../../../services/writing-skill-service'
@@ -18,7 +20,7 @@ beforeEach(() => {
   installMock.mockReset()
 })
 
-describe('inspect_writing_skill', () => {
+describe('manage_skills inspect', () => {
   it('returns the inspection as JSON', async () => {
     inspectMock.mockResolvedValue({
       success: true,
@@ -34,8 +36,8 @@ describe('inspect_writing_skill', () => {
       },
     })
 
-    const tool = createInspectWritingSkillTool('zh-CN')
-    const result = await tool.execute('c1', { source_url: 'https://github.com/x/y' })
+    const tool = createManageSkillsTool('zh-CN', [])
+    const result = await tool.execute('c1', { action: 'inspect', source_url: 'https://github.com/x/y' })
     const first = result.content[0]
     if (first.type === 'text') {
       expect(first.text).toContain('scene-craft')
@@ -45,16 +47,26 @@ describe('inspect_writing_skill', () => {
 
   it('throws when inspection fails', async () => {
     inspectMock.mockResolvedValue({ success: false, error: '检查失败' })
-    const tool = createInspectWritingSkillTool('zh-CN')
-    await expect(tool.execute('c1', { source_url: 'https://github.com/x/y' })).rejects.toThrow('检查失败')
+    const tool = createManageSkillsTool('zh-CN', [])
+    await expect(tool.execute('c1', { action: 'inspect', source_url: 'https://github.com/x/y' })).rejects.toThrow('检查失败')
   })
 })
 
-describe('install_writing_skill', () => {
+describe('manage_skills install', () => {
   it('reports the installed skill name', async () => {
-    installMock.mockResolvedValue({ success: true, skill: { name: 'scene-craft', source: 'user', version: '1.0.0', language: 'zh-CN', compatible: true, utf8Bytes: 100 } })
-    const tool = createInstallWritingSkillTool('zh-CN')
-    const result = await tool.execute('c1', { source_url: 'https://github.com/x/y' })
+    installMock.mockResolvedValue({
+      success: true,
+      skill: {
+        name: 'scene-craft',
+        source: 'user',
+        version: '1.0.0',
+        language: 'zh-CN',
+        compatible: true,
+        utf8Bytes: 100,
+      },
+    })
+    const tool = createManageSkillsTool('zh-CN', [])
+    const result = await tool.execute('c1', { action: 'install', source_url: 'https://github.com/x/y' })
     const first = result.content[0]
     if (first.type === 'text') expect(first.text).toContain('scene-craft')
   })

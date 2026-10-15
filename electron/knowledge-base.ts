@@ -86,7 +86,14 @@ function migrationFailureDetails(error: unknown): { error: string; errorCode?: t
   // IPC callers display this value directly. Preserve an Error's user-facing
   // message rather than leaking the JavaScript-only "Error:" wrapper; unknown
   // throwables still have a deterministic fallback.
-  return { error: error instanceof Error ? error.message : String(error) }
+  if (error instanceof Error) return { error: error.message }
+  return { error: String(error) }
+}
+
+function embeddingModelName(modelName: string | undefined): string {
+  const trimmed = modelName?.trim()
+  if (trimmed) return trimmed
+  return 'default'
 }
 
 function embeddingSpaceFor(
@@ -95,7 +102,7 @@ function embeddingSpaceFor(
 ): EmbeddingSpaceIdentity {
   // 只持久化可公开比较的模型身份，绝不写入 API key。
   return {
-    modelFingerprint: `${protocol}|${model.baseUrl.trim().replace(/\/+$/, '')}|${model.modelName?.trim() || 'default'}`,
+    modelFingerprint: `${protocol}|${model.baseUrl.trim().replace(/\/+$/, '')}|${embeddingModelName(model.modelName)}`,
     distanceMetric: 'l2',
   }
 }
@@ -174,7 +181,7 @@ export async function importDocument(
       return { success: false, error: result.error }
     }
 
-    onProgress?.(100, `✅ 已导入 ${fileName}（${chunks.length} 个块）`)
+    onProgress?.(100, `已导入 ${fileName}（${chunks.length} 个块）`)
     return { success: true, docId, chunkCount: chunks.length }
   } catch (error) {
     return { success: false, ...migrationFailureDetails(error) }
@@ -264,14 +271,7 @@ export async function getKnowledgeStats(projectPath: string): Promise<{
   }
 }
 
-/**
- * 直接将文本字符串内容导入知识库
- * 用于定稿后自动导入、按章推演等无文件场景
- */
-/**
- * 从文件名解析章节元数据
- * 支持格式：第{N}章 {title} xxx.md
- */
+/** 从文件名解析章节元数据。支持格式：第{N}章 {title} xxx.md */
 function parseChapterMetaFromFileName(fileName: string): { chapterNumber?: number; chapterTitle?: string } | undefined {
   const match = fileName.match(/^第(\d+)章\s+(.+?)\s+(正文|要点|蓝图)\.md$/)
   if (match) {

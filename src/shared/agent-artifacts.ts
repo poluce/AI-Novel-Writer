@@ -70,7 +70,8 @@ export function artifactFromToolResult(
   if (toolName === 'write' || toolName === 'edit') {
     if (record.commitState && record.commitState !== 'committed') return null
     const path = detailText(record, 'path') ?? detailText(record, 'file_path')
-    const name = detailText(record, 'name') ?? (path ? path.split(/[/\\]/).pop() : undefined)
+    let name = detailText(record, 'name')
+    if (!name && path) name = path.split(/[/\\]/).pop()
     if (!path || !name) return null
     return createToolArtifact({
       type: 'file_modified',

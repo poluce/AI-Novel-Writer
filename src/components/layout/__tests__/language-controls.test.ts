@@ -11,7 +11,7 @@ describe('language controls', () => {
   })
 
   it('provides explicit locale choices in settings', () => {
-    const source = readFileSync('src/components/settings/SettingsModal.tsx', 'utf8')
+    const source = readFileSync('src/components/settings/EditorSettings.tsx', 'utf8')
 
     expect(source).toContain('setLocale')
     expect(source).toContain('<option value="zh-CN">')

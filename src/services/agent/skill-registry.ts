@@ -33,20 +33,10 @@ export type SkillSource = WritingSkillSource
 
 /** Skill 元数据（从 SKILL.md frontmatter 解析） */
 export interface SkillMetadata {
-  /** Skill 唯一名称 */
   name: string
-  /** 显示名称 */
   displayName?: string
-  /** 功能描述 */
   description: string
-  /** 使用场景（用于 Agent 自动匹配） */
-  whenToUse?: string
-  /** 版本 */
   version?: string
-  /** 允许的工具列表（白名单） */
-  allowedTools?: string[]
-  /** 参数提示 */
-  argumentHint?: string
   /** 是否可由模型自动调用 */
   userInvocable?: boolean
 }
@@ -67,7 +57,7 @@ export interface LoadedSkill {
   projectSession?: ProjectSessionContext
   /** Stable project-binding key. */
   skillId: string
-  /** Prompt-only workflow compatibility; incompatible packages remain visible but are never injected. */
+  /** Compatibility inspection only; incompatible packages stay listed. Not used for stage injection. */
   writingSkill: WritingSkillInspection
   /** Built-in bilingual copy selected by project writing language. */
   localizedContent?: Partial<Record<WritingLanguage, string>>
@@ -75,18 +65,18 @@ export interface LoadedSkill {
 
 // ===== Skill Registry =====
 
-
 class SkillRegistryImpl {
   private skills: Map<string, LoadedSkill> = new Map()
   private loadTail: Promise<void> = Promise.resolve()
   private loadedOnce = false
+  /** 最近一次加载的规范诊断（名字不符规范、描述超长等）。 */
+  private diagnostics: WritingSkillCatalogDiagnostic[] = []
 
-  /** 注册一个 Skill */
   register(skill: LoadedSkill): void {
     this.skills.set(skill.skillId, skill)
   }
 
-  /** Legacy lookup by metadata name. Stable project bindings use getById. */
+  /** Legacy lookup by metadata name. Stable ids use getById. */
   get(name: string): LoadedSkill | undefined {
     return this.listAll().find(skill => skill.metadata.name === name)
   }
@@ -95,23 +85,17 @@ class SkillRegistryImpl {
     return this.skills.get(skillId)
   }
 
-  /** 列出所有 Skill */
   listAll(): LoadedSkill[] {
     return Array.from(this.skills.values())
   }
 
-  /** 按来源列出 */
   listBySource(source: SkillSource): LoadedSkill[] {
     return this.listAll().filter(s => s.source === source)
   }
 
-  /** Skill 数量 */
   get size(): number {
     return this.skills.size
   }
-
-  /** 最近一次加载的规范诊断（名字不符规范、描述超长等）。 */
-  private diagnostics: WritingSkillCatalogDiagnostic[] = []
 
   /** 最近一次加载的诊断；设置页据此提示而不是静默跳过。 */
   listDiagnostics(): WritingSkillCatalogDiagnostic[] {
@@ -140,9 +124,9 @@ class SkillRegistryImpl {
           projectSession.projectPath,
         )
         : await ipc.invoke('skills:load-user-catalog')
-      this.diagnostics = catalog.diagnostics
+      this.diagnostics = catalog?.diagnostics ?? []
       let count = 0
-      for (const record of catalog.skills) {
+      for (const record of catalog?.skills ?? []) {
         const skill = toLoadedSkill(record, projectSession ?? undefined)
         if (!skill) continue
         target.set(skill.skillId, skill)
@@ -184,12 +168,7 @@ class SkillRegistryImpl {
   }
 
   private async loadAllAtomic(): Promise<void> {
-    const projectSession = projectSessionContextFromProject(
-      useProjectStore.getState().currentProject,
-    )
     const staged = new Map<string, LoadedSkill>()
-
-    // 注册内置 Skill
     registerBuiltinSkills({ register: skill => staged.set(skill.skillId, skill) })
 
     const count = await this.loadCatalog(staged)
@@ -199,7 +178,6 @@ class SkillRegistryImpl {
     if (this.diagnostics.length > 0) {
       console.warn(`[Skills] ${this.diagnostics.length} 条技能诊断：`, this.diagnostics)
     }
-    void projectSession
 
     this.skills = staged
     this.loadedOnce = true
@@ -216,6 +194,37 @@ export const skillRegistry = new SkillRegistryImpl()
 
 // ===== SKILL.md 解析 =====
 
+function assembleLoadedSkill(params: {
+  name: string
+  displayName?: string
+  description: string
+  version?: string
+  userInvocable: boolean
+  content: string
+  source: SkillSource
+  baseDir: string
+  filePath: string
+  projectSession?: ProjectSessionContext
+  writingSkill: WritingSkillInspection
+}): LoadedSkill {
+  return {
+    metadata: {
+      name: params.name,
+      displayName: params.displayName,
+      description: params.description,
+      version: params.version,
+      userInvocable: params.userInvocable,
+    },
+    content: params.content,
+    source: params.source,
+    baseDir: params.baseDir,
+    filePath: params.filePath,
+    ...(params.projectSession ? { projectSession: params.projectSession } : {}),
+    skillId: `${params.source}:${params.name}`,
+    writingSkill: params.writingSkill,
+  }
+}
+
 /**
  * 目录记录 → 注册表条目。
  *
@@ -229,38 +238,34 @@ function toLoadedSkill(
 ): LoadedSkill | null {
   const name = record.name.trim()
   if (!name) return null
-  const writingSkill: WritingSkillInspection = {
-    metadata: {
-      name,
-      displayName: record.displayName,
-      description: record.description,
-      version: record.version,
-      language: record.language,
-      stage: record.stage,
-    },
-    content: record.content,
-    compatible: record.compatible,
-    reasons: [...record.reasons],
-    suggestedStage: record.suggestedStage,
-    utf8Bytes: record.utf8Bytes,
-  }
-  return {
-    metadata: {
-      name,
-      displayName: record.displayName,
-      description: record.description || `Skill: ${name}`,
-      version: record.version,
-      // Pi 的 `disable-model-invocation` 与我们的 `userInvocable` 是同一件事。
-      userInvocable: record.disableModelInvocation ? false : true,
-    },
+  return assembleLoadedSkill({
+    name,
+    displayName: record.displayName,
+    description: record.description || `Skill: ${name}`,
+    version: record.version,
+    // Pi 的 `disable-model-invocation` 与我们的 `userInvocable` 是同一件事。
+    userInvocable: record.disableModelInvocation ? false : true,
     content: record.content,
     source: record.source,
     baseDir: record.baseDir,
     filePath: record.filePath,
-    ...(record.source === 'project' && projectSession ? { projectSession } : {}),
-    skillId: `${record.source}:${name}`,
-    writingSkill,
-  }
+    projectSession: record.source === 'project' ? projectSession : undefined,
+    writingSkill: {
+      metadata: {
+        name,
+        displayName: record.displayName,
+        description: record.description,
+        version: record.version,
+        language: record.language,
+        stage: record.stage,
+      },
+      content: record.content,
+      compatible: record.compatible,
+      reasons: [...record.reasons],
+      suggestedStage: record.suggestedStage,
+      utf8Bytes: record.utf8Bytes,
+    },
+  })
 }
 
 /**
@@ -271,8 +276,8 @@ function toLoadedSkill(
  * ---
  * name: skill-name
  * description: 功能描述
- * when_to_use: 什么时候使用
- * allowed-tools: [read_file, search_knowledge]
+ * version: 1.0.0
+ * language: bilingual
  * ---
  *
  * # Skill 提示词内容
@@ -292,24 +297,19 @@ export function parseSkillMd(
     ? fallbackName
     : writingSkill.metadata.name
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(inspectedName)) return null
-  const metadata: SkillMetadata = {
+  return assembleLoadedSkill({
     name: inspectedName,
     displayName: writingSkill.metadata.displayName,
     description: writingSkill.metadata.description || `Skill: ${fallbackName}`,
     version: writingSkill.metadata.version,
     userInvocable: true,
-  }
-
-  return {
-    metadata,
     content: writingSkill.content,
     source,
     baseDir,
     filePath,
     projectSession,
-    skillId: `${source}:${metadata.name}`,
     writingSkill,
-  }
+  })
 }
 
 // ===== 内置 Skills =====
@@ -318,7 +318,7 @@ function registerBuiltinSkills(registry: Pick<SkillRegistryImpl, 'register'>): v
   const builtins: Array<{
     metadata: SkillMetadata
     content: string
-    writingSkill?: WritingSkillInspection
+    writingSkill: WritingSkillInspection
     localizedContent?: Partial<Record<WritingLanguage, string>>
   }> = [
     {
@@ -354,7 +354,6 @@ function registerBuiltinSkills(registry: Pick<SkillRegistryImpl, 'register'>): v
         name: 'review-chapter',
         displayName: '章节审阅',
         description: '对指定章节进行全面的质量审阅，包括剧情逻辑、角色一致性、节奏感、伏笔呼应等多个维度。',
-        whenToUse: '用户要求审阅、检查、评估某个章节时',
       },
       content: `# 章节审阅
 
@@ -417,7 +416,6 @@ For each dimension, provide a 1-5 rating, a concise explanation, and actionable 
         name: 'brainstorm',
         displayName: '脑暴创意',
         description: '针对指定话题进行创意脑暴，生成多个创意方向和灵感。',
-        whenToUse: '用户要求头脑风暴、找灵感、想创意时',
       },
       content: `# 创意脑暴
 
@@ -454,7 +452,6 @@ Provide at least five distinct directions.`,
         name: 'character-analysis',
         displayName: '角色分析',
         description: '深入分析指定角色的性格、动机、角色弧、人物关系等。',
-        whenToUse: '用户想深入了解或调整角色设定时',
       },
       content: `# 角色深度分析
 
@@ -491,7 +488,6 @@ Use manage_characters for the character cards and read_architecture for the stor
         name: 'continuity-check',
         displayName: '连续性检查',
         description: '检查小说中的设定一致性和连续性问题，发现矛盾和遗漏。',
-        whenToUse: '用户想检查设定有没有矛盾、是否有不一致的地方时',
       },
       content: `# 连续性与一致性检查
 
@@ -528,7 +524,6 @@ Return a table and label each finding as critical, warning, or clear.`,
         name: 'writing-coach',
         displayName: '写作教练',
         description: '提供专业的写作技巧指导和文笔改善建议。',
-        whenToUse: '用户想提高写作水平、求教写作技巧时',
       },
       content: `# 写作教练
 
@@ -562,10 +557,9 @@ Use read_project_state first to understand the project's established style. Then
   ]
 
   for (const { metadata, content, writingSkill, localizedContent } of builtins) {
-    const inspected = writingSkill ?? inspectWritingSkillMarkdown(`---\nname: ${metadata.name}\ndescription: ${metadata.description}\n---\n${content}`)
     // 系统内置技能属于官方认证的核心资产，始终受信任且保持兼容
     const safeInspected: WritingSkillInspection = {
-      ...inspected,
+      ...writingSkill,
       compatible: true,
       reasons: [],
     }

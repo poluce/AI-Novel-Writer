@@ -8,7 +8,6 @@
 
 import {
   BaseWorkflowCommand,
-  injectWritingSkillIntoSession,
   type CommandExecuteParams,
   type WorkflowGenerationRuntimeDependencies,
 } from './base-command'
@@ -320,7 +319,6 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
         responseFormat: { type: 'json_object' },
         purpose: 'import-inference:endpoint-card-recovery',
         reasoningStage: 'planning',
-        writingSkillStage: 'planning',
         submitTool: 'submit_json',
       },
       context,
@@ -453,7 +451,6 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
         responseFormat: { type: 'json_object' },
         purpose: 'import-inference',
         reasoningStage: 'planning',
-        writingSkillStage: 'planning',
         submitTool: 'submit_json',
       },
       context,
@@ -478,7 +475,6 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
           responseFormat: { type: 'json_object' },
           purpose: repairTask.purpose,
           reasoningStage: 'planning',
-          writingSkillStage: 'planning',
           submitTool: 'submit_json',
           ...(repairTask.promptBudget ? { promptBudget: repairTask.promptBudget } : {}),
         },
@@ -699,9 +695,13 @@ export class InferBlueprintsPerChapterCommand extends BaseWorkflowCommand<void> 
     }
 
     const estimatedCalls = Math.ceil(chapters.length / InferBlueprintsPerChapterCommand.MAX_ITEMS_PER_BATCH)
+    let chapterWord = 'chapters'
+    if (chapters.length === 1) chapterWord = 'chapter'
+    let callWord = 'calls'
+    if (estimatedCalls === 1) callWord = 'call'
     callbacks.log(text(
       `开始分批推演蓝图（共 ${chapters.length} 章，预计至多 ${estimatedCalls} 次调用）...`,
-      `Inferring blueprints in batches (${chapters.length} ${chapters.length === 1 ? 'chapter' : 'chapters'}; at most ${estimatedCalls} model ${estimatedCalls === 1 ? 'call' : 'calls'})...`,
+      `Inferring blueprints in batches (${chapters.length} ${chapterWord}; at most ${estimatedCalls} model ${callWord})...`,
     ))
     callbacks.setProgress(5)
 
@@ -774,10 +774,9 @@ export class InferBlueprintsPerChapterCommand extends BaseWorkflowCommand<void> 
     }
 
     const execution = this.requireGenerationExecution()
-    const planningSession = injectWritingSkillIntoSession(execution.session, context, 'planning')
     const batch = await createStructuredBatchExecutor({
       contract,
-      session: planningSession,
+      session: execution.session,
       writingLanguage,
       onAttempt: receipt => this.reportGenerationPromptBudget(callbacks, receipt),
     }).execute({

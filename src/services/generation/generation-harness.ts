@@ -260,6 +260,26 @@ export class GenerationAttemptError extends GenerationHarnessError {
   }
 }
 
+function resolveHarnessReasoningStage(task: GenerationTask): GenerationReasoningStage {
+  if (task.reasoningStage) return task.reasoningStage
+  if (task.output === 'structured-data') return 'planning'
+  return 'drafting'
+}
+
+function harnessAttemptFailure(termination: 'cancelled' | 'deadline' | null): {
+  code: 'CANCELLED' | 'DEADLINE_EXHAUSTED' | 'PROVIDER_REQUEST_FAILED'
+  message: string
+  finishReason: 'cancelled' | 'error'
+} {
+  if (termination === 'cancelled') {
+    return { code: 'CANCELLED', message: '生成请求已取消。', finishReason: 'cancelled' }
+  }
+  if (termination === 'deadline') {
+    return { code: 'DEADLINE_EXHAUSTED', message: '生成请求超过会话截止时间。', finishReason: 'error' }
+  }
+  return { code: 'PROVIDER_REQUEST_FAILED', message: '模型请求失败。', finishReason: 'error' }
+}
+
 export function safeReceiptPurpose(purpose: string): string {
   return /^[a-z0-9][a-z0-9:_-]{0,127}$/u.test(purpose) ? purpose : 'unknown'
 }
@@ -683,8 +703,7 @@ export function createGenerationHarness(dependencies: {
                 modelId: frozenModel.id,
                 purpose: task.purpose,
                 creativeStrategy,
-                reasoningStage: task.reasoningStage
-                  ?? (task.output === 'structured-data' ? 'planning' : 'drafting'),
+                reasoningStage: resolveHarnessReasoningStage(task),
                 messages: task.messages.map(message => Object.freeze({ ...message })),
                 plan,
                 signal: controller.signal,
@@ -693,23 +712,15 @@ export function createGenerationHarness(dependencies: {
               terminationPromise,
             ])
           } catch {
-            const cancellationCode = termination === 'cancelled'
-              ? 'CANCELLED'
-              : termination === 'deadline'
-                ? 'DEADLINE_EXHAUSTED'
-                : 'PROVIDER_REQUEST_FAILED'
+            const failure = harnessAttemptFailure(termination)
             throw new GenerationAttemptError(
-              cancellationCode,
-              cancellationCode === 'CANCELLED'
-                ? '生成请求已取消。'
-                : cancellationCode === 'DEADLINE_EXHAUSTED'
-                  ? '生成请求超过会话截止时间。'
-                  : '模型请求失败。',
+              failure.code,
+              failure.message,
               attemptReceipt(
                 task.purpose,
                 attempt,
                 maxOutputTokens,
-                cancellationCode === 'CANCELLED' ? 'cancelled' : 'error',
+                failure.finishReason,
                 undefined,
                 promptBudget,
               ),

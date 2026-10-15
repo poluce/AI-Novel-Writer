@@ -44,7 +44,7 @@ export function toAgentSkillCatalog(
     description: clampDescription(skillDescription(skill, locale)) || skill.metadata.name,
     location: skill.filePath,
     source: skill.source,
-    // 正文随目录下发但只留在主进程内存里：模型调用 `load_writing_skill` 才看得到。
+    // 正文随目录下发但只留在主进程内存里，不进入系统提示词。
     ...(skill.localizedContent?.[locale] ?? skill.content
       ? { content: skill.localizedContent?.[locale] ?? skill.content }
       : {}),

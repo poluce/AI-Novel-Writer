@@ -150,9 +150,11 @@ export async function streamSingleShot(
     options.signal?.addEventListener('abort', onOuterAbort, { once: true })
     unregister = registerPiInFlight(options.inFlightId ?? `single-shot:${randomUUID()}`, controller)
     const { systemSuffix, messages } = toPiMessages(input, model)
-    const effectiveSystemPrompt = systemSuffix
-      ? (systemPrompt ? `${systemPrompt}\n\n${systemSuffix}` : systemSuffix)
-      : systemPrompt
+    let effectiveSystemPrompt = systemPrompt
+    if (systemSuffix) {
+      if (systemPrompt) effectiveSystemPrompt = `${systemPrompt}\n\n${systemSuffix}`
+      else effectiveSystemPrompt = systemSuffix
+    }
 
     const stream = models.stream(model, {
       systemPrompt: effectiveSystemPrompt,

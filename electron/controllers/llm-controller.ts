@@ -14,13 +14,12 @@ import { getCurrentProjectPath } from '../database'
 import { LLMHistoryRepository } from '../repositories/llm-repository'
 import { projectAccess } from '../services/project-access'
 import { ModelDiscoveryService } from '../services/model-discovery-service'
-import { isSubmitToolName } from '../../src/shared/submit-contract'
+import { isSubmitToolName, type SubmitToolName } from '../../src/shared/submit-contract'
 import { assertGenerationModelSupportsTools } from '../../src/shared/tool-calling-gate'
 import { logFailure } from '../../src/shared/fail-log'
 import { SingleShotAbortedError, streamSingleShot, type StreamSingleShotOptions } from '../pi/pi-single-shot'
 import { patchGoogleSamplingPayload, toPiSamplingParams } from '../pi/pi-stream-options'
 import { createSubmitTool, visibleTextFromSubmitArtifact } from '../pi/submit-tools'
-
 import { normalizeModelProfiles } from '../../src/shared/model-profile'
 
 interface ActiveStream {
@@ -28,11 +27,37 @@ interface ActiveStream {
   recordCancelled: () => void
 }
 
+interface ProviderOutcome {
+  success: boolean
+  usage?: TokenUsage
+  error?: string
+  finishReason?: LLMFinishReason
+}
+
+interface CompletedSingleShot {
+  success: boolean
+  content: string
+  artifact: Record<string, unknown> | undefined
+  finishReason: LLMFinishReason
+  error: string | undefined
+}
+
+type WriteResult = { success: true } | { success: false; error: string }
+type DefaultModelField = 'defaultModelId' | 'defaultEmbeddingModelId'
+
 const activeStreams = new Map<string, ActiveStream>()
 const CONNECTION_TEST_MAX_TOKENS = 1024
+const PROXY_ENV_KEYS = ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy'] as const
 
 function loadModelConfigs(): ModelProfile[] {
   return normalizeModelProfiles(readJsonFile<unknown[]>(MODELS_CONFIG_PATH, []))
+}
+
+function readJsonOrMissing<T>(filePath: string): T | undefined {
+  const result = tryReadJsonFile<T>(filePath)
+  if (result.status === 'error') throw result.error
+  if (result.status === 'ok') return result.value
+  return undefined
 }
 
 function loadModelConfigsForUpdate(): ModelProfile[] {
@@ -51,17 +76,22 @@ function loadGlobalConfigForUpdate(): GlobalConfig {
   return result.status === 'ok' ? result.value : { ...DEFAULT_GLOBAL_CONFIG }
 }
 
-function saveModelConfigs(models: ModelProfile[]) {
+function saveModelConfigs(models: ModelProfile[]): void {
   writeJsonFile(MODELS_CONFIG_PATH, normalizeModelProfiles(models))
 }
 
 function getModelConfig(modelId: string): ModelProfile | null {
-  const models = loadModelConfigs()
-  return models.find((m) => m.id === modelId) ?? null
+  return loadModelConfigs().find((model) => model.id === modelId) ?? null
 }
 
-function resolveSubmitToolName(request: Pick<LLMRequest, 'submitTool'>) {
-  return isSubmitToolName(request.submitTool) ? request.submitTool : 'submit_text'
+function resolveSubmitToolName(request: Pick<LLMRequest, 'submitTool'>): SubmitToolName {
+  if (isSubmitToolName(request.submitTool)) return request.submitTool
+  return 'submit_text'
+}
+
+function finishCode(finishReason: LLMFinishReason): string | undefined {
+  if (finishReason === 'stop') return undefined
+  return `finish:${finishReason}`
 }
 
 function toStreamSingleShotOptions(
@@ -69,16 +99,35 @@ function toStreamSingleShotOptions(
   params: ResolvedGenerationParameters,
   extra: Pick<StreamSingleShotOptions, 'signal' | 'inFlightId' | 'onDelta'> = {},
 ): StreamSingleShotOptions {
-  return {
+  const options: StreamSingleShotOptions = {
     ...extra,
     maxTokens: params.maxTokens,
     temperature: params.temperature,
     samplingParams: toPiSamplingParams(params),
-    // Gemini 适配器不读 samplingParams，温度与思考预算只能打进请求体。
-    ...(model.protocol === 'gemini'
-      ? { payloadPatch: (payload: unknown) => patchGoogleSamplingPayload(payload, params) }
-      : {}),
   }
+  // Gemini 适配器不读 samplingParams，温度与思考预算只能打进请求体。
+  if (model.protocol === 'gemini') {
+    options.payloadPatch = (payload: unknown) => patchGoogleSamplingPayload(payload, params)
+  }
+  return options
+}
+
+function splitPromptMessages(
+  messages: LLMRequest['messages'],
+): { systemPrompt: string; userPrompt: string } {
+  const systemPrompt = messages
+    .filter((message) => message.role === 'system')
+    .map((message) => message.content)
+    .join('\n\n')
+  const nonSystem = messages.filter((message) => message.role !== 'system')
+  if (nonSystem.length === 1 && nonSystem[0].role === 'user') {
+    return { systemPrompt, userPrompt: nonSystem[0].content }
+  }
+  const userPrompt = nonSystem.map((message) => {
+    if (message.role === 'assistant') return `Assistant:\n${message.content}`
+    return message.content
+  }).join('\n\n')
+  return { systemPrompt, userPrompt }
 }
 
 async function completeSingleShot(
@@ -86,14 +135,10 @@ async function completeSingleShot(
   request: Pick<LLMRequest, 'messages' | 'submitTool'>,
   params: ResolvedGenerationParameters,
   extra?: Pick<StreamSingleShotOptions, 'signal' | 'inFlightId' | 'onDelta'>,
-) {
+): Promise<CompletedSingleShot> {
   assertGenerationModelSupportsTools(model)
   const submitTool = resolveSubmitToolName(request)
-  const systemPrompt = request.messages.filter(m => m.role === 'system').map(m => m.content).join('\n\n')
-  const nonSystem = request.messages.filter(m => m.role !== 'system')
-  const userPrompt = nonSystem.length === 1 && nonSystem[0].role === 'user'
-    ? nonSystem[0].content
-    : nonSystem.map(m => m.role === 'assistant' ? `Assistant:\n${m.content}` : m.content).join('\n\n')
+  const { systemPrompt, userPrompt } = splitPromptMessages(request.messages)
   const result = await streamSingleShot(
     model,
     systemPrompt,
@@ -101,35 +146,32 @@ async function completeSingleShot(
     createSubmitTool(submitTool),
     toStreamSingleShotOptions(model, params, extra),
   )
-  const content = visibleTextFromSubmitArtifact(submitTool, result.artifact, result.text)
   const finishReason = result.finishReason
-  const success = finishReason === 'stop'
   return {
-    success,
-    content,
+    success: finishReason === 'stop',
+    content: visibleTextFromSubmitArtifact(submitTool, result.artifact, result.text),
     artifact: result.artifact,
     finishReason,
-    error: success ? undefined : `finish:${finishReason}`,
+    error: finishCode(finishReason),
   }
 }
 
-function applyProxyConfig() {
+function setProcessProxy(proxyUrl: string | undefined): void {
+  for (const key of PROXY_ENV_KEYS) {
+    if (proxyUrl) process.env[key] = proxyUrl
+    else delete process.env[key]
+  }
+}
+
+function applyProxyConfig(): void {
   try {
     const config = readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)
-    if (config.proxy?.enabled && config.proxy.host) {
-      const proxyUrl = config.proxy.type === 'socks5'
-        ? `socks5://${config.proxy.host}:${config.proxy.port}`
-        : `http://${config.proxy.host}:${config.proxy.port}`
-      process.env.HTTP_PROXY = proxyUrl
-      process.env.HTTPS_PROXY = proxyUrl
-      process.env.http_proxy = proxyUrl
-      process.env.https_proxy = proxyUrl
-    } else {
-      delete process.env.HTTP_PROXY
-      delete process.env.HTTPS_PROXY
-      delete process.env.http_proxy
-      delete process.env.https_proxy
+    if (!config.proxy?.enabled || !config.proxy.host) {
+      setProcessProxy(undefined)
+      return
     }
+    const scheme = config.proxy.type === 'socks5' ? 'socks5' : 'http'
+    setProcessProxy(`${scheme}://${config.proxy.host}:${config.proxy.port}`)
   } catch (error) {
     logFailure('LLM', 'apply proxy config failed', error)
   }
@@ -139,12 +181,7 @@ function recordProviderOutcome(
   request: LLMRequest,
   model: ModelProfile,
   startedAt: number,
-  outcome: {
-    success: boolean
-    usage?: TokenUsage
-    error?: string
-    finishReason?: LLMFinishReason
-  },
+  outcome: ProviderOutcome,
 ): void {
   if (!isProjectSessionContext(request.projectSession)) return
   try {
@@ -158,8 +195,8 @@ function recordProviderOutcome(
       totalTokens: outcome.usage?.totalTokens ?? null,
       durationMs: Math.max(0, Date.now() - startedAt),
       success: outcome.success,
-      errorMessage: outcome.finishReason && outcome.finishReason !== 'stop'
-        ? `finish:${outcome.finishReason}`
+      errorMessage: outcome.finishReason
+        ? finishCode(outcome.finishReason) ?? outcome.error
         : outcome.error,
     })
   } catch (error) {
@@ -168,22 +205,34 @@ function recordProviderOutcome(
   }
 }
 
-export function registerLLMController() {
+function writeDefaultModelId(field: DefaultModelField, modelId: string | null): WriteResult {
+  try {
+    const config = loadGlobalConfigForUpdate()
+    config[field] = modelId
+    writeJsonFile(GLOBAL_CONFIG_PATH, config)
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
+}
+
+export function registerLLMController(): void {
   const modelDiscovery = new ModelDiscoveryService()
 
   ipcMain.handle('llm:generate-stream', async (event, requestId: string, request: LLMRequest) => {
     applyProxyConfig()
     const model = getModelConfig(request.modelId)
     if (!model) return { requestId, started: false, error: '指定的生成模型不存在或已被删除。' }
-    const generationParameters = resolveGenerationParameters(model, request)
+    const resolvedModel: ModelProfile = model
+    const generationParameters = resolveGenerationParameters(resolvedModel, request)
 
     const abortController = new AbortController()
     const startedAt = Date.now()
     let recorded = false
-    const recordOnce = (outcome: { success: boolean; usage?: TokenUsage; error?: string; finishReason?: LLMFinishReason }) => {
+    function recordOnce(outcome: ProviderOutcome): void {
       if (recorded) return
       recorded = true
-      recordProviderOutcome(request, model, startedAt, outcome)
+      recordProviderOutcome(request, resolvedModel, startedAt, outcome)
     }
     activeStreams.set(requestId, {
       controller: abortController,
@@ -191,49 +240,50 @@ export function registerLLMController() {
     })
     const win = BrowserWindow.fromWebContents(event.sender)
 
-    void completeSingleShot(
-      model,
-      request,
-      generationParameters,
-      {
-        signal: abortController.signal,
-        inFlightId: `llm:${requestId}`,
-        onDelta: (chunk: string) => {
-          win?.webContents.send('llm:stream-chunk', { requestId, chunk })
-        },
-      },
-    ).then(result => {
-      recordOnce({ success: result.success, error: result.error, finishReason: result.finishReason })
-      win?.webContents.send('llm:stream-done', {
-        requestId,
-        fullText: result.content,
-        artifact: result.artifact,
-        finishReason: result.finishReason,
-      })
-    }).catch(error => {
-      if (error instanceof SingleShotAbortedError || abortController.signal.aborted) {
-        recordOnce({ success: false, error: 'cancelled' })
-        win?.webContents.send('llm:stream-error', { requestId, error: 'cancelled' })
-        return
+    void (async function runStream(): Promise<void> {
+      try {
+        const result = await completeSingleShot(
+          resolvedModel,
+          request,
+          generationParameters,
+          {
+            signal: abortController.signal,
+            inFlightId: `llm:${requestId}`,
+            onDelta: (chunk: string) => {
+              win?.webContents.send('llm:stream-chunk', { requestId, chunk })
+            },
+          },
+        )
+        recordOnce({ success: result.success, error: result.error, finishReason: result.finishReason })
+        win?.webContents.send('llm:stream-done', {
+          requestId,
+          fullText: result.content,
+          artifact: result.artifact,
+          finishReason: result.finishReason,
+        })
+      } catch (error) {
+        if (error instanceof SingleShotAbortedError || abortController.signal.aborted) {
+          recordOnce({ success: false, error: 'cancelled' })
+          win?.webContents.send('llm:stream-error', { requestId, error: 'cancelled' })
+          return
+        }
+        const message = error instanceof Error ? error.message : String(error)
+        recordOnce({ success: false, error: message })
+        win?.webContents.send('llm:stream-error', { requestId, error: message })
+      } finally {
+        activeStreams.delete(requestId)
       }
-      const message = error instanceof Error ? error.message : String(error)
-      recordOnce({ success: false, error: message })
-      win?.webContents.send('llm:stream-error', { requestId, error: message })
-    }).finally(() => {
-      activeStreams.delete(requestId)
-    })
+    })()
     return { requestId, started: true }
   })
 
   ipcMain.handle('llm:cancel', async (_event, requestId: string) => {
     const stream = activeStreams.get(requestId)
-    if (stream) {
-      stream.recordCancelled()
-      stream.controller.abort()
-      activeStreams.delete(requestId)
-      return { success: true }
-    }
-    return { success: false }
+    if (!stream) return { success: false }
+    stream.recordCancelled()
+    stream.controller.abort()
+    activeStreams.delete(requestId)
+    return { success: true }
   })
 
   ipcMain.handle('llm:list-models', async () => loadModelConfigs())
@@ -251,8 +301,8 @@ export function registerLLMController() {
   ipcMain.handle('llm:save-model', async (_event, model: ModelProfile) => {
     try {
       const models = loadModelConfigsForUpdate()
-      const idx = models.findIndex((m) => m.id === model.id)
-      if (idx >= 0) models[idx] = model
+      const index = models.findIndex((entry) => entry.id === model.id)
+      if (index >= 0) models[index] = model
       else models.push(model)
       saveModelConfigs(models)
       return { success: true }
@@ -265,14 +315,8 @@ export function registerLLMController() {
     let originalConfig: GlobalConfig | undefined
     let configChanged = false
     try {
-      const modelsRead = tryReadJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH)
-      if (modelsRead.status === 'error') throw modelsRead.error
-      const originalModels = modelsRead.status === 'ok' ? modelsRead.value : []
-      const configRead = tryReadJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH)
-      if (configRead.status === 'error') throw configRead.error
-      originalConfig = configRead.status === 'ok'
-        ? configRead.value
-        : { ...DEFAULT_GLOBAL_CONFIG }
+      const originalModels = readJsonOrMissing<ModelProfile[]>(MODELS_CONFIG_PATH) ?? []
+      originalConfig = readJsonOrMissing<GlobalConfig>(GLOBAL_CONFIG_PATH) ?? { ...DEFAULT_GLOBAL_CONFIG }
 
       const nextConfig = { ...originalConfig }
       if (nextConfig.defaultModelId === modelId) {
@@ -288,7 +332,7 @@ export function registerLLMController() {
       // 即使回滚也失败，配置中只会缺少默认值，不会悬空指向已删除模型。
       if (configChanged) writeJsonFile(GLOBAL_CONFIG_PATH, nextConfig)
       try {
-        saveModelConfigs(originalModels.filter(model => model.id !== modelId))
+        saveModelConfigs(originalModels.filter((model) => model.id !== modelId))
       } catch (error) {
         if (configChanged) {
           try {
@@ -310,14 +354,7 @@ export function registerLLMController() {
   })
 
   ipcMain.handle('llm:set-default-model', async (_event, modelId: string | null) => {
-    try {
-      const config = loadGlobalConfigForUpdate()
-      config.defaultModelId = modelId
-      writeJsonFile(GLOBAL_CONFIG_PATH, config)
-      return { success: true }
-    } catch (error) {
-      return { success: false, error: String(error) }
-    }
+    return writeDefaultModelId('defaultModelId', modelId)
   })
 
   ipcMain.handle('llm:get-default-model', async () => {
@@ -326,14 +363,7 @@ export function registerLLMController() {
   })
 
   ipcMain.handle('llm:set-default-embedding-model', async (_event, modelId: string | null) => {
-    try {
-      const config = loadGlobalConfigForUpdate()
-      config.defaultEmbeddingModelId = modelId
-      writeJsonFile(GLOBAL_CONFIG_PATH, config)
-      return { success: true }
-    } catch (error) {
-      return { success: false, error: String(error) }
-    }
+    return writeDefaultModelId('defaultEmbeddingModelId', modelId)
   })
 
   ipcMain.handle('llm:get-default-embedding-model', async () => {
@@ -348,25 +378,21 @@ export function registerLLMController() {
   ) => {
     try {
       applyProxyConfig()
-
-      let result = { success: true, error: undefined as undefined | string }
       if (model.purposes?.includes('embedding')) {
         const { generateEmbeddings } = await import('../embedding')
         await generateEmbeddings(['hello'], model.protocol, model)
-      } else {
-        const res = await completeSingleShot(
-          model,
-          { messages: [{ role: 'user', content: 'Say "hello" and nothing else.' }] },
-          resolveGenerationParameters(model, {
-            // 推理模型可能先消耗 reasoning tokens；预算过小会把可用连接误判为截断失败。
-            maxTokens: CONNECTION_TEST_MAX_TOKENS,
-            reasoningStage: 'general',
-            creativeStrategy,
-          }),
-        )
-        result = { success: res.success, error: res.error }
+        return { success: true, error: undefined }
       }
-      
+      const result = await completeSingleShot(
+        model,
+        { messages: [{ role: 'user', content: 'Say "hello" and nothing else.' }] },
+        resolveGenerationParameters(model, {
+          // 推理模型可能先消耗 reasoning tokens；预算过小会把可用连接误判为截断失败。
+          maxTokens: CONNECTION_TEST_MAX_TOKENS,
+          reasoningStage: 'general',
+          creativeStrategy,
+        }),
+      )
       return { success: result.success, error: result.error }
     } catch (error) {
       return { success: false, error: String(error) }

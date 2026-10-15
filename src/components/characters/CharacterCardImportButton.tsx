@@ -17,6 +17,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 
 interface Props { projectKey: string; compact?: boolean; disabled?: boolean }
 
+function compactButtonClassName(compact: boolean | undefined): string | undefined {
+  if (compact) return 'h-6 w-6'
+  return undefined
+}
+
 interface ImportDraft {
   source: string
   files: PlanningMaterial[]
@@ -159,7 +164,7 @@ function SessionImportButton({ session, compact, disabled }: Props & { session: 
   }
 
   return <>
-    <Button variant="ghost" size={compact ? 'icon' : 'sm'} className={compact ? 'h-6 w-6' : undefined} disabled={disabled || busy} title={label} aria-label={label} onClick={() => setOpen(true)}>
+    <Button variant="ghost" size={compact ? 'icon' : 'sm'} className={compactButtonClassName(compact)} disabled={disabled || busy} title={label} aria-label={label} onClick={() => setOpen(true)}>
       <ClipboardPaste size={14} />{!compact && label}
     </Button>
     <Dialog open={open} onOpenChange={value => { if (!busy) setOpen(value) }}>

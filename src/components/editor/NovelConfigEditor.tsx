@@ -43,12 +43,12 @@ export default function NovelConfigEditor({ projectKey }: { projectKey: string }
 }
 
 function NovelConfigEditorSession({ projectKey }: { projectKey: string }) {
-  // ✅ 用 selector 精确订阅：只有 currentProject 变化时才重新渲染
+  // 用 selector 精确订阅：只有 currentProject 变化时才重新渲染
   //    不订阅 fileTree、recentProjects 等无关字段
   const currentProject = useProjectStore(s => s.currentProject)
   const updateNovelConfig = useProjectStore(s => s.updateNovelConfig)
   const saveProject = useProjectStore(s => s.saveProject)
-  // ✅ addLog 用 getState() 命令式调用，不订阅 workflow store
+  // addLog 用 getState() 命令式调用，不订阅 workflow store
   //    避免 AI 流式生成时 globalLogs 高频更新导致本组件被动重渲染
   const addLog = useWorkflowStore.getState().addLog
   const [saving, setSaving] = useState(false)

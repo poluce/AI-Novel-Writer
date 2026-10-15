@@ -63,8 +63,17 @@ function requireSection(
   return value
 }
 
+function parsedPromptSections(
+  preparsed: ReturnType<typeof parsePromptSections> | undefined,
+  source: string | undefined,
+): ReturnType<typeof parsePromptSections> | undefined {
+  if (preparsed) return preparsed
+  if (source) return parsePromptSections(source)
+  return undefined
+}
+
 function readTemplate(structure: (typeof BUILTIN_PROMPT_STRUCTURES)[number]): PromptTemplate {
-  const sections = ZH_CN_PARSED_PROMPTS[structure.key] ?? (zhByKey[structure.key] ? parsePromptSections(zhByKey[structure.key]) : undefined)
+  const sections = parsedPromptSections(ZH_CN_PARSED_PROMPTS[structure.key], zhByKey[structure.key])
   if (sections === undefined) {
     throw new Error(`Missing zh-CN prompt source for ${structure.key}`)
   }
@@ -88,7 +97,7 @@ function readTemplate(structure: (typeof BUILTIN_PROMPT_STRUCTURES)[number]): Pr
 export const BUILTIN_PROMPTS: PromptTemplate[] = BUILTIN_PROMPT_STRUCTURES.map(readTemplate)
 
 function readOverlay(key: string): PromptLanguageOverlay | undefined {
-  const sections = EN_US_PARSED_PROMPTS[key] ?? (enByKey[key] ? parsePromptSections(enByKey[key]) : undefined)
+  const sections = parsedPromptSections(EN_US_PARSED_PROMPTS[key], enByKey[key])
   if (sections === undefined) return undefined
   const overlay: PromptLanguageOverlay = {
     systemRole: requireSection(sections, key, 'systemRole'),

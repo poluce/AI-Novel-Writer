@@ -110,7 +110,8 @@ interface EditorState {
 const BACKGROUND_LEDGER_BY_EDITOR_TYPE: Partial<Record<EditorTab['type'], string>> = {
   character: 'character-editor-drafts',
   config: 'config',
-  'chapter-card': 'chapter-card-editor'}
+  'chapter-card': 'chapter-card-editor',
+}
 const PROJECT_SCOPED_BUILTIN_TYPES = new Set<EditorTab['type']>([
   'character',
   'config',
@@ -168,6 +169,33 @@ export function createProjectScopedEditorTabId(
   return `${baseId}:${encodeURIComponent(projectKey)}`
 }
 
+function mapTab(
+  tabs: EditorTab[],
+  tabId: string,
+  update: (tab: EditorTab) => EditorTab,
+): EditorTab[] {
+  return tabs.map(tab => tab.id === tabId ? update(tab) : tab)
+}
+
+function nextContentRevision(tab: EditorTab, contentChanged: boolean): number {
+  const current = tab.contentRevision ?? 0
+  if (contentChanged) return current + 1
+  return current
+}
+
+function snapshotMatchesTab(tab: EditorTab, snapshot: EditorTabSaveSnapshot): boolean {
+  return (tab.contentRevision ?? 0) === snapshot.contentRevision && tab.content === snapshot.content
+}
+
+function nextActiveTabId(
+  tabs: EditorTab[],
+  closingId: string,
+  currentId: string | null,
+): string | null {
+  if (currentId !== closingId) return currentId
+  return tabs.at(-1)?.id ?? null
+}
+
 function hasBackgroundProjectDraft(
   draftLedgers: Record<string, string>,
   tab: EditorTab,
@@ -197,7 +225,8 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   openFile: (tab) => {
     const projectScopedTab = {
       ...tab,
-      id: createProjectScopedEditorTabId(tab.id, tab.type, tab.projectKey)}
+      id: createProjectScopedEditorTabId(tab.id, tab.type, tab.projectKey),
+    }
     const tabWithDraftState = hasBackgroundProjectDraft(
       useEditorDraftLedgerStore.getState().draftLedgers,
       projectScopedTab,
@@ -220,42 +249,43 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       if (tabWithDraftState.type === 'diff' || tabWithDraftState.type === 'review-report') {
         set((s) => ({
           tabs: s.tabs.map((t) => t.id === existing.id ? { ...t, ...tabWithDraftState, id: tabWithDraftState.id } : t),
-          activeTabId: tabWithDraftState.id}))
+          activeTabId: tabWithDraftState.id,
+        }))
       } else {
-        // 其他类型 Tab：已打开，更新名称并直接激活
         set((s) => ({
-          tabs: s.tabs.map((t) => t.id === existing.id
-            ? {
-                ...t,
-                name: tabWithDraftState.name,
-                ...(tabWithDraftState.draftId === undefined
-                  ? {}
-                  : { draftId: tabWithDraftState.draftId }),
-                ...(tabWithDraftState.chapterNumber === undefined
-                  ? {}
-                  : { chapterNumber: tabWithDraftState.chapterNumber }),
-                ...(tabWithDraftState.draftStatus === undefined
-                  ? {}
-                  : { draftStatus: tabWithDraftState.draftStatus }),
-                ...(tabWithDraftState.narrativeThreadView === undefined
-                  ? {}
-                  : {
-                      narrativeThreadView: tabWithDraftState.narrativeThreadView,
-                      narrativeThreadViewRequest: (t.narrativeThreadViewRequest ?? 0) + 1})}
-            : t),
-          activeTabId: existing.id}))
+          tabs: mapTab(s.tabs, existing.id, current => {
+            const next: EditorTab = {
+              ...current,
+              name: tabWithDraftState.name,
+            }
+            if (tabWithDraftState.draftId !== undefined) next.draftId = tabWithDraftState.draftId
+            if (tabWithDraftState.chapterNumber !== undefined) {
+              next.chapterNumber = tabWithDraftState.chapterNumber
+            }
+            if (tabWithDraftState.draftStatus !== undefined) {
+              next.draftStatus = tabWithDraftState.draftStatus
+            }
+            if (tabWithDraftState.narrativeThreadView !== undefined) {
+              next.narrativeThreadView = tabWithDraftState.narrativeThreadView
+              next.narrativeThreadViewRequest = (current.narrativeThreadViewRequest ?? 0) + 1
+            }
+            return next
+          }),
+          activeTabId: existing.id,
+        }))
       }
     } else {
-      // 新开 Tab
+      let opened = tabWithDraftState
+      if (
+        tabWithDraftState.type === 'narrative-thread'
+        && tabWithDraftState.narrativeThreadView !== undefined
+      ) {
+        opened = { ...tabWithDraftState, narrativeThreadViewRequest: 1 }
+      }
       set((s) => ({
-        tabs: [
-          ...s.tabs,
-          tabWithDraftState.type === 'narrative-thread'
-            && tabWithDraftState.narrativeThreadView !== undefined
-            ? { ...tabWithDraftState, narrativeThreadViewRequest: 1 }
-            : tabWithDraftState,
-        ],
-        activeTabId: tabWithDraftState.id}))
+        tabs: [...s.tabs, opened],
+        activeTabId: tabWithDraftState.id,
+      }))
     }
   },
 
@@ -265,7 +295,8 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         tab.type === type && tab.projectKey === projectKey
           ? { ...tab, dirty }
           : tab
-      ))}))
+      )),
+    }))
   },
 
   closeTab: (tabId) => {
@@ -277,9 +308,8 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     const newTabs = tabs.filter((t) => t.id !== tabId)
     set({
       tabs: newTabs,
-      activeTabId: activeTabId === tabId
-        ? (newTabs.length > 0 ? newTabs[newTabs.length - 1].id : null)
-        : activeTabId})
+      activeTabId: nextActiveTabId(newTabs, tabId, activeTabId),
+    })
   },
 
   setActiveTab: (tabId) => {
@@ -288,75 +318,69 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
   updateTabContent: (tabId, content) => {
     set((s) => ({
-      tabs: s.tabs.map((t) => t.id === tabId
-        ? {
-            ...t,
-            content,
-            contentRevision: (t.contentRevision ?? 0) + 1,
-            dirty: true}
-        : t)}))
+      tabs: mapTab(s.tabs, tabId, tab => ({
+        ...tab,
+        content,
+        contentRevision: (tab.contentRevision ?? 0) + 1,
+        dirty: true,
+      })),
+    }))
   },
 
   // 静默刷新内容（不改变 dirty 标记，用于 AI 生成后刷新、打开文件同步等场景）
   syncTabContent: (tabId, content) => {
     set((s) => ({
-      tabs: s.tabs.map((t) => t.id === tabId
-        ? {
-            ...t,
-            content,
-            contentRevision: content === t.content
-              ? (t.contentRevision ?? 0)
-              : (t.contentRevision ?? 0) + 1}
-        : t)}))
+      tabs: mapTab(s.tabs, tabId, tab => {
+        const sameContent = content === tab.content
+        return {
+          ...tab,
+          content,
+          contentRevision: nextContentRevision(tab, !sameContent),
+        }
+      }),
+    }))
   },
 
   // 标记 Tab 已保存 —— 清除 dirty 标记，使标题栏警示灯和 Tab 圆点消失
   markTabSaved: (tabId, savedContent) => {
     set((s) => ({
-      tabs: s.tabs.map((t) => t.id === tabId
-        ? {
-            ...t,
-            dirty: false,
-            ...(savedContent === undefined ? {} : { savedContent })}
-        : t)}))
+      tabs: mapTab(s.tabs, tabId, tab => {
+        const next = { ...tab, dirty: false }
+        if (savedContent !== undefined) next.savedContent = savedContent
+        return next
+      }),
+    }))
   },
 
   settleTabSave: (tabId, snapshot) => {
     set((state) => ({
-      tabs: state.tabs.map(tab => {
-        if (tab.id !== tabId) return tab
-        const snapshotStillCurrent = (
-          (tab.contentRevision ?? 0) === snapshot.contentRevision
-          && tab.content === snapshot.content
-        )
-        return {
-          ...tab,
-          savedContent: snapshot.content,
-          dirty: !snapshotStillCurrent}
-      })}))
+      tabs: mapTab(state.tabs, tabId, tab => ({
+        ...tab,
+        savedContent: snapshot.content,
+        dirty: !snapshotMatchesTab(tab, snapshot),
+      })),
+    }))
   },
 
   settleMergedRevision: (tabId, snapshot, mergedContent) => {
     set((state) => ({
-      tabs: state.tabs.map(tab => {
-        if (tab.id !== tabId) return tab
-        const snapshotStillCurrent = (
-          (tab.contentRevision ?? 0) === snapshot.contentRevision
-          && tab.content === snapshot.content
-        )
-        if (!snapshotStillCurrent) {
+      tabs: mapTab(state.tabs, tabId, tab => {
+        if (!snapshotMatchesTab(tab, snapshot)) {
           return {
             ...tab,
             savedContent: mergedContent,
-            dirty: true}
+            dirty: true,
+          }
         }
         return {
           ...tab,
           content: mergedContent,
           savedContent: mergedContent,
-          contentRevision: (tab.contentRevision ?? 0) + (tab.content === mergedContent ? 0 : 1),
-          dirty: false}
-      })}))
+          contentRevision: nextContentRevision(tab, tab.content !== mergedContent),
+          dirty: false,
+        }
+      }),
+    }))
   },
 
   clearTabs: () => {
@@ -376,7 +400,8 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         : (tabs.at(-1)?.id ?? null)
       return { tabs, activeTabId }
     })
-  }}))
+  },
+}))
 
 export async function saveDirtyEditorChangesForExit(currentProjectKey: string | undefined): Promise<void> {
   const initial = useEditorStore.getState()

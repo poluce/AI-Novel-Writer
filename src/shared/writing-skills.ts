@@ -88,14 +88,8 @@ function normalizedStage(value: string | undefined): WritingSkillStage | undefin
   return WRITING_SKILL_STAGES.find(stage => stage === value?.toLowerCase())
 }
 
-function suggestedStage(fields: Record<string, string>, content: string): WritingSkillStage {
-  const explicit = normalizedStage(fields.stage)
-  if (explicit) return explicit
-  const searchable = `${fields.name ?? ''} ${fields.description ?? ''} ${content.slice(0, 1000)}`.toLowerCase()
-  if (/review|critique|审稿|审阅|检查/.test(searchable)) return 'review'
-  if (/refin|polish|prose|润色|修稿|改写/.test(searchable)) return 'refinement'
-  if (/plan|outline|architect|规划|大纲|设定/.test(searchable)) return 'planning'
-  return 'drafting'
+function suggestedStage(fields: Record<string, string>): WritingSkillStage {
+  return normalizedStage(fields.stage) ?? 'drafting'
 }
 
 export function inspectWritingSkillMarkdown(raw: string): WritingSkillInspection {
@@ -124,7 +118,7 @@ export function inspectWritingSkillMarkdown(raw: string): WritingSkillInspection
     || /\b(?:use|call|invoke)\s+(?:the\s+)?[a-z0-9_-]+\s+tools?\b/i.test(content)
     || /(?:使用|调用).{0,24}工具/.test(content)) reasons.add('tool-dependency')
 
-  const stage = suggestedStage(fields, content)
+  const stage = suggestedStage(fields)
   return {
     metadata: {
       name,

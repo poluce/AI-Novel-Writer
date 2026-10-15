@@ -33,6 +33,28 @@ import {
 import { sameProjectSessionContext } from '../../shared/project-session-context'
 import { getVectorRebuildPresentation } from './knowledge-rebuild-presentation'
 
+function vectorBackfillMessage(
+  result: { processed: number; failed: number },
+  text: (zhCNText: string, enUSText: string) => string,
+): string {
+  if (result.processed === 0) {
+    return text(
+      '向量索引检查完成，当前模型无需重建',
+      'Vector index check complete; the current model does not need a rebuild',
+    )
+  }
+  let failedZh = ''
+  let failedEn = ''
+  if (result.failed > 0) {
+    failedZh = `，${result.failed} 块失败`
+    failedEn = `, ${result.failed} failed`
+  }
+  return text(
+    `向量索引重建完成：已处理 ${result.processed} 块${failedZh}`,
+    `Vector index rebuilt: ${result.processed} chunks processed${failedEn}`,
+  )
+}
+
 /**
  * 知识库概览页面 — LanceDB 向量数据库的管理中心
  * 当侧栏视图为"知识库"时，作为中间编辑区的固定内容展示。
@@ -186,9 +208,7 @@ export default function KnowledgeOverview() {
       )
       if (!isProjectSessionCurrent(projectSession)) return
       if (result.success) {
-        toast.success(result.processed === 0
-          ? text('向量索引检查完成，当前模型无需重建', 'Vector index check complete; the current model does not need a rebuild')
-          : text(`向量索引重建完成：已处理 ${result.processed} 块${result.failed > 0 ? `，${result.failed} 块失败` : ''}`, `Vector index rebuilt: ${result.processed} chunks processed${result.failed > 0 ? `, ${result.failed} failed` : ''}`))
+        toast.success(vectorBackfillMessage(result, text))
       } else {
         toast.error(result.error || text('向量回填失败', 'Vector backfill failed'))
       }

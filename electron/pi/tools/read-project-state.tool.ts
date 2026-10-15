@@ -13,6 +13,30 @@ import {
 /** 单次返回的最大章节行数，避免几千章的项目把结果撑爆。 */
 const MAX_CHAPTER_ROWS = 200
 
+function projectStatusHeading(english: boolean, projectName: string): string {
+  if (english) return `# Project status: "${projectName}"\n`
+  return `# 📊 项目状态：《${projectName}》\n`
+}
+
+function configLoadFailureMessage(english: boolean): string {
+  if (english) return '## Novel configuration\nFailed to load configuration.'
+  return '## 小说配置\n⚠️ 获取配置失败'
+}
+
+function presenceMark(present: boolean): string {
+  if (present) return '✅'
+  return '❌'
+}
+
+function chapterProgressRow(
+  chapterNumber: number,
+  hasBlueprint: boolean,
+  hasDraft: boolean,
+  hasFinalized: boolean,
+): string {
+  return `| ${chapterNumber} | ${presenceMark(hasBlueprint)} | ${presenceMark(hasDraft)} | ${presenceMark(hasFinalized)} |`
+}
+
 const ALL_SECTIONS = ['config', 'progress', 'recent_notes', 'blueprints'] as const
 type SectionKey = (typeof ALL_SECTIONS)[number]
 
@@ -62,9 +86,7 @@ export function createReadProjectStateTool(
       const wants = (section: SectionKey) => sections.includes(section)
 
       const core = ProjectCoreRepository.get()
-      const parts: string[] = [english
-        ? `# Project status: "${core?.projectName ?? ''}"\n`
-        : `# 📊 项目状态：《${core?.projectName ?? ''}》\n`]
+      const parts: string[] = [projectStatusHeading(english, core?.projectName ?? '')]
 
       if (wants('config')) {
         if (core) {
@@ -86,9 +108,7 @@ export function createReadProjectStateTool(
             writingStyle: core.writingStyle,
           }, null, 2)}\n\`\`\``)
         } else {
-          parts.push(english
-            ? '## Novel configuration\nFailed to load configuration.'
-            : '## 小说配置\n⚠️ 获取配置失败')
+          parts.push(configLoadFailureMessage(english))
         }
       }
 
@@ -109,13 +129,20 @@ export function createReadProjectStateTool(
             : '## 章节进度\n暂无章节数据。建议先生成故事架构和章节蓝图。')
         } else {
           const shown = allNums.slice(0, MAX_CHAPTER_ROWS)
-          const rows = shown.map(num => (
-            `| ${num} | ${bpNums.has(num) ? '✅' : '❌'} | ${draftNums.has(num) ? '✅' : '❌'} | ${finalizedNums.has(num) ? '✅' : '❌'} |`
+          const rows = shown.map(num => chapterProgressRow(
+            num,
+            bpNums.has(num),
+            draftNums.has(num),
+            finalizedNums.has(num),
           ))
           const table = `${english ? '| Chapter | Blueprint | Draft | Finalized |' : '| 章节 | 蓝图 | 草稿 | 定稿 |'}\n| --- | --- | --- | --- |\n${rows.join('\n')}`
-          const truncated = allNums.length > shown.length
-            ? text(`\n（共 ${allNums.length} 章，仅列出前 ${shown.length} 章）`, `\n(${allNums.length} chapters total; showing the first ${shown.length})`)
-            : ''
+          let truncated = ''
+          if (allNums.length > shown.length) {
+            truncated = text(
+              `\n（共 ${allNums.length} 章，仅列出前 ${shown.length} 章）`,
+              `\n(${allNums.length} chapters total; showing the first ${shown.length})`,
+            )
+          }
           parts.push(`${english ? '## Chapter progress' : '## 章节进度'}\n\n${table}\n\n${text(
             `总计：${allNums.length} 个章节，${bpNums.size} 个蓝图，${draftNums.size} 个草稿，${finalizedNums.size} 个定稿`,
             `Total: ${allNums.length} chapters, ${bpNums.size} blueprints, ${draftNums.size} drafts, ${finalizedNums.size} finalized`,

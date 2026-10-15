@@ -43,6 +43,33 @@ const SECTION_LABELS: Record<string, readonly [string, string]> = {
   synopsis: ['情节大纲', 'Plot outline'],
 }
 
+type ArchitectureSectionKey = keyof typeof SECTION_LABELS
+
+function architectureSectionContent(
+  core: { premise: string; worldbuilding: string; synopsis: string },
+  key: ArchitectureSectionKey,
+): string {
+  if (key === 'premise') return core.premise
+  if (key === 'worldbuilding') return core.worldbuilding
+  return core.synopsis
+}
+
+function emptyArchitectureMessage(
+  requested: 'all' | ArchitectureSectionKey,
+  text: (zhCNText: string, enUSText: string) => string,
+): string {
+  if (requested === 'all') {
+    return text(
+      '⚠️ 架构为空，暂无故事前提、世界观与情节大纲。建议通过工作流生成故事架构。',
+      '⚠️ The architecture is empty: no premise, worldbuilding, or plot outline yet. Generate the story architecture with the workflow first.',
+    )
+  }
+  return text(
+    `${SECTION_LABELS[requested][0]}尚未生成。`,
+    `${SECTION_LABELS[requested][1]} has not been generated yet.`,
+  )
+}
+
 export function createReadArchitectureTool(
   language: WritingLanguage,
 ): AgentTool<typeof Schema, { sections: string[] }> {
@@ -64,31 +91,19 @@ export function createReadArchitectureTool(
 
       const rawSection = params.section ?? 'all'
       const requested = SECTION_ALIASES[rawSection] ?? 'all'
-      const wanted: Array<keyof typeof SECTION_LABELS> = requested === 'all'
+      const wanted: ArchitectureSectionKey[] = requested === 'all'
         ? ['premise', 'worldbuilding', 'synopsis']
         : [requested]
 
-      const blocks: Array<{ key: keyof typeof SECTION_LABELS; content: string }> = []
+      const blocks: Array<{ key: ArchitectureSectionKey; content: string }> = []
       for (const key of wanted) {
-        const content = key === 'premise'
-          ? core.premise
-          : key === 'worldbuilding'
-            ? core.worldbuilding
-            : core.synopsis
+        const content = architectureSectionContent(core, key)
         if (content && content.trim()) blocks.push({ key, content })
       }
 
       if (blocks.length === 0) {
         return {
-          content: [{ type: 'text', text: requested === 'all'
-            ? text(
-                '⚠️ 架构为空，暂无故事前提、世界观与情节大纲。建议通过工作流生成故事架构。',
-                '⚠️ The architecture is empty: no premise, worldbuilding, or plot outline yet. Generate the story architecture with the workflow first.',
-              )
-            : text(
-                `${SECTION_LABELS[requested][0]}尚未生成。`,
-                `${SECTION_LABELS[requested][1]} has not been generated yet.`,
-              ) }],
+          content: [{ type: 'text', text: emptyArchitectureMessage(requested, text) }],
           details: { sections: [] },
         }
       }
@@ -97,12 +112,13 @@ export function createReadArchitectureTool(
         `## 📄 ${text(...SECTION_LABELS[key])}\n\n${content}`
       )).join('\n\n---\n\n')
       const missing = wanted.filter(key => !blocks.some(block => block.key === key))
-      const missingNote = missing.length > 0
-        ? `\n\n${text(
-            `（未生成：${missing.map(key => text(...SECTION_LABELS[key])).join('、')}）`,
-            `(Not generated yet: ${missing.map(key => text(...SECTION_LABELS[key])).join(', ')})`,
-          )}`
-        : ''
+      let missingNote = ''
+      if (missing.length > 0) {
+        missingNote = `\n\n${text(
+          `（未生成：${missing.map(key => text(...SECTION_LABELS[key])).join('、')}）`,
+          `(Not generated yet: ${missing.map(key => text(...SECTION_LABELS[key])).join(', ')})`,
+        )}`
+      }
 
       return {
         content: [{ type: 'text', text: `${text(

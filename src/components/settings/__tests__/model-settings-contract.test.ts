@@ -8,7 +8,7 @@ function source(file: string): string {
 
 describe('model settings contract', () => {
   it('keeps the user-facing model field vocabulary and provider options in the settings surface', () => {
-    const settingsModal = source('src/components/settings/SettingsModal.tsx')
+    const settingsModal = source('src/components/settings/GenerationModelSettings.tsx')
 
     for (const field of [
       ['模型列表', 'Models'],
@@ -29,7 +29,7 @@ describe('model settings contract', () => {
   })
 
   it('creates new embedding profiles from the SiliconFlow preset and opens only fixed provider resources through IPC', () => {
-    const settingsModal = source('src/components/settings/SettingsModal.tsx')
+    const settingsModal = source('src/components/settings/GenerationModelSettings.tsx')
     const resourceController = source('electron/controllers/model-provider-resource-controller.ts')
 
     expect(settingsModal).toContain('createModelProfileDraft')
@@ -45,9 +45,9 @@ describe('model settings contract', () => {
   })
 
   it('exposes test connection button and per-model connectivity status indicators in the model list', () => {
-    const settingsModal = source('src/components/settings/SettingsModal.tsx')
+    const settingsModal = source('src/components/settings/GenerationModelSettings.tsx')
 
-    expect(settingsModal).toContain("text('测试连接', 'Test connection')")
+    expect(settingsModal).toContain("busyActionLabel(testing, text, '测试中...', 'Testing...', '测试连接', 'Test connection')")
     expect(settingsModal).toContain("data-test-status={testInfo.status}")
     expect(settingsModal).toContain("handleTestSingleModel")
     expect(settingsModal).toContain("handleTestAllModels")

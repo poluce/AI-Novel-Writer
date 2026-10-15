@@ -60,6 +60,12 @@ export function characterRosterEntryFromCard(card: CharacterData): CharacterRost
   }
 }
 
+function rosterRelationshipNotes(entry: CharacterRosterEntry): string {
+  if (entry.legacyRelationshipNotes != null) return entry.legacyRelationshipNotes
+  if (entry.relationships.length > 0) return JSON.stringify(entry.relationships)
+  return ''
+}
+
 export function characterCardFromRosterEntry(entry: CharacterRosterEntry): CharacterData {
   return {
     name: entry.name,
@@ -71,8 +77,7 @@ export function characterCardFromRosterEntry(entry: CharacterRosterEntry): Chara
     background: entry.background,
     abilities: entry.abilities,
     motivation: entry.motivation,
-    relationships: entry.legacyRelationshipNotes
-      ?? (entry.relationships.length > 0 ? JSON.stringify(entry.relationships) : ''),
+    relationships: rosterRelationshipNotes(entry),
     arc: entry.arc,
     notes: entry.notes,
     ...(entry.currentState ? { currentState: entry.currentState } : {}),

@@ -32,6 +32,12 @@ interface ConfirmDialogProps extends ConfirmOptions {
   onResolve: (value: boolean) => void
 }
 
+function overlayAnimation(overlay: boolean | undefined, isExiting: boolean): string | undefined {
+  if (!overlay) return undefined
+  if (isExiting) return 'backdrop-exit 0.15s ease-out both'
+  return 'backdrop-enter 0.25s ease-out both'
+}
+
 function ConfirmDialog({
   title,
   message,
@@ -95,9 +101,8 @@ function ConfirmDialog({
         backgroundColor: overlay ? 'var(--color-backdrop)' : 'transparent',
         backdropFilter: overlay ? 'blur(8px)' : 'none',
         pointerEvents: overlay ? 'auto' : 'none',
-        animation: overlay
-          ? (isExiting ? 'backdrop-exit 0.15s ease-out both' : 'backdrop-enter 0.25s ease-out both')
-          : undefined}}
+        animation: overlayAnimation(overlay, isExiting),
+      }}
       onClick={overlay ? handleCancel : undefined}
     >
       <div

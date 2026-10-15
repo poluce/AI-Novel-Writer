@@ -12,8 +12,21 @@ export type RightView = 'agent' | 'ai-output'
 /** 左侧主导航当前视觉激活项 */
 export type LeftRailItem = SidebarView | 'blueprint' | 'world' | 'synopsis' | 'plot-tree' | BottomTab
 
+const SETTINGS_SECTION_IDS = [
+  'appearance',
+  'llm',
+  'embedding',
+  'presets',
+  'proxy',
+  'editor',
+  'prompts',
+  'skills',
+  'mcp',
+  'about',
+] as const
+
 /** 设置弹窗分类 */
-export type SettingsSection = 'appearance' | 'llm' | 'embedding' | 'presets' | 'proxy' | 'editor' | 'prompts' | 'skills' | 'mcp' | 'about'
+export type SettingsSection = (typeof SETTINGS_SECTION_IDS)[number]
 
 /** 章节创建对话框的预填参数 */
 export type ChapterCreationPrefill = Record<string, unknown> | null
@@ -88,6 +101,33 @@ interface LayoutState {
   closeChapterCreation: () => void
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value))
+}
+
+function isSettingsSection(value: unknown): value is SettingsSection {
+  return typeof value === 'string' && SETTINGS_SECTION_IDS.includes(value as SettingsSection)
+}
+
+function resolveSettingsSection(section: unknown): SettingsSection {
+  if (isSettingsSection(section)) return section
+  return 'appearance'
+}
+
+function resolveSettingsRailItem(activeRailItem: unknown): LeftRailItem {
+  if (typeof activeRailItem === 'string') return activeRailItem as LeftRailItem
+  return 'settings'
+}
+
+function nextPanelOpen(sameButton: boolean, currentlyOpen: boolean): boolean {
+  if (sameButton) return !currentlyOpen
+  return true
+}
+
+function novelImportState(open: boolean): Pick<LayoutState, 'importNovelOpen' | 'novelDeconstructionOpen'> {
+  return { importNovelOpen: open, novelDeconstructionOpen: open }
+}
+
 export const useLayoutStore = create<LayoutState>()((set) => ({
   // 默认值
   sidebarOpen: true,
@@ -123,13 +163,14 @@ export const useLayoutStore = create<LayoutState>()((set) => ({
       return {
         sidebarView: view,
         activeRailItem: nextRailItem,
-        sidebarOpen: sameButton ? !s.sidebarOpen : true}
+        sidebarOpen: nextPanelOpen(sameButton, s.sidebarOpen),
+      }
     }),
-  setSidebarWidth: (width) => set({ sidebarWidth: Math.max(200, Math.min(500, width)) }),
+  setSidebarWidth: (width) => set({ sidebarWidth: clamp(width, 200, 500) }),
 
   toggleAIPanel: () => set((s) => ({ aiPanelOpen: !s.aiPanelOpen })),
   setAIPanelOpen: (open) => set({ aiPanelOpen: open }),
-  setAIPanelWidth: (width) => set({ aiPanelWidth: Math.max(260, Math.min(600, width)) }),
+  setAIPanelWidth: (width) => set({ aiPanelWidth: clamp(width, 260, 600) }),
   setRightView: (view) => set({ rightView: view }),
   openRightPanel: (view) => set({ aiPanelOpen: true, rightView: view }),
 
@@ -140,44 +181,31 @@ export const useLayoutStore = create<LayoutState>()((set) => ({
       return {
         bottomTab: tab,
         activeRailItem: tab,
-        bottomPanelOpen: sameButton ? !s.bottomPanelOpen : true}
+        bottomPanelOpen: nextPanelOpen(sameButton, s.bottomPanelOpen),
+      }
     }),
-  setBottomPanelHeight: (height) => set({ bottomPanelHeight: Math.max(100, Math.min(500, height)) }),
+  setBottomPanelHeight: (height) => set({ bottomPanelHeight: clamp(height, 100, 500) }),
   openBottomTab: (tab) => set({ bottomPanelOpen: true, bottomTab: tab, activeRailItem: tab }),
 
   // 全局弹窗 Actions
-  openSettings: (section?: SettingsSection | unknown, activeRailItem?: LeftRailItem) => {
-    const validSections: SettingsSection[] = [
-      'appearance',
-      'llm',
-      'embedding',
-      'presets',
-      'proxy',
-      'editor',
-      'prompts',
-      'skills',
-      'mcp',
-      'about',
-    ]
-    const resolvedSection: SettingsSection =
-      typeof section === 'string' && validSections.includes(section as SettingsSection)
-        ? (section as SettingsSection)
-        : 'appearance'
-    const resolvedRailItem: LeftRailItem =
-      typeof activeRailItem === 'string' ? activeRailItem : 'settings'
-
-    set({ settingsOpen: true, settingsSection: resolvedSection, activeRailItem: resolvedRailItem })
+  openSettings: (section, activeRailItem) => {
+    set({
+      settingsOpen: true,
+      settingsSection: resolveSettingsSection(section),
+      activeRailItem: resolveSettingsRailItem(activeRailItem),
+    })
   },
   closeSettings: () => set({ settingsOpen: false }),
   openNewProject: () => set({ newProjectOpen: true }),
   closeNewProject: () => set({ newProjectOpen: false }),
   openExport: () => set({ exportOpen: true }),
   closeExport: () => set({ exportOpen: false }),
-  openImportNovel: () => set({ importNovelOpen: true, novelDeconstructionOpen: true }),
-  closeImportNovel: () => set({ importNovelOpen: false, novelDeconstructionOpen: false }),
+  openImportNovel: () => set(novelImportState(true)),
+  closeImportNovel: () => set(novelImportState(false)),
   openAuthorManuscriptImport: () => set({ authorManuscriptImportOpen: true }),
   closeAuthorManuscriptImport: () => set({ authorManuscriptImportOpen: false }),
-  openNovelDeconstruction: () => set({ novelDeconstructionOpen: true, importNovelOpen: true }),
-  closeNovelDeconstruction: () => set({ novelDeconstructionOpen: false, importNovelOpen: false }),
+  openNovelDeconstruction: () => set(novelImportState(true)),
+  closeNovelDeconstruction: () => set(novelImportState(false)),
   openChapterCreation: (prefill = null) => set({ chapterCreationOpen: true, chapterCreationPrefill: prefill }),
-  closeChapterCreation: () => set({ chapterCreationOpen: false, chapterCreationPrefill: null })}))
+  closeChapterCreation: () => set({ chapterCreationOpen: false, chapterCreationPrefill: null }),
+}))

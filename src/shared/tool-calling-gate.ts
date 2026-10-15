@@ -13,9 +13,10 @@ export function generationModelLacksToolCalling(
 }
 
 export function toolCallingRequiredMessage(locale: 'zh-CN' | 'en-US' = 'zh-CN'): string {
-  return locale === 'en-US'
-    ? 'This model does not support native tool calling, so it cannot be used for writing generation. Choose a model with function calling.'
-    : '该模型不支持原生工具调用，无法用于写作生成。请更换支持 function calling 的模型。'
+  if (locale === 'en-US') {
+    return 'This model does not support native tool calling, so it cannot be used for writing generation. Choose a model with function calling.'
+  }
+  return '该模型不支持原生工具调用，无法用于写作生成。请更换支持 function calling 的模型。'
 }
 
 export function assertGenerationModelSupportsTools(

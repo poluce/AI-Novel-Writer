@@ -117,7 +117,9 @@ function plotTreeErrorMessage(
       'Add a chapter blueprint, finalized chapter, or narrative thread before generating a plot tree.',
     )
   }
-  const raw = error instanceof Error ? error.message : typeof error === 'string' ? error : ''
+  let raw = ''
+  if (error instanceof Error) raw = error.message
+  else if (typeof error === 'string') raw = error
   const message = raw.replace(/^Error:\s*/, '')
   if (message.startsWith('剧情树')
     && SNAPSHOT_VALIDATION_ERROR_ENDINGS.some(ending => message.endsWith(ending))) {

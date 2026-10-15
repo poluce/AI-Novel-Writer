@@ -1,10 +1,5 @@
 /**
- * 单条消息渲染组件（升级版）
- *
- * 支持三种渲染模式：
- * - 用户消息：右对齐气泡
- * - 助手消息：左侧 Markdown 风格渲染
- * - Tool 调用：ToolCallBlock / ConfirmCard / ArtifactCard
+ * 单条消息渲染：用户气泡、助手 Markdown、工具折叠条 / 确认卡 / 产物卡。
  */
 import { useState, useEffect } from 'react'
 import {
@@ -30,38 +25,55 @@ interface Props {
   message: AgentMessageType
 }
 
-function getToolSummary(toolCalls: ToolCallInfo[], text: (zh: string, en: string) => string) {
+type LocaleText = (zh: string, en: string) => string
+
+function getToolSummary(toolCalls: ToolCallInfo[], text: LocaleText) {
+  const uniqueToolNames = Array.from(new Set(toolCalls.map(tc => tc.toolName)))
   const hasWaitingConfirm = toolCalls.some(tc => tc.status === 'waiting_confirm')
-  const hasRunning = toolCalls.some(tc => tc.status === 'running' || tc.status === 'pending')
-  const hasFailed = toolCalls.some(tc => tc.status === 'failed')
-
-  let statusIcon = <CheckCircle2 size={12} className="text-[var(--color-success)] shrink-0" />
-  let statusText = text(`已执行 ${toolCalls.length} 个操作`, `Executed ${toolCalls.length} tools`)
-
   if (hasWaitingConfirm) {
-    statusIcon = <AlertTriangle size={12} className="text-[var(--color-warning)] shrink-0 animate-pulse" />
-    statusText = text('需要确认操作', 'Action requires confirmation')
-  } else if (hasRunning) {
-    statusIcon = <Loader2 size={12} className="text-[var(--color-accent)] shrink-0 animate-spin" />
-    const runningCall = toolCalls.find(tc => tc.status === 'running' || tc.status === 'pending')
-    statusText = text(
-      `正在执行: ${runningCall?.toolName || '工具'}...`,
-      `Running: ${runningCall?.toolName || 'tool'}...`,
-    )
-  } else if (hasFailed) {
-    statusIcon = <XCircle size={12} className="text-[var(--color-error)] shrink-0" />
-    statusText = text('执行完成（包含失败项）', 'Completed with errors')
+    return {
+      hasWaitingConfirm,
+      statusIcon: <AlertTriangle size={12} className="text-[var(--color-warning)] shrink-0 animate-pulse" />,
+      statusText: text('需要确认操作', 'Action requires confirmation'),
+      uniqueToolNames,
+    }
   }
 
-  const uniqueToolNames = Array.from(new Set(toolCalls.map(tc => tc.toolName)))
+  const runningCall = toolCalls.find(tc => tc.status === 'running' || tc.status === 'pending')
+  if (runningCall) {
+    return {
+      hasWaitingConfirm,
+      statusIcon: <Loader2 size={12} className="text-[var(--color-accent)] shrink-0 animate-spin" />,
+      statusText: text(
+        `正在执行: ${runningCall.toolName || '工具'}...`,
+        `Running: ${runningCall.toolName || 'tool'}...`,
+      ),
+      uniqueToolNames,
+    }
+  }
+
+  if (toolCalls.some(tc => tc.status === 'failed')) {
+    return {
+      hasWaitingConfirm,
+      statusIcon: <XCircle size={12} className="text-[var(--color-error)] shrink-0" />,
+      statusText: text('执行完成（包含失败项）', 'Completed with errors'),
+      uniqueToolNames,
+    }
+  }
 
   return {
     hasWaitingConfirm,
-    hasRunning,
-    statusIcon,
-    statusText,
+    statusIcon: <CheckCircle2 size={12} className="text-[var(--color-success)] shrink-0" />,
+    statusText: text(`已执行 ${toolCalls.length} 个操作`, `Executed ${toolCalls.length} tools`),
     uniqueToolNames,
   }
+}
+
+function renderToolCall(tc: ToolCallInfo) {
+  if (tc.status === 'waiting_confirm') {
+    return <ConfirmCard key={tc.id} toolCall={tc} />
+  }
+  return <ToolCallBlock key={tc.id} toolCall={tc} />
 }
 
 function ToolCallsCollapsibleSection({
@@ -69,18 +81,20 @@ function ToolCallsCollapsibleSection({
   text,
 }: {
   toolCalls: ToolCallInfo[]
-  text: (zh: string, en: string) => string
+  text: LocaleText
 }) {
-  const hasWaitingConfirm = toolCalls.some(tc => tc.status === 'waiting_confirm')
-  const [expanded, setExpanded] = useState(hasWaitingConfirm)
+  const summary = getToolSummary(toolCalls, text)
+  const [expanded, setExpanded] = useState(summary.hasWaitingConfirm)
 
   useEffect(() => {
-    if (hasWaitingConfirm) {
+    if (summary.hasWaitingConfirm) {
       setExpanded(true)
     }
-  }, [hasWaitingConfirm])
+  }, [summary.hasWaitingConfirm])
 
-  const summary = getToolSummary(toolCalls, text)
+  const visibleCalls = expanded
+    ? toolCalls
+    : toolCalls.filter(tc => tc.status === 'waiting_confirm')
 
   return (
     <div className="mb-2">
@@ -109,25 +123,9 @@ function ToolCallsCollapsibleSection({
         </span>
       </button>
 
-      {/* 展开的卡片内容 */}
-      {expanded && (
+      {visibleCalls.length > 0 && (
         <div className="mt-1.5 space-y-1.5">
-          {toolCalls.map(tc => (
-            tc.status === 'waiting_confirm' ? (
-              <ConfirmCard key={tc.id} toolCall={tc} />
-            ) : (
-              <ToolCallBlock key={tc.id} toolCall={tc} />
-            )
-          ))}
-        </div>
-      )}
-
-      {/* 即使折叠，未确认的卡片也始终显示在外，防止用户漏掉审批 */}
-      {!expanded && summary.hasWaitingConfirm && (
-        <div className="mt-1.5 space-y-1.5">
-          {toolCalls.filter(tc => tc.status === 'waiting_confirm').map(tc => (
-            <ConfirmCard key={tc.id} toolCall={tc} />
-          ))}
+          {visibleCalls.map(renderToolCall)}
         </div>
       )}
     </div>
@@ -138,7 +136,8 @@ export default function AgentMessage({ message }: Props) {
   const { role, content, streaming, toolCalls, artifacts } = message
   const text = useLocaleStore(state => state.text)
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
-  const copyMessage = async () => {
+
+  async function copyMessage() {
     try {
       await navigator.clipboard.writeText(content)
       setCopyState('copied')
@@ -146,14 +145,18 @@ export default function AgentMessage({ message }: Props) {
       setCopyState('failed')
     }
   }
+
+  let copyTitle = text('复制消息', 'Copy message')
+  if (copyState === 'copied') {
+    copyTitle = text('已复制', 'Copied')
+  }
+
   const copyButton = (
     <>
       <button
         type="button"
         aria-label={text('复制消息', 'Copy message')}
-        title={copyState === 'copied'
-          ? text('已复制', 'Copied')
-          : text('复制消息', 'Copy message')}
+        title={copyTitle}
         disabled={!content || streaming}
         onClick={() => void copyMessage()}
         className="flex h-5 w-5 items-center justify-center rounded opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100 disabled:cursor-not-allowed disabled:opacity-0 hover:bg-[var(--color-hover)]"
@@ -167,7 +170,7 @@ export default function AgentMessage({ message }: Props) {
 
   if (role === 'user') {
     return (
-      <div className="group relative flex justify-end mb-2">
+      <div className="group flex justify-end mb-2">
         <div
           className="max-w-[88%] px-3 py-2 rounded-2xl text-xs leading-relaxed break-words whitespace-pre-wrap"
           style={{
@@ -185,14 +188,12 @@ export default function AgentMessage({ message }: Props) {
     )
   }
 
-  // 助手消息
   return (
-    <div className="group relative flex justify-start mb-2">
+    <div className="group flex justify-start mb-2">
       <div
         className="max-w-full text-xs leading-relaxed break-words w-full"
         style={{ color: 'var(--color-text)' }}
       >
-        {/* 1. 顶部：Tool 调用过程折叠条（自然时序位于正文之前，默认收拢） */}
         {toolCalls && toolCalls.length > 0 && (
           <ToolCallsCollapsibleSection
             toolCalls={toolCalls}
@@ -200,7 +201,6 @@ export default function AgentMessage({ message }: Props) {
           />
         )}
 
-        {/* 2. 中间：文本回复内容与底部解耦的操作栏 */}
         {content ? (
           <div>
             <MarkdownContent content={content} streaming={streaming} />
@@ -209,17 +209,16 @@ export default function AgentMessage({ message }: Props) {
             </div>
           </div>
         ) : (
-          <div className="flex items-center justify-between min-h-[16px]">
-            {streaming ? (
-              <span className="inline-flex items-center h-4">
+          <div className="flex items-center justify-end min-h-[16px]">
+            {streaming && (
+              <span className="inline-flex items-center h-4 mr-auto">
                 <StreamingCursor />
               </span>
-            ) : <span />}
+            )}
             {copyButton}
           </div>
         )}
 
-        {/* 3. 底部：最终产物卡片列表 */}
         {artifacts && artifacts.length > 0 && (
           <div className="mt-2">
             {artifacts.map((a, i) => (

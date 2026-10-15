@@ -27,7 +27,7 @@ export function freezeChapterGoals(chapterNumber: number, keyEvents: string | nu
     .map((text, index) => Object.freeze({ id: `ch${chapterNumber}:keyEvents:${index + 1}`, text }))
   return Object.freeze({
     chapterNumber,
-    coverage: keyEvents === undefined ? 'unknown' : items.length ? 'complete' : 'not_configured',
+    coverage: frozenGoalCoverage(keyEvents, items.length),
     items: Object.freeze(items),
   })
 }
@@ -135,12 +135,27 @@ export function parseChapterGoalReview(value: unknown): ChapterGoalReview | null
   return parsed as unknown as ChapterGoalReview
 }
 
+function frozenGoalCoverage(
+  keyEvents: string | null | undefined,
+  itemCount: number,
+): ChapterGoalReview['coverage'] {
+  if (keyEvents === undefined) return 'unknown'
+  if (itemCount) return 'complete'
+  return 'not_configured'
+}
+
+function chapterGoalSeverity(status: ChapterGoalReviewItem['status']): 'pass' | 'error' | 'unknown' {
+  if (status === 'completed') return 'pass'
+  if (status === 'unmet') return 'error'
+  return 'unknown'
+}
+
 /** A deterministic presentation projection, not another editable source of goal truth. */
 export function chapterGoalReviewItems(review: ChapterGoalReview, language: WritingLanguage): Array<Record<string, unknown>> {
   const category = writingLanguageText(language, '本章目标', 'Chapter goal')
   const items: Array<Record<string, unknown>> = review.items.map(item => ({
     category, goalId: item.id,
-    severity: item.status === 'completed' ? 'pass' : item.status === 'unmet' ? 'error' : 'unknown',
+    severity: chapterGoalSeverity(item.status),
     description: `${item.text}\n${item.description}`,
     ...(item.evidence.length ? { quote: item.evidence.map(evidence => evidence.quote).join('\n') } : {}),
   }))

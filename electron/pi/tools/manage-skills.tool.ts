@@ -107,7 +107,6 @@ export function createManageSkillsTool(
     ),
     parameters: Schema,
     execute: async (_id, params) => {
-      // 智能回退：若未提供 action，但提供了 name 且无 content/url，默认走 load
       let action = params.action as ManageSkillsAction | undefined
       if (!action) {
         if (params.name && !params.content && !params.source_url) {
@@ -118,7 +117,6 @@ export function createManageSkillsTool(
       }
 
       switch (action) {
-        // ===== 1. 列出所有技能 =====
         case 'list': {
           const rows = available.map(skill =>
             formatSkillListingRow(skill, text)
@@ -133,15 +131,14 @@ export function createManageSkillsTool(
               type: 'text',
               text: `${text('## 可用写作技能列表：', '## Available Writing Skills:')}\n${body}\n\n` +
                 text(
-                  '💡 使用 action: "load", name: "<技能名>" 可调取具体技法的完整正文。',
-                  '💡 Use action: "load", name: "<skill_name>" to load the full instructions for any skill.',
+                  '使用 action: "load", name: "<技能名>" 可调取具体技法的完整正文。',
+                  'Use action: "load", name: "<skill_name>" to load the full instructions for any skill.',
                 ),
             }],
             details: { skills: available },
           }
         }
 
-        // ===== 2. 读取技能完整指引正文 =====
         case 'load': {
           const name = params.name?.trim()
           if (!name) throw new Error(text('缺少 name 参数（请指定要加载的技能名）', 'The name parameter is required to load a skill'))
@@ -174,7 +171,6 @@ export function createManageSkillsTool(
           }
         }
 
-        // ===== 3. 创建自定义技能 =====
         case 'create': {
           const name = params.name?.trim()
           if (!name) throw new Error(text('缺少 name 参数', 'The name parameter is required'))
@@ -206,7 +202,6 @@ export function createManageSkillsTool(
           }
         }
 
-        // ===== 4. 修改已有技能 =====
         case 'update': {
           const name = params.name?.trim()
           if (!name) throw new Error(text('缺少 name 参数（请指定要修改的技能名）', 'The name parameter is required'))
@@ -233,7 +228,6 @@ export function createManageSkillsTool(
           }
         }
 
-        // ===== 5. 删除技能 =====
         case 'delete': {
           const name = params.name?.trim()
           if (!name) throw new Error(text('缺少 name 参数（请指定要删除的技能名）', 'The name parameter is required'))
@@ -257,7 +251,6 @@ export function createManageSkillsTool(
           }
         }
 
-        // ===== 6. 预检远程技能 =====
         case 'inspect': {
           const sourceUrl = params.source_url?.trim()
           if (!sourceUrl) throw new Error(text('缺少 source_url 参数', 'The source_url parameter is required'))
@@ -283,7 +276,6 @@ export function createManageSkillsTool(
           }
         }
 
-        // ===== 7. 安装远程技能 =====
         case 'install': {
           const sourceUrl = params.source_url?.trim()
           if (!sourceUrl) throw new Error(text('缺少 source_url 参数', 'The source_url parameter is required'))

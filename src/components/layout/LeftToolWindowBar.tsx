@@ -30,6 +30,13 @@ const bottomTabs: Array<{ id: BottomTab; icon: typeof ListChecks; zh: string; en
   { id: 'models', icon: Cpu, zh: '模型', en: 'Models' },
 ]
 
+function leftNavButtonClassName(active: boolean | undefined, disabled: boolean | undefined): string {
+  let className = 'left-nav-button'
+  if (active) className += ' is-active'
+  if (disabled) className += ' is-disabled opacity-35 cursor-not-allowed pointer-events-none'
+  return className
+}
+
 function LeftNavButton({
   icon: Icon,
   label,
@@ -57,7 +64,7 @@ function LeftNavButton({
         onClick={onClick}
         disabled={disabled}
         title={resolvedTitle}
-        className={`left-nav-button${active ? ' is-active' : ''}${disabled ? ' is-disabled opacity-35 cursor-not-allowed pointer-events-none' : ''}`}
+        className={leftNavButtonClassName(active, disabled)}
       >
         <Icon size={22} strokeWidth={active ? 2 : 1.75} />
         <span className="left-nav-label">{label}</span>

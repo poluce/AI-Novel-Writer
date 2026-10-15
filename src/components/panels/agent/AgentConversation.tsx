@@ -44,13 +44,11 @@ export default function AgentConversation() {
 function EmptyState() {
   const text = useLocaleStore(s => s.text)
   const { conversations, selectConversation } = useAgentStore()
-  // 取最近 3 条历史会话（不包含当前空会话）
-  const recentConvs = conversations
-    .filter(c => c && c.messages.length > 0)
+  const nonEmptyConvs = conversations.filter(c => c && c.messages.length > 0)
+  const recentConvs = nonEmptyConvs
+    .slice()
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, 3)
-
-
 
   return (
     <div className="flex flex-col h-full">
@@ -72,7 +70,7 @@ function EmptyState() {
                 />
               ))}
             </div>
-            {conversations.filter(c => c.messages.length > 0).length > 3 && (
+            {nonEmptyConvs.length > 3 && (
               <button
                 onClick={() => useAgentStore.getState().setShowHistory(true)}
                 className="mt-4 text-left text-xs transition-all hover:underline"
@@ -87,13 +85,7 @@ function EmptyState() {
         )}
       </div>
 
-      <div
-        className="flex-shrink-0 px-3 pb-3 pt-2"
-        style={{ borderTop: '1px solid var(--color-border)' }}
-      >
-        <AgentToolbar />
-        <AgentInputBox />
-      </div>
+      <AgentComposerFooter />
     </div>
   )
 }
@@ -178,14 +170,7 @@ function ActiveConversation() {
         </button>
       )}
 
-      {/* 底部工具栏 + 输入区 */}
-      <div
-        className="flex-shrink-0 px-3 pb-3 pt-2"
-        style={{ borderTop: '1px solid var(--color-border)' }}
-      >
-        <AgentToolbar />
-        <AgentInputBox />
-      </div>
+      <AgentComposerFooter />
     </div>
   )
 }
@@ -197,11 +182,22 @@ function ActiveConversation() {
  * 左侧：快速引用按钮（架构、角色、蓝图）
  * 右侧：打开 AI 输出面板按钮
  */
-function toolbarChipStyle() {
-  return {
-    color: 'var(--color-text-muted)',
-    border: '1px solid var(--color-border)'} as const
+function AgentComposerFooter() {
+  return (
+    <div
+      className="flex-shrink-0 px-3 pb-3 pt-2"
+      style={{ borderTop: '1px solid var(--color-border)' }}
+    >
+      <AgentToolbar />
+      <AgentInputBox />
+    </div>
+  )
 }
+
+const TOOLBAR_CHIP_STYLE = {
+  color: 'var(--color-text-muted)',
+  border: '1px solid var(--color-border)',
+} as const
 
 /** 助手提示词预览按项目写作语言渲染，与真实请求一致（无项目时退回界面语言）。 */
 function agentWritingLanguage(locale: Locale): WritingLanguage {
@@ -244,16 +240,31 @@ function AgentToolbar() {
         'agent:system-prompt',
         buildAgentSkillCatalog(agentWritingLanguage(locale)),
       )
-      setInspect({
-        kind: 'system',
-        body: result.success
-          ? (result.prompt ?? '')
-          : (result.error ?? text('无法读取系统提示词', 'Could not read the system prompt'))})
+      let body = result.prompt ?? ''
+      if (!result.success) {
+        body = result.error ?? text('无法读取系统提示词', 'Could not read the system prompt')
+      }
+      setInspect({ kind: 'system', body })
     } catch (error) {
       setInspect({
         kind: 'system',
         body: text(`无法读取系统提示词：${error}`, `Could not read the system prompt: ${error}`)})
     }
+  }
+
+  let inspectTitle = text('本轮上下文', 'This turn’s context')
+  let inspectDescription = text(
+    '发送下一条消息时附带的应用状态。不含系统提示词，也不含文件正文。',
+    'App state attached to the next message. This is not the system prompt and does not include file bodies.',
+  )
+  let inspectBody = inspect?.body || text('（本轮没有额外上下文）', '(No extra context this turn)')
+  if (inspect?.kind === 'system') {
+    inspectTitle = text('系统提示词', 'System prompt')
+    inspectDescription = text(
+      '助手的基础身份与当前项目摘要。不含本轮界面状态，也不含工具列表。',
+      'The assistant’s identity and current project summary. This is not the per-turn UI state or the tool list.',
+    )
+    inspectBody = inspect.body || text('（没有系统提示词）', '(No system prompt)')
   }
 
   return (
@@ -263,7 +274,7 @@ function AgentToolbar() {
           type="button"
           onClick={() => void openSystemPrompt()}
           className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all select-none"
-          style={toolbarChipStyle()}
+          style={TOOLBAR_CHIP_STYLE}
           title={text('查看助手系统提示词', 'View the assistant system prompt')}
           {...chipHover}
         >
@@ -274,7 +285,7 @@ function AgentToolbar() {
           type="button"
           onClick={openTurnContext}
           className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all select-none"
-          style={toolbarChipStyle()}
+          style={TOOLBAR_CHIP_STYLE}
           title={text('查看本轮发给助手的额外上下文', 'View extra context sent with this turn')}
           {...chipHover}
         >
@@ -292,34 +303,18 @@ function AgentToolbar() {
           onFocusOutside={event => event.preventDefault()}
         >
           <DialogHeader>
-            <DialogTitle>
-              {inspect?.kind === 'system'
-                ? text('系统提示词', 'System prompt')
-                : text('本轮上下文', 'This turn’s context')}
-            </DialogTitle>
-            <DialogDescription>
-              {inspect?.kind === 'system'
-                ? text(
-                    '助手的基础身份与当前项目摘要。不含本轮界面状态，也不含工具列表。',
-                    'The assistant’s identity and current project summary. This is not the per-turn UI state or the tool list.',
-                  )
-                : text(
-                    '发送下一条消息时附带的应用状态。不含系统提示词，也不含文件正文。',
-                    'App state attached to the next message. This is not the system prompt and does not include file bodies.',
-                  )}
-            </DialogDescription>
+            <DialogTitle>{inspectTitle}</DialogTitle>
+            <DialogDescription>{inspectDescription}</DialogDescription>
           </DialogHeader>
           <pre
             className="mx-5 mb-5 mt-3 max-h-[50vh] overflow-y-auto whitespace-pre-wrap rounded-md px-3 py-2 text-xs leading-relaxed"
             style={{
               backgroundColor: 'var(--color-editor-bg)',
               border: '1px solid var(--color-border)',
-              color: 'var(--color-text)'}}
+              color: 'var(--color-text)',
+            }}
           >
-            {inspect?.body
-              || (inspect?.kind === 'system'
-                ? text('（没有系统提示词）', '(No system prompt)')
-                : text('（本轮没有额外上下文）', '(No extra context this turn)'))}
+            {inspectBody}
           </pre>
         </DialogContent>
       </Dialog>
@@ -338,9 +333,7 @@ function AgentHistoryPanel() {
     deleteConversation,
     setShowHistory} = useAgentStore()
 
-  // 按更新时间倒序排列
-  const sorted = conversations
-    .sort((a, b) => b.updatedAt - a.updatedAt)
+  const sorted = [...conversations].sort((a, b) => b.updatedAt - a.updatedAt)
 
   return (
     <div className="flex flex-col h-full">

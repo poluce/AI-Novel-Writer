@@ -338,6 +338,29 @@ export function replaceExactOnce(source: string, oldText: string, newText: strin
   }
 }
 
+function citationChapterLabel(chapterNumber: number, language: WritingLanguage): string {
+  if (language === 'en-US') return `Chapter ${chapterNumber}`
+  return `第${chapterNumber}章`
+}
+
+function citationLineLabel(fromLine: number, toLine: number, language: WritingLanguage): string {
+  if (language === 'en-US') {
+    if (toLine > fromLine) return `lines ${fromLine}–${toLine}`
+    return `line ${fromLine}`
+  }
+  if (toLine > fromLine) return `第${fromLine}–${toLine}行`
+  return `第${fromLine}行`
+}
+
+function citationHeading(location: string, language: WritingLanguage): string {
+  if (language === 'en-US') {
+    if (location) return `[Draft excerpt — ${location}]`
+    return '[Draft excerpt]'
+  }
+  if (location) return `【草稿引用 — ${location}】`
+  return '【草稿引用】'
+}
+
 export function formatDraftPassageCitations(
   citations: readonly DraftPassageCitation[],
   language: WritingLanguage,
@@ -345,23 +368,10 @@ export function formatDraftPassageCitations(
   if (citations.length === 0) return ''
   return citations.map((citation) => {
     const location = [
-      citation.chapterNumber != null
-        ? (language === 'en-US' ? `Chapter ${citation.chapterNumber}` : `第${citation.chapterNumber}章`)
-        : '',
+      citation.chapterNumber != null ? citationChapterLabel(citation.chapterNumber, language) : '',
       citation.version != null ? `v${citation.version}` : '',
-      citation.fromLine > 0
-        ? (language === 'en-US'
-          ? (citation.toLine > citation.fromLine
-            ? `lines ${citation.fromLine}–${citation.toLine}`
-            : `line ${citation.fromLine}`)
-          : (citation.toLine > citation.fromLine
-            ? `第${citation.fromLine}–${citation.toLine}行`
-            : `第${citation.fromLine}行`))
-        : '',
+      citation.fromLine > 0 ? citationLineLabel(citation.fromLine, citation.toLine, language) : '',
     ].filter(Boolean).join(' · ')
-    const heading = language === 'en-US'
-      ? `[Draft excerpt${location ? ` — ${location}` : ''}]`
-      : `【草稿引用${location ? ` — ${location}` : ''}】`
-    return `${heading}\n「${citation.quote ?? ''}」`
+    return `${citationHeading(location, language)}\n「${citation.quote ?? ''}」`
   }).join('\n\n')
 }

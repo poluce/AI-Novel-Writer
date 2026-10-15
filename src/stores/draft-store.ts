@@ -1,14 +1,12 @@
 /**
- * 草稿状态管理 — 管理各章节草稿列表、定稿操作等
- *
- * 数据来源：drafts/ch{N}/index.json（md+json 分离方案）
- * .md 文件保持纯正文，元数据全部由 index.json 管理
+ * 草稿状态管理：各章草稿列表缓存与修稿合并。权威数据在 SQLite。
  */
 import { create } from 'zustand'
 import { ipc } from '../services/ipc-client'
 import {
   type DraftMeta,
 } from '../services/draft-index'
+import type { DraftMeta as DbDraftMeta } from '../shared/contracts/draft'
 import type { DraftStatus } from '../shared/draft-status'
 import type { ProjectSessionContext } from '../shared/ipc-channels'
 import { sameProjectSessionContext } from '../shared/project-session-context'
@@ -39,7 +37,33 @@ function staleProjectError(): { success: false; error: string } {
   return { success: false, error: '项目会话已变化，已拒绝继续操作' }
 }
 
-// ===== 类型定义 =====
+function isCurrentDraftRequest(
+  requestId: number,
+  projectSession: ProjectSessionContext,
+): boolean {
+  return requestId === loadAllDraftsRequestSequence
+    && sameProjectSessionContext(projectSession, readActiveProjectSession())
+}
+
+function toDraftMeta(draft: DbDraftMeta): DraftMeta {
+  return {
+    ...draft,
+    status: draft.status as DraftStatus,
+    source: draft.source as DraftMeta['source'],
+    fileName: `draft_v${draft.version}.md`,
+    filePath: `vela://draft/${draft.id}`,
+  }
+}
+
+function velaNumericId(filePath: string, prefix: string): number {
+  return parseInt(filePath.replace(prefix, ''), 10)
+}
+
+function draftUriPrefix(filePath: string): 'vela://draft/' | 'vela://manuscript/' | null {
+  if (filePath.startsWith('vela://draft/')) return 'vela://draft/'
+  if (filePath.startsWith('vela://manuscript/')) return 'vela://manuscript/'
+  return null
+}
 
 /** 单章下的草稿列表（key = chapterNumber） */
 export type DraftsByChapter = Record<number, DraftMeta[]>
@@ -132,20 +156,8 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
     try {
       // 直接调用后端 DB 获取列表，返回的结构已经转换为兼容的 DraftMeta 格式
       const list = await ipc.invokeWithProjectSession(projectSession, 'db:draft-list', chapterNumber, projectPath)
-      if (
-        requestId !== loadAllDraftsRequestSequence
-        || !sameProjectSessionContext(
-          projectSession,
-          readActiveProjectSession(),
-        )
-      ) return
-      const metas: DraftMeta[] = list.map((m) => ({
-        ...m,
-        status: m.status as DraftStatus,
-        source: m.source as DraftMeta['source'],
-        fileName: `draft_v${m.version}.md`,
-        filePath: `vela://draft/${m.id}`
-      }))
+      if (!isCurrentDraftRequest(requestId, projectSession)) return
+      const metas = list.map(toDraftMeta)
 
       // 按版本号排序（新 → 旧）
       metas.sort((a, b) => b.version - a.version)
@@ -170,33 +182,24 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
     const projectPath = expectedProjectPath ?? project.path
     const requestId = ++loadAllDraftsRequestSequence
 
-    set(s => ({
-      draftsByChapter: sameProjectSessionContext(s.dataProjectSession, projectSession)
-        ? s.draftsByChapter
-        : {},
-      loading: true,
-      dataProjectKey: sameProjectSessionContext(s.dataProjectSession, projectSession)
-        ? projectPath
-        : null,
-      dataProjectSession: sameProjectSessionContext(s.dataProjectSession, projectSession)
-        ? projectSession
-        : null,
-      loadingProjectKey: projectPath,
-      loadingProjectSession: projectSession,
-    }))
+    set(s => {
+      const sameSession = sameProjectSessionContext(s.dataProjectSession, projectSession)
+      return {
+        draftsByChapter: sameSession ? s.draftsByChapter : {},
+        loading: true,
+        dataProjectKey: sameSession ? projectPath : null,
+        dataProjectSession: sameSession ? projectSession : null,
+        loadingProjectKey: projectPath,
+        loadingProjectSession: projectSession,
+      }
+    })
     try {
       const drafts = await ipc.invokeWithProjectSession(projectSession, 'db:draft-list-all', projectPath)
       const newDraftsByChapter: DraftsByChapter = {}
 
       for (const draft of drafts) {
         const chapterDrafts = newDraftsByChapter[draft.chapterNumber] ?? []
-        chapterDrafts.push({
-          ...draft,
-          status: draft.status as DraftStatus,
-          source: draft.source as DraftMeta['source'],
-          fileName: `draft_v${draft.version}.md`,
-          filePath: `vela://draft/${draft.id}`
-        })
+        chapterDrafts.push(toDraftMeta(draft))
         newDraftsByChapter[draft.chapterNumber] = chapterDrafts
       }
 
@@ -204,13 +207,7 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
         chapterDrafts.sort((a, b) => b.version - a.version)
       }
 
-      if (
-        requestId === loadAllDraftsRequestSequence
-        && sameProjectSessionContext(
-          projectSession,
-          readActiveProjectSession(),
-        )
-      ) {
+      if (isCurrentDraftRequest(requestId, projectSession)) {
         set({
           draftsByChapter: newDraftsByChapter,
           dataProjectKey: projectPath,
@@ -218,13 +215,7 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
         })
       }
     } finally {
-      if (
-        requestId === loadAllDraftsRequestSequence
-        && sameProjectSessionContext(
-          projectSession,
-          readActiveProjectSession(),
-        )
-      ) {
+      if (isCurrentDraftRequest(requestId, projectSession)) {
         set({ loading: false, loadingProjectKey: null, loadingProjectSession: null })
       }
     }
@@ -266,9 +257,9 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
       const version = versionMatch ? parseInt(versionMatch[1]) : 1
 
       let targetDraftId: number | undefined
-      if (filePath.startsWith('vela://draft/') || filePath.startsWith('vela://manuscript/')) {
-        const prefix = filePath.startsWith('vela://draft/') ? 'vela://draft/' : 'vela://manuscript/'
-        targetDraftId = parseInt(filePath.replace(prefix, ''))
+      const uriPrefix = draftUriPrefix(filePath)
+      if (uriPrefix) {
+        targetDraftId = velaNumericId(filePath, uriPrefix)
       } else {
         const chMatch = filePath.match(/ch(\d+)/)
         const chNum = chMatch ? parseInt(chMatch[1]) : chapterNumber
@@ -361,12 +352,12 @@ export async function readDraftBody(
   const projectSession = currentDraftProjectSession(expectedProjectPath, expectedProjectSession)
   if (!projectSession) throw new Error('读取草稿时缺少匹配的冻结项目会话')
 
-  if (filePath.startsWith('vela://draft/') || filePath.startsWith('vela://manuscript/')) {
-    const prefix = filePath.startsWith('vela://draft/') ? 'vela://draft/' : 'vela://manuscript/'
+  const uriPrefix = draftUriPrefix(filePath)
+  if (uriPrefix) {
     const full = await ipc.invokeWithProjectSession(
       projectSession,
       'db:draft-get-full',
-      parseInt(filePath.replace(prefix, '')),
+      velaNumericId(filePath, uriPrefix),
       expectedProjectPath,
     )
     if (!isDraftProjectSessionCurrent(projectSession)) return ''
@@ -377,7 +368,7 @@ export async function readDraftBody(
     const full = await ipc.invokeWithProjectSession(
       projectSession,
       'db:revision-get-full',
-      parseInt(filePath.replace('vela://revision/', '')),
+      velaNumericId(filePath, 'vela://revision/'),
       expectedProjectPath,
     )
     if (!isDraftProjectSessionCurrent(projectSession)) return ''
@@ -388,7 +379,7 @@ export async function readDraftBody(
     const full = await ipc.invokeWithProjectSession(
       projectSession,
       'db:review-get-full',
-      parseInt(filePath.replace('vela://review/', '')),
+      velaNumericId(filePath, 'vela://review/'),
       expectedProjectPath,
     )
     if (!isDraftProjectSessionCurrent(projectSession)) return ''

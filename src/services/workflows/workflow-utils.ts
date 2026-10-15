@@ -250,6 +250,20 @@ export interface PipelineOptions {
  * @param options 可选配置
  * @returns 完整的后处理状态
  */
+function postProcessStepLine(
+  ok: boolean,
+  label: string,
+  error: string | undefined,
+  language: 'zh-CN' | 'en-US',
+): string {
+  if (ok) {
+    if (language === 'en-US') return `  Succeeded: ${label}`
+    return `  成功：${label}`
+  }
+  if (language === 'en-US') return `  Failed: ${label} — ${error}`
+  return `  失败：${label} — ${error}`
+}
+
 export async function runPostProcessPipeline(
   projectPath: string,
   scope: string,
@@ -417,8 +431,8 @@ export async function runPostProcessPipeline(
   ))
   for (const [, r] of Object.entries(status.steps)) {
     callbacks.log(text(
-      `  ${r.ok ? '成功' : '失败'}：${r.label}${r.ok ? '' : ` — ${r.error}`}`,
-      `  ${r.ok ? 'Succeeded' : 'Failed'}: ${r.label}${r.ok ? '' : ` — ${r.error}`}`,
+      postProcessStepLine(r.ok, r.label, r.error, 'zh-CN'),
+      postProcessStepLine(r.ok, r.label, r.error, 'en-US'),
     ))
   }
   callbacks.log(text(

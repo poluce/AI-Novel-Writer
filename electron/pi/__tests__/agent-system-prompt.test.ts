@@ -112,7 +112,7 @@ describe('buildMainProcessAgentSystemPrompt', () => {
     }
     const english = buildMainProcessAgentSystemPrompt(core({ writingLanguage: 'en-US' }), undefined, [skill])
     expect(english).toContain('Read skill instructions on demand')
-    expect(english).toContain('load_writing_skill')
+    expect(english).toContain('manage_skills (action: "load")')
     expect(english).toContain('suggest the user enable it with `/skill-name`')
     expect(english).not.toContain('/技能名')
 
@@ -131,7 +131,7 @@ describe('buildMainProcessAgentSystemPrompt', () => {
     }
     const projectPrompt = buildMainProcessAgentSystemPrompt(core(), undefined, [skill])
     expect(projectPrompt).toContain('全书底层文风由项目设定的写作风格（writingStyle）统一规范')
-    expect(projectPrompt).toContain('先用 load_writing_skill 读出正文')
+    expect(projectPrompt).toContain('先用 manage_skills（action: "load"）读出正文')
     expect(projectPrompt).toContain('<available_skills>')
     expect(projectPrompt).toContain('用户在输入框输入 `/技能名` 时')
     // 助手只在项目内工作，系统提示词始终带项目事实。

@@ -18,6 +18,16 @@ export function SettingDocument({ children }: { children: ReactNode }) {
   )
 }
 
+function generateButtonTitle(
+  generateTitle: string | undefined,
+  generating: boolean,
+  text: (zhCNText: string, enUSText: string) => string,
+): string {
+  if (generateTitle) return generateTitle
+  if (generating) return text('正在生成...', 'Generating...')
+  return text('AI 生成', 'Generate with AI')
+}
+
 /** 带折叠 + 可选「清除」/「AI 生成」按钮的设置区块。 */
 export function SettingSection({
   title,
@@ -86,7 +96,7 @@ export function SettingSection({
                 size="sm"
                 onClick={onGenerate}
                 disabled={generateDisabled}
-                title={generateTitle ?? (generating ? text('正在生成...', 'Generating...') : text('AI 生成', 'Generate with AI'))}
+                title={generateButtonTitle(generateTitle, generating, text)}
               >
                 {generating ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
                 {generating ? text('生成中...', 'Generating...') : text('AI 生成', 'Generate with AI')}

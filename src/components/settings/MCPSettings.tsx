@@ -21,7 +21,7 @@ import { NativeSelect } from '../ui/NativeSelect'
 import { Textarea } from '../ui/Textarea'
 import { confirm } from '../ui/Confirm'
 import { toast } from '../ui/Toast'
-import type { MCPConnectionStatus, MCPServerConfigView } from '../../shared/ipc-channels'
+import type { MCPConnectionStatus, MCPServerConfigView, MCPServerSaveRequest } from '../../shared/ipc-channels'
 import { MCP_TEMPLATES, type MCPTemplate } from '../../shared/mcp-templates'
 
 /** 状态点颜色（与 Agent 面板的 MCP 子视图同一套语义色）。 */
@@ -99,15 +99,12 @@ export default function MCPSettings() {
   const [expandedServerId, setExpandedServerId] = useState<string | null>(null)
 
   useEffect(() => {
-    // 设置页打开时确保配置与状态是最新的一份。
     void (async () => {
       await reloadConfig()
       await refreshStatus()
       await refreshTools()
     })()
   }, [reloadConfig, refreshStatus, refreshTools])
-
-  const statusOf = (id: string) => servers.find(server => server.id === id)?.status
 
   const startCreate = () => {
     setEditingId(null)
@@ -127,15 +124,15 @@ export default function MCPSettings() {
 
   const applyTemplate = (tpl: MCPTemplate) => {
     setEditingId(null)
-    setEditor({
+    setEditor(configToDraft({
       id: tpl.id,
       transport: tpl.transport,
-      command: tpl.command ?? '',
-      args: (tpl.args ?? []).join('\n'),
-      env: Object.entries(tpl.env ?? {}).map(([key, value]) => `${key}=${value}`).join('\n'),
-      url: tpl.url ?? '',
+      command: tpl.command,
+      args: tpl.args,
+      env: tpl.env,
+      url: tpl.url,
       disabled: false,
-    })
+    }))
   }
 
   const handleSave = async () => {
@@ -158,17 +155,16 @@ export default function MCPSettings() {
     }
     setSaving(true)
     try {
-      const result = await saveServer({
-        id,
-        ...(editor.disabled ? { disabled: true } : {}),
-        ...(isSse
-          ? { url }
-          : {
-              command,
-              args: linesOf(editor.args),
-              env: envFromLines(editor.env),
-            }),
-      })
+      const payload: MCPServerSaveRequest = { id }
+      if (isSse) {
+        payload.url = url
+      } else {
+        payload.command = command
+        payload.args = linesOf(editor.args)
+        payload.env = envFromLines(editor.env)
+      }
+      if (editor.disabled) payload.disabled = true
+      const result = await saveServer(payload)
       if (result.success) {
         toast.success(text('已保存并尝试连接', 'Saved and attempting to connect'))
         setEditor(null)
@@ -203,9 +199,8 @@ export default function MCPSettings() {
     setBusyId(id)
     try {
       await connectServer(id)
-      await refreshTools()
     } catch {
-      // 连接失败的具体表现由状态点呈现，store 已记录错误。
+      // 连接失败由状态点呈现，store 已记录错误。
     } finally {
       setBusyId(null)
       await refreshStatus()
@@ -238,7 +233,6 @@ export default function MCPSettings() {
 
   return (
     <div className="space-y-4">
-      {/* 顶部说明与操作 */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
@@ -264,7 +258,6 @@ export default function MCPSettings() {
         </div>
       </div>
 
-      {/* 推荐创作插件模版卡片 */}
       <div
         className="rounded-xl p-3"
         style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-bg-secondary)' }}
@@ -325,7 +318,6 @@ export default function MCPSettings() {
         </div>
       </div>
 
-      {/* 编辑表单 */}
       {editor !== null && (
         <div
           className="rounded-xl p-4 space-y-3"
@@ -430,7 +422,6 @@ export default function MCPSettings() {
         </div>
       )}
 
-      {/* 服务器列表 */}
       <div className="space-y-2">
         {configs.length === 0 && editor === null && (
           <div
@@ -445,7 +436,8 @@ export default function MCPSettings() {
         )}
 
         {configs.map(config => {
-          const status = statusOf(config.id)
+          const runtime = servers.find(server => server.id === config.id)
+          const status = runtime?.status
           const isDisabled = config.disabled
           const serverTools = toolsForServer(config.id)
           const isExpanded = expandedServerId === config.id
@@ -489,7 +481,7 @@ export default function MCPSettings() {
                   <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                     <p className="text-[0.68rem] truncate" style={{ color: 'var(--color-text-muted)' }}>
                       {statusText(text, status)}
-                      {status === 'connected' && text(` · ${servers.find(s => s.id === config.id)?.toolCount ?? 0} 个工具`, ` · ${servers.find(s => s.id === config.id)?.toolCount ?? 0} tools`)}
+                      {status === 'connected' && text(` · ${runtime?.toolCount ?? 0} 个工具`, ` · ${runtime?.toolCount ?? 0} tools`)}
                     </p>
                     {!isDisabled && status === 'connected' && (
                       <button
@@ -517,17 +509,16 @@ export default function MCPSettings() {
                     {isDisabled ? text('启用', 'Enable') : text('休眠', 'Disable')}
                   </Button>
 
-                  {!isDisabled && (
-                    status === 'connected' ? (
-                      <Button variant="outline" size="sm" onClick={() => void handleDisconnect(config.id)} disabled={busyId === config.id}>
-                        {text('断开', 'Disconnect')}
-                      </Button>
-                    ) : (
-                      <Button variant="outline" size="sm" onClick={() => void handleConnect(config.id)} disabled={busyId === config.id}>
-                        <Link2 size={12} />
-                        {text('连接', 'Connect')}
-                      </Button>
-                    )
+                  {!isDisabled && status === 'connected' && (
+                    <Button variant="outline" size="sm" onClick={() => void handleDisconnect(config.id)} disabled={busyId === config.id}>
+                      {text('断开', 'Disconnect')}
+                    </Button>
+                  )}
+                  {!isDisabled && status !== 'connected' && (
+                    <Button variant="outline" size="sm" onClick={() => void handleConnect(config.id)} disabled={busyId === config.id}>
+                      <Link2 size={12} />
+                      {text('连接', 'Connect')}
+                    </Button>
                   )}
 
                   <Button variant="outline" size="sm" onClick={() => void startEdit(config.id)} disabled={editor !== null}>
@@ -540,7 +531,6 @@ export default function MCPSettings() {
                 </div>
               </div>
 
-              {/* 展开的工具列表抽屉 */}
               {isExpanded && !isDisabled && (
                 <div
                   className="px-3 py-2.5 space-y-2"

@@ -43,13 +43,48 @@ function requestedChapterCount(
   authoritativeNextChapter: number,
 ): number {
   if (params.mode === 'full') {
-    return params.count && params.count > 0
-      ? Math.min(totalChapters, params.count)
-      : totalChapters
+    if (params.count && params.count > 0) return Math.min(totalChapters, params.count)
+    return totalChapters
   }
   const startChapter = params.startChapter || authoritativeNextChapter
   const remaining = Math.max(0, totalChapters - startChapter + 1)
-  return params.count && params.count > 0 ? Math.min(remaining, params.count) : remaining
+  if (params.count && params.count > 0) return Math.min(remaining, params.count)
+  return remaining
+}
+
+function directoryPreviewParams(input: {
+  rangeMode: 'front' | 'range' | 'full'
+  overwriteMode: 'full' | 'append'
+  appendByDefault: boolean
+  appendStart: number
+  total: number
+  frontN: number | ''
+  selectedRangeStart: number
+  selectedRangeEnd: number
+}): DirectoryWorkflowParams {
+  if (input.rangeMode === 'full') {
+    if (input.overwriteMode === 'full') return { mode: 'full', count: 0 }
+    return { mode: 'append', count: 0 }
+  }
+  const defaultCount = Math.max(1, Number(input.frontN) || DEFAULT_BLUEPRINT_GENERATION_COUNT)
+  if (input.rangeMode === 'front') {
+    if (input.appendByDefault) {
+      return {
+        mode: 'append',
+        startChapter: input.appendStart,
+        count: Math.min(Math.max(0, input.total - input.appendStart + 1), defaultCount),
+      }
+    }
+    return {
+      mode: 'full',
+      count: Math.min(input.total, defaultCount),
+    }
+  }
+  return {
+    mode: 'append',
+    startChapter: input.selectedRangeStart,
+    count: Math.max(1, input.selectedRangeEnd - input.selectedRangeStart + 1),
+  }
 }
 
 async function readHighestBlueprintChapter(
@@ -167,27 +202,16 @@ export default function DirectoryConfigDialog({ isOpen, onClose, existingCount, 
   const appendByDefault = overwriteMode === 'append' && (existingCount > 0 || hasPriorAuthority)
   const selectedRangeStart = Math.min(total, Math.max(appendStart, Number(rangeStart) || appendStart))
   const selectedRangeEnd = Math.min(total, Math.max(selectedRangeStart, Number(rangeEnd) || selectedRangeStart))
-  const previewParams: DirectoryWorkflowParams = rangeMode === 'full'
-    ? { mode: overwriteMode === 'full' ? 'full' : 'append', count: 0 }
-    : rangeMode === 'front'
-      ? appendByDefault
-        ? {
-            mode: 'append',
-            startChapter: appendStart,
-            count: Math.min(
-              Math.max(0, total - appendStart + 1),
-              Math.max(1, Number(frontN) || DEFAULT_BLUEPRINT_GENERATION_COUNT),
-            ),
-          }
-        : {
-            mode: 'full',
-            count: Math.min(total, Math.max(1, Number(frontN) || DEFAULT_BLUEPRINT_GENERATION_COUNT)),
-          }
-      : {
-          mode: 'append',
-          startChapter: selectedRangeStart,
-          count: Math.max(1, selectedRangeEnd - selectedRangeStart + 1),
-        }
+  const previewParams = directoryPreviewParams({
+    rangeMode,
+    overwriteMode,
+    appendByDefault,
+    appendStart,
+    total,
+    frontN,
+    selectedRangeStart,
+    selectedRangeEnd,
+  })
   const previewCost = planBlueprintGenerationCost(
     requestedChapterCount(previewParams, total, appendStart),
   )

@@ -32,14 +32,19 @@ export function acceptedAssistantThinkingLevel(value: unknown): AssistantThinkin
  * 应用把"模型"存成扁平的档案（一个模型一条，各自带凭据），设置页与助手
  * 输入框都按这个键把它们归成"渠道 → 模型"两层；这里刻意不改底层存储格式。
  */
+export function normalizedModelBaseUrl(baseUrl: string | undefined): string {
+  return (baseUrl ?? '').replace(/\/+$/, '').toLowerCase()
+}
+
 export function modelChannelKey(
   profile: Pick<ModelProfile, 'provider' | 'protocol' | 'baseUrl'> & { channelName?: string },
 ): string {
-  const baseUrl = (profile.baseUrl ?? '').replace(/\/+$/, '').toLowerCase()
+  const baseUrl = normalizedModelBaseUrl(profile.baseUrl)
   const channel = profile.channelName?.trim()
-  return channel
-    ? `${profile.provider}\u0000${profile.protocol}\u0000${baseUrl}\u0000${channel}`
-    : `${profile.provider}\u0000${profile.protocol}\u0000${baseUrl}`
+  if (channel) {
+    return `${profile.provider}\u0000${profile.protocol}\u0000${baseUrl}\u0000${channel}`
+  }
+  return `${profile.provider}\u0000${profile.protocol}\u0000${baseUrl}`
 }
 
 /** 渠道显示名：若配置了 channelName 则优先使用，其次退回 host / protocol / provider。 */
@@ -71,6 +76,19 @@ export interface ModelChannelGroup {
   models: Array<{ profile: ModelProfile; modelName: string }>
 }
 
+function channelGroupName(profiles: readonly ModelProfile[], key: string, profile: ModelProfile): string {
+  const explicitChannel = profiles.find(candidate => (
+    modelChannelKey(candidate) === key && candidate.channelName?.trim()
+  ))?.channelName?.trim()
+  if (explicitChannel) return explicitChannel
+  const named = profile.channelName?.trim()
+  if (named) return named
+  const displayName = (profile.name ?? '').trim()
+  const modelName = (profile.modelName ?? '').trim()
+  if (displayName && displayName !== modelName) return displayName
+  return modelChannelLabel(profile)
+}
+
 /** 把扁平档案按渠道归组；渠道内按模型名排序，渠道按首次出现顺序。 */
 export function groupModelsByChannel(profiles: readonly ModelProfile[]): ModelChannelGroup[] {
   const groups = new Map<string, ModelChannelGroup>()
@@ -78,18 +96,10 @@ export function groupModelsByChannel(profiles: readonly ModelProfile[]): ModelCh
     const key = modelChannelKey(profile)
     let group = groups.get(key)
     if (!group) {
-      const explicitChannel = profiles.find(p => modelChannelKey(p) === key && p.channelName?.trim())?.channelName?.trim()
-      const pName = (profile.name ?? '').trim()
-      const pModel = (profile.modelName ?? '').trim()
-      const fallbackName = profile.channelName?.trim()
-        || (pName && pName !== pModel ? pName : '')
-        || modelChannelLabel(profile)
-      const channelName = explicitChannel || fallbackName
-
       group = {
         key,
         label: modelChannelLabel(profile),
-        channelName,
+        channelName: channelGroupName(profiles, key, profile),
         representative: profile,
         models: [],
       }
@@ -116,14 +126,14 @@ export function channelHasModel(
   modelName: string,
 ): boolean {
   const normalized = modelName.trim()
-  const channelBase = (channel.baseUrl ?? '').replace(/\/+$/, '').toLowerCase()
+  const channelBase = normalizedModelBaseUrl(channel.baseUrl)
   const channelName = channel.channelName?.trim()
 
   return profiles.some(profile => {
     if (profile.modelName.trim() !== normalized) return false
     if (profile.provider !== channel.provider) return false
     if (profile.protocol !== channel.protocol) return false
-    const profileBase = (profile.baseUrl ?? '').replace(/\/+$/, '').toLowerCase()
+    const profileBase = normalizedModelBaseUrl(profile.baseUrl)
     if (profileBase !== channelBase) return false
     if (channelName && profile.channelName?.trim() && profile.channelName.trim() !== channelName) {
       return false

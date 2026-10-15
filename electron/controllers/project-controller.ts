@@ -6,26 +6,31 @@ import { removeDirectoryWithWindowsRetry } from '../utils/remove-directory'
 import {
   ProjectData,
   type CreateProjectConfig,
-  type ProjectSessionContext} from '../../src/shared/ipc-channels'
+  type ProjectSessionContext,
+} from '../../src/shared/ipc-channels'
 import { DIR_PROMPTS } from '../../src/shared/project-paths'
 import { sameProjectPathKey } from '../../src/shared/project-session-context'
-import {
-  resolveWritingLanguage} from '../../src/shared/writing-language'
+import { resolveWritingLanguage } from '../../src/shared/writing-language'
 import {
   closeProjectDatabase,
   getCurrentProjectPath,
   getProjectDb,
-  initProjectDatabase} from '../database'
+  initProjectDatabase,
+} from '../database'
 import { closeConnection as closeVectorConnection } from '../vector-store'
 import {
   ProjectCoreRepository,
-  type ProjectCoreData} from '../repositories/project-core-repository'
+  type ProjectCoreData,
+} from '../repositories/project-core-repository'
 import { projectAccess, type ProjectSessionLease } from '../services/project-access'
 import { assertExpectedProjectPath, assertRequiredExpectedProjectPath } from '../utils/project-context'
 import { sanitizeProjectName } from './project-path'
 import { projectStoragePreflightFailure } from '../services/project-storage-preflight'
 
-function projectRootSelectionFailure(error: unknown) {
+function projectRootSelectionFailure(error: unknown): {
+  errorCode: 'PROJECT_ROOT_REQUIRED'
+  error: string
+} | null {
   if (
     typeof error === 'object'
     && error !== null
@@ -33,8 +38,9 @@ function projectRootSelectionFailure(error: unknown) {
     && error.code === 'PROJECT_ROOT_REQUIRED'
   ) {
     return {
-      errorCode: 'PROJECT_ROOT_REQUIRED' as const,
-      error: error instanceof Error ? error.message : String(error)}
+      errorCode: 'PROJECT_ROOT_REQUIRED',
+      error: error instanceof Error ? error.message : String(error),
+    }
   }
   return null
 }
@@ -59,6 +65,10 @@ function serializeProjectOpen<T>(operation: () => Promise<T>): Promise<T> {
 
 function yieldToPendingOpenRequests(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve))
+}
+
+function isLatestOpenRequest(requestToken: string): boolean {
+  return latestProjectOpenRequestToken === requestToken
 }
 
 interface ProjectDatabaseState {
@@ -260,30 +270,65 @@ function restoreProjectRollbackBoundary(
   return databaseState
 }
 
+interface RollbackRestoreResult {
+  databaseState: ProjectDatabaseState
+  restoreError?: unknown
+}
+
+function restoreReadyRollbackBoundary(
+  boundary: ProjectRollbackBoundary,
+  message: string,
+): RollbackRestoreResult {
+  try {
+    return {
+      databaseState: requireReadyDatabase(
+        restoreProjectRollbackBoundary(boundary),
+        message,
+      ),
+    }
+  } catch (restoreError) {
+    return {
+      databaseState: failedDatabaseState(),
+      restoreError,
+    }
+  }
+}
+
+function rollbackFailureMessage(error: unknown, rollbackError: unknown): string {
+  return rollbackError
+    ? `${String(error)}；回滚失败：${String(rollbackError)}`
+    : String(error)
+}
+
+function staleRestoreError(restoreError: unknown | undefined): { error: string } | Record<string, never> {
+  if (restoreError === undefined) return {}
+  return { error: String(restoreError) }
+}
+
 function loadRecentProjects(): RecentProject[] {
   return readJsonFile<RecentProject[]>(RECENT_PROJECTS_PATH, [])
 }
 
-function addRecentProject(project: RecentProject) {
+function addRecentProject(project: RecentProject): void {
   const list = loadRecentProjects()
   const filtered = list.filter((p) => !sameRecentProjectPath(p.path, project.path))
   filtered.unshift(project)
-  const trimmed = filtered.slice(0, 20)
-  writeJsonFile(RECENT_PROJECTS_PATH, trimmed)
+  writeJsonFile(RECENT_PROJECTS_PATH, filtered.slice(0, 20))
 }
 
-function removeRecentProject(projectPath: string) {
+function removeRecentProject(projectPath: string): void {
   const filtered = loadRecentProjects().filter((p) => !sameRecentProjectPath(p.path, projectPath))
   writeJsonFile(RECENT_PROJECTS_PATH, filtered)
 }
 
-export function registerProjectController() {
+export function registerProjectController(): void {
   ipcMain.handle('project:get-runtime-context', async () => {
     const activeProjectPath = getCurrentProjectPath()
     const database = getProjectDb()
     return {
       activeProjectPath,
-      dbReady: activeProjectPath === null ? database === null : database !== null}
+      dbReady: activeProjectPath === null ? database === null : database !== null,
+    }
   })
 
   ipcMain.handle('project:smoke-open-request', async () => {
@@ -315,7 +360,6 @@ export function registerProjectController() {
     }
   })
 
-  // 创建新项目
   ipcMain.handle('project:create', async (
     _event,
     config: CreateProjectConfig,
@@ -324,16 +368,14 @@ export function registerProjectController() {
     latestProjectOpenRequestToken = requestToken
     return serializeProjectOpen(async () => {
       await yieldToPendingOpenRequests()
-      const isLatestRequest = () => latestProjectOpenRequestToken === requestToken
       const rollbackBoundary = captureProjectRollbackBoundary()
-      if (!isLatestRequest()) {
-        const databaseState = databaseStateForRollbackBoundary(rollbackBoundary)
+      if (!isLatestOpenRequest(requestToken)) {
         return {
           success: false,
           projectId: '',
           requestToken,
           stale: true,
-          ...databaseState}
+          ...databaseStateForRollbackBoundary(rollbackBoundary)}
       }
 
       try {
@@ -350,29 +392,18 @@ export function registerProjectController() {
           targetAudience: config.targetAudience})
 
         const updatedAt = new Date().toISOString()
-        if (!isLatestRequest()) {
-          let databaseState: ProjectDatabaseState
-          try {
-            databaseState = requireReadyDatabase(
-              restoreProjectRollbackBoundary(rollbackBoundary),
-              '过期创建请求未能恢复可信项目数据库',
-            )
-          } catch (restoreError) {
-            databaseState = failedDatabaseState()
-            return {
-              success: false,
-              projectId: '',
-              requestToken,
-              stale: true,
-              ...databaseState,
-              error: String(restoreError)}
-          }
+        if (!isLatestOpenRequest(requestToken)) {
+          const restored = restoreReadyRollbackBoundary(
+            rollbackBoundary,
+            '过期创建请求未能恢复可信项目数据库',
+          )
           return {
             success: false,
             projectId: '',
             requestToken,
             stale: true,
-            ...databaseState}
+            ...restored.databaseState,
+            ...staleRestoreError(restored.restoreError)}
         }
 
         addRecentProject({
@@ -392,31 +423,21 @@ export function registerProjectController() {
           requestToken,
           ...databaseState}
       } catch (error) {
-        let rollbackError: unknown
-        let databaseState: ProjectDatabaseState
-        try {
-          databaseState = requireReadyDatabase(
-            restoreProjectRollbackBoundary(rollbackBoundary),
-            '创建失败后未能恢复可信项目数据库',
-          )
-        } catch (restoreError) {
-          rollbackError = restoreError
-          databaseState = failedDatabaseState()
-        }
+        const restored = restoreReadyRollbackBoundary(
+          rollbackBoundary,
+          '创建失败后未能恢复可信项目数据库',
+        )
         return {
           success: false,
           projectId: '',
           requestToken,
-          ...databaseState,
+          ...restored.databaseState,
           ...(projectStoragePreflightFailure(error) ?? {}),
-          error: rollbackError
-            ? `${String(error)}；回滚失败：${String(rollbackError)}`
-            : String(error)}
+          error: rollbackFailureMessage(error, restored.restoreError)}
       }
     })
   })
 
-  // 打开现有项目
   ipcMain.handle('project:open', async (
     _event,
     projectPath: string,
@@ -426,16 +447,14 @@ export function registerProjectController() {
     return serializeProjectOpen(async () => {
       // 让已经发出的后续打开请求先登记身份，避免旧请求抢先切换全局数据库。
       await yieldToPendingOpenRequests()
-      const isLatestRequest = () => latestProjectOpenRequestToken === requestToken
       const rollbackBoundary = captureProjectRollbackBoundary()
-      if (!isLatestRequest()) {
-        const databaseState = databaseStateForRollbackBoundary(rollbackBoundary)
+      if (!isLatestOpenRequest(requestToken)) {
         return {
           success: false,
           project: null,
           requestToken,
           stale: true,
-          ...databaseState}
+          ...databaseStateForRollbackBoundary(rollbackBoundary)}
       }
 
       try {
@@ -446,15 +465,11 @@ export function registerProjectController() {
         const resolvedProjectPath = trustedProject.rootPath
         initProjectDatabase(resolvedProjectPath)
 
-        // 从数据库读取配置
         const coreData = ProjectCoreRepository.get()
         if (!coreData) {
-          // 如果是从空目录新建并打开，尝试初始化
-          const folderName = path.basename(resolvedProjectPath)
-          ProjectCoreRepository.init(folderName)
+          ProjectCoreRepository.init(path.basename(resolvedProjectPath))
         }
 
-        // 组装返回给前端的数据结构
         const updatedCoreData = ProjectCoreRepository.get()!
         const projectData: ProjectData = {
           id: trustedProject.projectId,
@@ -484,29 +499,18 @@ export function registerProjectController() {
 
         // 初始化与读取期间若同步触发了更新请求，旧事务必须恢复渲染进程仍展示的项目。
         // 此处不再主动让出事件循环，避免其他项目级进程通信观察到尚未提交的数据库连接。
-        if (!isLatestRequest()) {
-          let databaseState: ProjectDatabaseState
-          try {
-            databaseState = requireReadyDatabase(
-              restoreProjectRollbackBoundary(rollbackBoundary),
-              '过期打开请求未能恢复可信项目数据库',
-            )
-          } catch (restoreError) {
-            databaseState = failedDatabaseState()
-            return {
-              success: false,
-              project: null,
-              requestToken,
-              stale: true,
-              ...databaseState,
-              error: String(restoreError)}
-          }
+        if (!isLatestOpenRequest(requestToken)) {
+          const restored = restoreReadyRollbackBoundary(
+            rollbackBoundary,
+            '过期打开请求未能恢复可信项目数据库',
+          )
           return {
             success: false,
             project: null,
             requestToken,
             stale: true,
-            ...databaseState}
+            ...restored.databaseState,
+            ...staleRestoreError(restored.restoreError)}
         }
 
         addRecentProject({
@@ -525,33 +529,21 @@ export function registerProjectController() {
           requestToken,
           ...databaseState}
       } catch (error) {
-        let rollbackError: unknown
-        let databaseState: ProjectDatabaseState
-        try {
-          databaseState = requireReadyDatabase(
-            restoreProjectRollbackBoundary(rollbackBoundary),
-            '打开失败后未能恢复可信项目数据库',
-          )
-        } catch (restoreError) {
-          rollbackError = restoreError
-          databaseState = failedDatabaseState()
-        }
-        const errorMessage = rollbackError
-          ? `${String(error)}；回滚失败：${String(rollbackError)}`
-          : String(error)
+        const restored = restoreReadyRollbackBoundary(
+          rollbackBoundary,
+          '打开失败后未能恢复可信项目数据库',
+        )
         return {
           success: false,
           project: null,
           requestToken,
-          ...databaseState,
+          ...restored.databaseState,
           ...(projectStoragePreflightFailure(error) ?? projectRootSelectionFailure(error) ?? {}),
-          error: errorMessage}
+          error: rollbackFailureMessage(error, restored.restoreError)}
       }
     })
   })
 
-  // 保存/更新项目配置
-  // 注意：这个接口前端可能还传入许多小说配置字段，需要映射到数据库。
   ipcMain.handle('project:save', async (
     _event,
     _projectId: string,
@@ -561,9 +553,10 @@ export function registerProjectController() {
   ) => {
     try {
       if (!data.path) return { success: false, error: '缺少项目路径' }
-      assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
+      const currentProjectPath = getCurrentProjectPath()
+      assertRequiredExpectedProjectPath(currentProjectPath, expectedProjectPath)
       assertExpectedProjectPath(data.path, expectedProjectPath)
-      assertRequiredProjectSession(_projectId, data, getCurrentProjectPath(), context)
+      assertRequiredProjectSession(_projectId, data, currentProjectPath, context)
 
       const coreUpdate: Parameters<typeof ProjectCoreRepository.update>[0] = {}
       if (data.novelConfig) {
@@ -659,12 +652,9 @@ export function registerProjectController() {
         throw new Error('项目会话与当前数据库不匹配，已拒绝删除')
       }
       deletingCurrentProject = true
-
-      if (deletingCurrentProject) {
-        closeVectorConnection(resolvedPath)
-        closeProjectDatabase()
-        databaseClosed = true
-      }
+      closeVectorConnection(resolvedPath)
+      closeProjectDatabase()
+      databaseClosed = true
     } catch (error) {
       return {
         success: false,

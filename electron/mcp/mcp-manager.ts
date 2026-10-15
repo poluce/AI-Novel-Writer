@@ -1,15 +1,3 @@
-/**
- * MCP（Model Context Protocol）连接管理器
- *
- * 运行在 Electron 主进程，通过 stdio/SSE 管理与外部 MCP Server 的连接。
- * 兼容 Claude Desktop 的配置格式 (claude_desktop_config.json)。
- *
- * 架构：
- * - 主进程负责 MCP 连接的生命周期（启动子进程 / 建立 SSE）
- * - 通过 IPC 将可用 Tool 列表暴露给渲染进程
- * - 渲染进程通过 IPC 调用 MCP Tool
- */
-
 import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { isDeepStrictEqual } from 'node:util'
@@ -27,29 +15,20 @@ import type {
   MCPToolDescription,
 } from '../../src/shared/ipc-channels'
 
-// ===== 类型定义 =====
+const CONNECT_TIMEOUT_MS = 10_000
+const CONFIG_CORRUPT = 'MCP 配置损坏，未加载任何服务器'
 
-/** MCP 服务器配置（兼容 Claude Desktop 格式） */
 export interface MCPServerConfig {
-  /** 服务器唯一 ID */
   id: string
-  /** 显示名称 */
   name: string
-  /** 传输协议 */
   transport: 'stdio' | 'sse'
-  /** stdio 模式：要执行的命令 */
   command?: string
-  /** stdio 模式：命令参数 */
   args?: string[]
-  /** stdio 模式：环境变量 */
   env?: Record<string, string>
-  /** SSE 模式：服务器 URL */
   url?: string
-  /** 是否禁用 */
   disabled?: boolean
 }
 
-/** MCP 配置文件格式（兼容 Claude Desktop） */
 export interface MCPConfig {
   mcpServers: Record<string, {
     command?: string
@@ -60,29 +39,9 @@ export interface MCPConfig {
   }>
 }
 
-/** MCP Tool 描述 */
-export interface MCPToolDesc extends MCPToolDescription {
-  /** 工具名（MCP 原始名称） */
-  name: string
-  /** 描述 */
-  description: string
-  /** 输入 JSON Schema */
-  inputSchema: Record<string, unknown>
-  /** 所属服务器 ID */
-  serverId: string
-}
+export type MCPToolDesc = MCPToolDescription
+export type MCPResourceDesc = MCPResourceDescription
 
-/** MCP 资源描述 */
-export interface MCPResourceDesc extends MCPResourceDescription {
-  uri: string
-  name: string
-  description?: string
-  mimeType?: string
-  serverId: string
-}
-
-/** 服务器连接状态 */
-/** 服务器运行时状态 */
 interface MCPServerRuntime {
   config: MCPServerConfig
   status: MCPConnectionStatus
@@ -103,6 +62,32 @@ export interface MCPCallToolResult {
   error?: string
 }
 
+function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`MCP 请求超时: ${label}`)), CONNECT_TIMEOUT_MS)
+    promise.then(
+      value => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      error => {
+        clearTimeout(timer)
+        reject(error)
+      },
+    )
+  })
+}
+
+function isMcpConfig(value: unknown): value is MCPConfig {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  if (!('mcpServers' in value) || !value.mcpServers) return false
+  return typeof value.mcpServers === 'object' && !Array.isArray(value.mcpServers)
+}
+
+function invalidServerId(serverId: unknown): boolean {
+  return !serverId || typeof serverId !== 'string'
+}
+
 /**
  * 校验单个服务器条目的唯一权威 Seam：加载、读取与保存都走这里。
  *
@@ -115,23 +100,22 @@ function parseServerEntry(
 ): { ok: true; config: MCPServerConfig } | { ok: false } {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return { ok: false }
   const cfg = value as MCPConfig['mcpServers'][string]
-  if (
-    (cfg.command !== undefined && typeof cfg.command !== 'string')
-    || (cfg.args !== undefined && (!Array.isArray(cfg.args) || cfg.args.some(arg => typeof arg !== 'string')))
-    || (cfg.env !== undefined && (
-      !cfg.env
-      || typeof cfg.env !== 'object'
-      || Array.isArray(cfg.env)
-      || Object.values(cfg.env).some(entry => typeof entry !== 'string')
-    ))
-    || (cfg.url !== undefined && typeof cfg.url !== 'string')
-  ) {
+  if (cfg.command !== undefined && typeof cfg.command !== 'string') return { ok: false }
+  if (cfg.args !== undefined && (!Array.isArray(cfg.args) || cfg.args.some(arg => typeof arg !== 'string'))) {
     return { ok: false }
   }
+  if (cfg.env !== undefined) {
+    const env = cfg.env
+    if (!env || typeof env !== 'object' || Array.isArray(env) || Object.values(env).some(entry => typeof entry !== 'string')) {
+      return { ok: false }
+    }
+  }
+  if (cfg.url !== undefined && typeof cfg.url !== 'string') return { ok: false }
+
   const hasCommand = typeof cfg.command === 'string' && cfg.command.trim().length > 0
   const hasUrl = typeof cfg.url === 'string' && cfg.url.trim().length > 0
   if (hasCommand === hasUrl) return { ok: false }
-  const disabled = typeof cfg.disabled === 'boolean' ? cfg.disabled : undefined
+
   return {
     ok: true,
     config: {
@@ -142,24 +126,22 @@ function parseServerEntry(
       args: cfg.args,
       env: cfg.env,
       url: hasUrl ? cfg.url : undefined,
-      disabled,
+      disabled: typeof cfg.disabled === 'boolean' ? cfg.disabled : undefined,
     },
   }
 }
 
-/** 受信配置 → 磁盘条目（Claude Desktop 兼容，只写该传输方式相关字段）。 */
 function serializeServerEntry(config: MCPServerConfig): MCPConfig['mcpServers'][string] {
-  const base = config.transport === 'sse'
-    ? { url: config.url ?? '' }
-    : {
-        command: config.command ?? '',
-        ...(config.args && config.args.length > 0 ? { args: config.args } : {}),
-        ...(config.env && Object.keys(config.env).length > 0 ? { env: config.env } : {}),
-      }
-  return {
-    ...base,
-    ...(config.disabled ? { disabled: true } : {}),
+  const entry: MCPConfig['mcpServers'][string] = {}
+  if (config.transport === 'sse') {
+    entry.url = config.url ?? ''
+  } else {
+    entry.command = config.command ?? ''
+    if (config.args && config.args.length > 0) entry.args = config.args
+    if (config.env && Object.keys(config.env).length > 0) entry.env = config.env
   }
+  if (config.disabled) entry.disabled = true
+  return entry
 }
 
 function toConfigView(config: MCPServerConfig): MCPServerConfigView {
@@ -174,55 +156,21 @@ function toConfigView(config: MCPServerConfig): MCPServerConfigView {
   }
 }
 
-// ===== MCP Manager 实现 =====
-
 class MCPManagerImpl {
   private servers: Map<string, MCPServerRuntime> = new Map()
   private loadedConfigs: Map<string, MCPServerConfig> = new Map()
 
-  /** 状态变更通知回调（通知渲染进程） */
-  private onStatusChange?: (serverId: string, status: MCPConnectionStatus, error?: string) => void
-  /** Tool 列表变更回调 */
-  private onToolsChange?: (tools: MCPToolDesc[]) => void
-
-  /** 设置状态变更回调 */
-  setCallbacks(callbacks: {
-    onStatusChange?: (serverId: string, status: MCPConnectionStatus, error?: string) => void
-    onToolsChange?: (tools: MCPToolDesc[]) => void
-  }) {
-    this.onStatusChange = callbacks.onStatusChange
-    this.onToolsChange = callbacks.onToolsChange
-  }
-
-  /** 获取 MCP 配置文件默认路径 */
   getDefaultConfigPath(): string {
     return join(VELA_HOME, 'mcp_config.json')
   }
 
-  /**
-   * 加载 MCP 配置文件
-   * 兼容 Claude Desktop 格式
-   */
   async loadConfig(): Promise<MCPConfigLoadResult> {
-    const path = this.getDefaultConfigPath()
     this.loadedConfigs.clear()
-    const revoke = async (result: MCPConfigLoadResult): Promise<MCPConfigLoadResult> => {
-      await this.disconnectAll()
-      return result
-    }
     try {
-      const raw = await readFile(path, 'utf-8')
-      const parsed: unknown = JSON.parse(raw)
-
-      if (
-        !parsed
-        || typeof parsed !== 'object'
-        || !('mcpServers' in parsed)
-        || !parsed.mcpServers
-        || typeof parsed.mcpServers !== 'object'
-        || Array.isArray(parsed.mcpServers)
-      ) {
-        return revoke({ status: 'error', servers: [], error: 'MCP 配置损坏，未加载任何服务器' })
+      const parsed: unknown = JSON.parse(await readFile(this.getDefaultConfigPath(), 'utf-8'))
+      if (!isMcpConfig(parsed)) {
+        await this.disconnectAll()
+        return { status: 'error', servers: [], error: CONFIG_CORRUPT }
       }
 
       const servers: MCPServerSummary[] = []
@@ -230,15 +178,15 @@ class MCPManagerImpl {
       for (const [id, value] of Object.entries(parsed.mcpServers)) {
         const parsedEntry = parseServerEntry(id, value)
         if (!parsedEntry.ok) {
-          return revoke({ status: 'error', servers: [], error: 'MCP 配置损坏，未加载任何服务器' })
+          await this.disconnectAll()
+          return { status: 'error', servers: [], error: CONFIG_CORRUPT }
         }
-        const trustedConfig = parsedEntry.config
-        trustedConfigs.set(id, trustedConfig)
+        trustedConfigs.set(id, parsedEntry.config)
         servers.push({
           id,
           name: id,
-          transport: trustedConfig.transport,
-          disabled: trustedConfig.disabled,
+          transport: parsedEntry.config.transport,
+          disabled: parsedEntry.config.disabled,
         })
       }
       for (const [id, runtime] of this.servers) {
@@ -250,16 +198,14 @@ class MCPManagerImpl {
       this.loadedConfigs = trustedConfigs
       return { status: 'loaded', servers }
     } catch (error) {
+      await this.disconnectAll()
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        return revoke({ status: 'missing', servers: [] })
+        return { status: 'missing', servers: [] }
       }
-      return revoke({ status: 'error', servers: [], error: 'MCP 配置损坏或无法读取，未加载任何服务器' })
+      return { status: 'error', servers: [], error: 'MCP 配置损坏或无法读取，未加载任何服务器' }
     }
   }
 
-  /**
-   * 读取磁盘配置文件对象；文件不存在返回 null，内容损坏则抛出。
-   */
   private async readConfigObject(): Promise<MCPConfig | null> {
     let raw: string
     try {
@@ -269,29 +215,33 @@ class MCPManagerImpl {
       throw error
     }
     const parsed: unknown = JSON.parse(raw)
-    if (
-      !parsed
-      || typeof parsed !== 'object'
-      || Array.isArray(parsed)
-      || !('mcpServers' in parsed)
-      || !parsed.mcpServers
-      || typeof parsed.mcpServers !== 'object'
-      || Array.isArray(parsed.mcpServers)
-    ) {
-      throw new Error('MCP 配置损坏或无法读取')
-    }
-    return parsed as MCPConfig
+    if (!isMcpConfig(parsed)) throw new Error('MCP 配置损坏或无法读取')
+    return parsed
   }
 
-  /**
-   * 按需读取单个服务器的完整配置（设置页编辑用）。
-   * 与 loadConfig 的摘要下发不同：这里只返回用户明确点开的那一条。
-   */
+  private persistConfig(config: MCPConfig, action: string, serverId: string): { success: true } | { success: false; error: string } {
+    try {
+      writeJsonFile(this.getDefaultConfigPath(), config)
+      return { success: true }
+    } catch (error) {
+      logFailure('MCP', action, error, { serverId })
+      return { success: false, error: '写入配置文件失败' }
+    }
+  }
+
+  private async reloadAfterWrite(): Promise<{ success: boolean; error?: string }> {
+    const reload = await this.loadConfig()
+    if (reload.status === 'error') {
+      return { success: false, error: '配置已写入，但重新加载失败' }
+    }
+    return { success: true }
+  }
+
   async getServerConfig(serverId: string): Promise<
     | { success: true; config: MCPServerConfigView }
     | { success: false; error: string }
   > {
-    if (!serverId || typeof serverId !== 'string') return { success: false, error: '服务器 ID 无效' }
+    if (invalidServerId(serverId)) return { success: false, error: '服务器 ID 无效' }
     try {
       const config = await this.readConfigObject()
       if (!config) return { success: false, error: 'MCP 配置文件不存在' }
@@ -303,9 +253,6 @@ class MCPManagerImpl {
     }
   }
 
-  /**
-   * 新增或覆盖一个服务器：校验 → 原子写盘 → 重新加载（会断开配置已变化的连接）。
-   */
   async saveServer(request: MCPServerSaveRequest): Promise<{ success: boolean; error?: string }> {
     if (!request || typeof request.id !== 'string' || !request.id.trim()) {
       return { success: false, error: '服务器 ID 不能为空' }
@@ -332,24 +279,13 @@ class MCPManagerImpl {
       return { success: false, error: 'MCP 配置损坏，无法保存。请先修复或删除该文件' }
     }
     config.mcpServers[id] = serializeServerEntry(parsedEntry.config)
-    try {
-      writeJsonFile(this.getDefaultConfigPath(), config)
-    } catch (error) {
-      logFailure('MCP', 'save server config failed', error, { serverId: id })
-      return { success: false, error: '写入配置文件失败' }
-    }
-    const reload = await this.loadConfig()
-    if (reload.status === 'error') {
-      return { success: false, error: '配置已写入，但重新加载失败' }
-    }
-    return { success: true }
+    const written = this.persistConfig(config, 'save server config failed', id)
+    if (!written.success) return written
+    return this.reloadAfterWrite()
   }
 
-  /**
-   * 删除一个服务器：原子写盘 → 断开其连接 → 重新加载。
-   */
   async deleteServer(serverId: string): Promise<{ success: boolean; error?: string }> {
-    if (!serverId || typeof serverId !== 'string') return { success: false, error: '服务器 ID 无效' }
+    if (invalidServerId(serverId)) return { success: false, error: '服务器 ID 无效' }
     let config: MCPConfig | null
     try {
       config = await this.readConfigObject()
@@ -360,28 +296,18 @@ class MCPManagerImpl {
       return { success: false, error: '未找到该服务器' }
     }
     delete config.mcpServers[serverId]
-    try {
-      writeJsonFile(this.getDefaultConfigPath(), config)
-    } catch (error) {
-      logFailure('MCP', 'delete server config failed', error, { serverId })
-      return { success: false, error: '写入配置文件失败' }
-    }
+    const written = this.persistConfig(config, 'delete server config failed', serverId)
+    if (!written.success) return written
     await this.disconnect(serverId)
     await this.loadConfig()
     return { success: true }
   }
 
-  /**
-   * 局部更新一个服务器：未提供的字段保留原值，提供的字段整体替换。
-   *
-   * 切换传输方式时把另一侧字段显式传空字符串清掉（如 url: '' 切回 stdio）。
-   * 校验、写盘与重新加载仍走同一条 Seam。
-   */
   async updateServer(
     serverId: string,
     patch: { command?: string; args?: string[]; env?: Record<string, string>; url?: string; disabled?: boolean },
   ): Promise<{ success: boolean; error?: string }> {
-    if (!serverId || typeof serverId !== 'string') return { success: false, error: '服务器 ID 无效' }
+    if (invalidServerId(serverId)) return { success: false, error: '服务器 ID 无效' }
     let config: MCPConfig | null
     try {
       config = await this.readConfigObject()
@@ -409,22 +335,11 @@ class MCPManagerImpl {
       }
     }
     config.mcpServers[serverId] = serializeServerEntry(validated.config)
-    try {
-      writeJsonFile(this.getDefaultConfigPath(), config)
-    } catch (error) {
-      logFailure('MCP', 'update server config failed', error, { serverId })
-      return { success: false, error: '写入配置文件失败' }
-    }
-    const reload = await this.loadConfig()
-    if (reload.status === 'error') {
-      return { success: false, error: '配置已写入，但重新加载失败' }
-    }
-    return { success: true }
+    const written = this.persistConfig(config, 'update server config failed', serverId)
+    if (!written.success) return written
+    return this.reloadAfterWrite()
   }
 
-  /**
-   * 连接到 MCP 服务器
-   */
   async connect(serverId: string): Promise<void> {
     const config = this.loadedConfigs.get(serverId)
     if (!config) throw new Error('MCP 服务器未配置或配置尚未加载')
@@ -439,27 +354,12 @@ class MCPManagerImpl {
       resources: [],
     }
     this.servers.set(config.id, runtime)
-    this.notifyStatusChange(config.id, 'connecting')
 
     try {
-      runtime.session = await new Promise<NonNullable<MCPServerRuntime['session']>>((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('MCP 请求超时: initialize')), 10_000)
-        openMcpSdkSession(config).then(
-          session => {
-            clearTimeout(timer)
-            resolve(session)
-          },
-          error => {
-            clearTimeout(timer)
-            reject(error)
-          },
-        )
-      })
+      runtime.session = await withTimeout(openMcpSdkSession(config), 'initialize')
       await this.discoverTools(runtime)
       await this.discoverResources(runtime)
       runtime.status = 'connected'
-      this.notifyStatusChange(config.id, 'connected')
-      this.notifyToolsChange()
     } catch (error) {
       logFailure('MCP', 'server connect failed', error, { serverId: config.id, transport: config.transport })
       await runtime.session?.close().catch((closeError) => {
@@ -468,12 +368,10 @@ class MCPManagerImpl {
       runtime.session = undefined
       runtime.status = 'error'
       runtime.error = 'MCP 服务器连接失败'
-      this.notifyStatusChange(config.id, 'error', runtime.error)
       throw new Error(runtime.error)
     }
   }
 
-  /** 发现可用工具 */
   private async discoverTools(runtime: MCPServerRuntime): Promise<void> {
     try {
       const result = await runtime.session!.listTools()
@@ -489,7 +387,6 @@ class MCPManagerImpl {
     }
   }
 
-  /** 发现可用资源 */
   private async discoverResources(runtime: MCPServerRuntime): Promise<void> {
     try {
       const result = await runtime.session!.listResources()
@@ -506,9 +403,6 @@ class MCPManagerImpl {
     }
   }
 
-  /**
-   * 调用 MCP Tool
-   */
   async callTool(serverId: string, toolName: string, args: Record<string, unknown>): Promise<MCPCallToolResult> {
     const runtime = this.servers.get(serverId)
     if (!runtime || runtime.status !== 'connected') {
@@ -529,9 +423,7 @@ class MCPManagerImpl {
           const data = typeof rec.data === 'string' ? rec.data : ''
           const mimeType = typeof rec.mimeType === 'string' ? rec.mimeType : 'image/png'
           textParts.push(`[Image: ${mimeType}]`)
-          if (data) {
-            items.push({ type: 'image', data, mimeType })
-          }
+          if (data) items.push({ type: 'image', data, mimeType })
         } else if (c.type === 'resource') {
           const res = (c as Record<string, unknown>).resource as { uri?: string; text?: string } | undefined
           const text = res?.text ?? `[Resource: ${res?.uri ?? 'unknown'}]`
@@ -548,66 +440,43 @@ class MCPManagerImpl {
     }
   }
 
-  /** 断开服务器连接 */
   async disconnect(serverId: string): Promise<void> {
     const runtime = this.servers.get(serverId)
     if (!runtime) return
-
     await runtime.session?.close().catch(() => {})
     this.servers.delete(serverId)
-    this.notifyStatusChange(serverId, 'disconnected')
-    this.notifyToolsChange()
   }
 
-  /** 断开所有连接 */
   async disconnectAll(): Promise<void> {
     for (const id of this.servers.keys()) {
       await this.disconnect(id)
     }
   }
 
-  /** 获取所有 MCP Tool */
+  private connectedRuntimes(): MCPServerRuntime[] {
+    return Array.from(this.servers.values()).filter(runtime => (
+      runtime.status === 'connected' && !runtime.config.disabled
+    ))
+  }
+
   getAllTools(): MCPToolDesc[] {
-    const tools: MCPToolDesc[] = []
-    for (const runtime of this.servers.values()) {
-      if (runtime.status === 'connected' && !runtime.config.disabled) {
-        tools.push(...runtime.tools)
-      }
-    }
-    return tools
+    return this.connectedRuntimes().flatMap(runtime => runtime.tools)
   }
 
-  /** 获取所有 MCP 资源 */
   getAllResources(): MCPResourceDesc[] {
-    const resources: MCPResourceDesc[] = []
-    for (const runtime of this.servers.values()) {
-      if (runtime.status === 'connected' && !runtime.config.disabled) {
-        resources.push(...runtime.resources)
-      }
-    }
-    return resources
+    return this.connectedRuntimes().flatMap(runtime => runtime.resources)
   }
 
-  /** 获取所有服务器状态 */
   getServersStatus(): MCPServerStatus[] {
-    return Array.from(this.servers.values()).map(r => ({
-      id: r.config.id,
-      name: r.config.name,
-      status: r.status,
-      toolCount: r.tools.length,
-      error: r.error,
-      disabled: r.config.disabled,
+    return Array.from(this.servers.values()).map(runtime => ({
+      id: runtime.config.id,
+      name: runtime.config.name,
+      status: runtime.status,
+      toolCount: runtime.tools.length,
+      error: runtime.error,
+      disabled: runtime.config.disabled,
     }))
-  }
-
-  private notifyStatusChange(serverId: string, status: MCPConnectionStatus, error?: string) {
-    this.onStatusChange?.(serverId, status, error)
-  }
-
-  private notifyToolsChange() {
-    this.onToolsChange?.(this.getAllTools())
   }
 }
 
-/** 全局单例 MCP Manager */
 export const mcpManager = new MCPManagerImpl()

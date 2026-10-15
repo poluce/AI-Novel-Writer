@@ -64,6 +64,7 @@ describe('manage_skills tool', () => {
     expect(text).toContain('review-chapter')
     expect(text).toContain('scene-design')
     expect(text).toContain('内置')
+    expect(text).not.toContain('💡')
   })
 
   it('loads the full content of a skill by name (explicit action: "load")', async () => {

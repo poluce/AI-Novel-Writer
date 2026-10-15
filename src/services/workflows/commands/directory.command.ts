@@ -1,6 +1,5 @@
 import {
   BaseWorkflowCommand,
-  injectWritingSkillIntoSession,
   type CommandExecuteParams,
 } from './base-command'
 import type { BlueprintRangeCommitReceipt } from '../../../shared/contracts/blueprint-commit'
@@ -42,8 +41,21 @@ import { readAuthoritativeNextChapter } from '../../authoritative-chapter-sequen
 import { localizeNovelConfigFacts } from '../../../shared/novel-config-localization'
 import { normalizeChapterWordsTarget } from '../chapter-creation-parameters'
 import { internalPrompt } from '../../../prompts/internal/load'
+import type { WritingLanguage } from '../../../shared/writing-language'
 
 type CreateDirectoryGenerationRuntime = typeof createGenerationRuntime
+type DirectoryUiLocale = CommandExecuteParams['context']['uiLocale']
+type DirectoryContractDiagnostic = {
+  code: string
+  path: string
+  field: string
+  actualCharacters?: number
+  maxCharacters?: number
+}
+type DirectoryChapterRange = {
+  startChapter: number
+  endChapter: number
+}
 
 export interface GenerateDirectoryCommandDependencies {
   createRuntime?: CreateDirectoryGenerationRuntime
@@ -87,35 +99,45 @@ export class DirectoryCostLimitError extends Error {
   }
 }
 
+function directoryBlueprintContractErrorMessage(
+  diagnostic: DirectoryContractDiagnostic,
+  generationSummary: string | undefined,
+  uiLocale: DirectoryUiLocale,
+): string {
+  let characterCounts = ''
+  if (diagnostic.actualCharacters !== undefined && diagnostic.maxCharacters !== undefined) {
+    characterCounts = ` actualCharacters=${diagnostic.actualCharacters} maxCharacters=${diagnostic.maxCharacters}`
+  }
+  const detail = `code=${diagnostic.code} path=${diagnostic.path} field=${diagnostic.field}${characterCounts}`
+  if (uiLocale === 'en-US') {
+    if (generationSummary) {
+      return `Structured contract diagnostic ${detail}; ${generationSummary}`
+    }
+    return `Structured contract diagnostic ${detail}`
+  }
+  if (generationSummary) {
+    return `结构化合同诊断 ${detail}；${generationSummary}`
+  }
+  return `结构化合同诊断 ${detail}`
+}
+
 export class DirectoryBlueprintContractError extends Error {
   constructor(
-    readonly diagnostic: {
-      code: string
-      path: string
-      field: string
-      actualCharacters?: number
-      maxCharacters?: number
-    },
+    readonly diagnostic: DirectoryContractDiagnostic,
     readonly generationSummary?: string,
-    uiLocale: CommandExecuteParams['context']['uiLocale'] = 'zh-CN',
+    uiLocale: DirectoryUiLocale = 'zh-CN',
   ) {
-    const characterCounts = diagnostic.actualCharacters !== undefined
-      && diagnostic.maxCharacters !== undefined
-      ? ` actualCharacters=${diagnostic.actualCharacters} maxCharacters=${diagnostic.maxCharacters}`
-      : ''
-    super(
-      uiLocale === 'en-US'
-        ? `Structured contract diagnostic code=${diagnostic.code} path=${diagnostic.path} field=${diagnostic.field}${characterCounts}`
-          + (generationSummary ? `; ${generationSummary}` : '')
-        : `结构化合同诊断 code=${diagnostic.code} path=${diagnostic.path} field=${diagnostic.field}${characterCounts}`
-          + (generationSummary ? `；${generationSummary}` : ''),
-    )
+    super(directoryBlueprintContractErrorMessage(diagnostic, generationSummary, uiLocale))
     this.name = 'DirectoryBlueprintContractError'
   }
 }
 
 function directoryGenerationFailureSummary(
-  attempts: readonly { purpose?: string; finishReason: string; budget: { requestedOutputTokens: number } }[],
+  attempts: readonly {
+    purpose?: string
+    finishReason: string
+    budget: { requestedOutputTokens: number }
+  }[],
 ): string {
   if (attempts.length === 0) return 'generationAttempts=none'
   return attempts.map((attempt, index) => (
@@ -130,7 +152,7 @@ const COMPACT_SYSTEM_ROLE_MAX_UTF8_BYTES = 600
 const COMPACT_RECENT_BLUEPRINTS = 3
 
 function blueprintCapacityGenerationContract(
-  writingLanguage: NonNullable<CommandExecuteParams['context']['writingLanguage']>,
+  writingLanguage: WritingLanguage,
   targetWords: number,
 ): string {
   const lowerBound = Math.round(targetWords * 0.8)
@@ -173,43 +195,59 @@ function boundedFactText(value: string, maxBytes: number): string {
     bounded.lastIndexOf('！'),
     bounded.lastIndexOf('？'),
   )
-  return (boundary >= Math.floor(bounded.length * 0.6)
-    ? bounded.slice(0, boundary + 1)
-    : bounded).trim()
+  if (boundary >= Math.floor(bounded.length * 0.6)) {
+    return bounded.slice(0, boundary + 1).trim()
+  }
+  return bounded.trim()
+}
+
+function truncateGeneratedCharacters(value: string, maxCharacters: number): string {
+  return Array.from(value.trim()).slice(0, maxCharacters).join('')
+}
+
+function truncateGeneratedBlueprintRecord(record: Record<string, unknown>): void {
+  for (const [field, maxCharacters] of GENERATED_BLUEPRINT_TEXT_LIMITS) {
+    const value = record[field]
+    if (typeof value === 'string') {
+      record[field] = truncateGeneratedCharacters(value, maxCharacters)
+    }
+  }
+  const maxRelationCharacters = BLUEPRINT_SEMANTIC_CONTRACT_MANIFEST.outputLimits.relationshipCharacters
+  for (const field of GENERATED_BLUEPRINT_RELATION_FIELDS) {
+    const relationships = record[field]
+    if (!Array.isArray(relationships)) continue
+    for (const relationship of relationships) {
+      if (!relationship || typeof relationship !== 'object' || Array.isArray(relationship)) continue
+      const relationRecord = relationship as Record<string, unknown>
+      if (typeof relationRecord.relation === 'string') {
+        relationRecord.relation = truncateGeneratedCharacters(
+          relationRecord.relation,
+          maxRelationCharacters,
+        )
+      }
+    }
+  }
 }
 
 function normalizeGeneratedBlueprintText(content: string): string {
   const trimmed = content.trim()
   const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/iu.exec(trimmed)
   const parsed: unknown = JSON.parse(fenced ? fenced[1].trim() : trimmed)
-  const candidates = parsed && typeof parsed === 'object' && !Array.isArray(parsed) && Object.hasOwn(parsed, 'blueprints')
-    ? (parsed as Record<string, unknown>).blueprints
-    : parsed
+  let candidates: unknown = parsed
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && Object.hasOwn(parsed, 'blueprints')) {
+    candidates = (parsed as Record<string, unknown>).blueprints
+  }
   if (!Array.isArray(candidates)) return content
   for (const candidate of candidates) {
     if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) continue
-    const record = candidate as Record<string, unknown>
-    for (const [field, maxCharacters] of GENERATED_BLUEPRINT_TEXT_LIMITS) {
-      const value = record[field]
-      if (typeof value === 'string') {
-        record[field] = Array.from(value.trim()).slice(0, maxCharacters).join('')
-      }
-    }
-    for (const field of GENERATED_BLUEPRINT_RELATION_FIELDS) {
-      const relationships = record[field]
-      if (!Array.isArray(relationships)) continue
-      for (const relationship of relationships) {
-        if (!relationship || typeof relationship !== 'object' || Array.isArray(relationship)) continue
-        const relation = (relationship as Record<string, unknown>).relation
-        if (typeof relation === 'string') {
-          (relationship as Record<string, unknown>).relation = Array.from(relation.trim())
-            .slice(0, BLUEPRINT_SEMANTIC_CONTRACT_MANIFEST.outputLimits.relationshipCharacters)
-            .join('')
-        }
-      }
-    }
+    truncateGeneratedBlueprintRecord(candidate as Record<string, unknown>)
   }
   return JSON.stringify(parsed)
+}
+
+function isTruncatableBlueprintField(field: string): boolean {
+  if (field === 'relation') return true
+  return GENERATED_BLUEPRINT_TEXT_LIMITS.some(([name]) => name === field)
 }
 
 function decodeGeneratedBlueprints(
@@ -221,13 +259,9 @@ function decodeGeneratedBlueprints(
     return parseTextBlueprintsStrict(content, startChapter, endChapter)
   } catch (error) {
     const diagnostic = structuredContractDiagnostic(error)
-    if (
-      diagnostic?.code !== 'value_too_long'
-      || (
-        diagnostic.field !== 'relation'
-        && !GENERATED_BLUEPRINT_TEXT_LIMITS.some(([field]) => field === diagnostic.field)
-      )
-    ) throw error
+    if (diagnostic?.code !== 'value_too_long' || !isTruncatableBlueprintField(diagnostic.field)) {
+      throw error
+    }
     return parseTextBlueprintsStrict(
       normalizeGeneratedBlueprintText(content),
       startChapter,
@@ -246,8 +280,8 @@ function buildCompactBlueprintTask(input: {
   globalGuidance: string
   pacingGuidance: string
   systemRole: string
-  writingLanguage: NonNullable<CommandExecuteParams['context']['writingLanguage']>
-  diagnostic?: { code: string; path: string; field: string }
+  writingLanguage: WritingLanguage
+  diagnostic?: Pick<DirectoryContractDiagnostic, 'code' | 'path' | 'field'>
 }): GenerationTask {
   const facts = {
     targetChapterNumber: input.chapterNumber,
@@ -264,7 +298,7 @@ function buildCompactBlueprintTask(input: {
     globalGuidance: input.globalGuidance,
     pacingGuidance: input.pacingGuidance,
   }
-  const prompt = [
+  const promptParts = [
     promptLanguageText(input.writingLanguage, '仅根据下列有界事实生成该章完整蓝图。', 'Build the complete chapter blueprint from only the bounded facts below.'),
     promptLanguageText(input.writingLanguage, '【有界事实】', '[Bounded facts]'),
     JSON.stringify(facts),
@@ -275,26 +309,35 @@ function buildCompactBlueprintTask(input: {
       `【精确 JSON 形状】{"blueprints":[{"chapterNumber":${input.chapterNumber},"title":"短标题","role":"简短结构标签","purpose":"一句简洁陈述","keyEvents":"简洁事件摘要","characters":["完整姓名"],"relationships":[],"suspenseHook":"一句简洁陈述"}]}`,
       `[Exact JSON shape] {"blueprints":[{"chapterNumber":${input.chapterNumber},"title":"short title","role":"short structural label","purpose":"one concise sentence","keyEvents":"concise event summary","characters":["full name"],"relationships":[],"suspenseHook":"one concise sentence"}]}`,
     ),
-    ...(input.diagnostic
-      ? [promptLanguageText(
-          input.writingLanguage,
-          `【上次合同违规】code=${input.diagnostic.code} path=${input.diagnostic.path} field=${input.diagnostic.field}。丢弃上次输出，按上述合同完整重建。`,
-          `[Previous contract violation] code=${input.diagnostic.code} path=${input.diagnostic.path} field=${input.diagnostic.field}. Discard the previous output and rebuild the complete item under the contract above.`,
-        )]
-      : []),
+  ]
+  if (input.diagnostic) {
+    promptParts.push(promptLanguageText(
+      input.writingLanguage,
+      `【上次合同违规】code=${input.diagnostic.code} path=${input.diagnostic.path} field=${input.diagnostic.field}。丢弃上次输出，按上述合同完整重建。`,
+      `[Previous contract violation] code=${input.diagnostic.code} path=${input.diagnostic.path} field=${input.diagnostic.field}. Discard the previous output and rebuild the complete item under the contract above.`,
+    ))
+  }
+  promptParts.push(
     promptLanguageText(input.writingLanguage, `必须且只能返回 chapterNumber=${input.chapterNumber} 的一项。`, `Return exactly one item whose chapterNumber is ${input.chapterNumber}.`),
     promptLanguageText(input.writingLanguage, `严格执行字段和列表上限：${JSON.stringify(BLUEPRINT_SEMANTIC_CONTRACT_MANIFEST.outputLimits)}。`, `Enforce these field and list limits exactly: ${JSON.stringify(BLUEPRINT_SEMANTIC_CONTRACT_MANIFEST.outputLimits)}.`),
     blueprintCapacityGenerationContract(input.writingLanguage, input.wordsPerChapter),
-  ].join('\n')
+  )
+  const prompt = promptParts.join('\n')
   const systemRole = composePromptSystemRole({
     systemRole: boundedFactText(input.systemRole, COMPACT_SYSTEM_ROLE_MAX_UTF8_BYTES)
       || internalPrompt('directory_chapter_architect_role', input.writingLanguage),
   }, input.writingLanguage)
-  const factSection = (sectionName: string, key: keyof typeof facts) => ({
-    sectionName,
-    messageIndex: 1,
-    finalText: JSON.stringify({ [key]: facts[key] }).slice(1, -1),
-  })
+  function factSection(sectionName: string, key: keyof typeof facts): {
+    sectionName: string
+    messageIndex: number
+    finalText: string
+  } {
+    return {
+      sectionName,
+      messageIndex: 1,
+      finalText: JSON.stringify({ [key]: facts[key] }).slice(1, -1),
+    }
+  }
   return {
     purpose: `chapter-blueprint-directory:compact-single:chapter-${input.chapterNumber}`,
     output: 'structured-data',
@@ -335,6 +378,40 @@ function observeWorkflowCancellation(context: CommandExecuteParams['context']): 
   }
 }
 
+function resolveDirectoryChapterRange(
+  params: DirectoryWorkflowParams,
+  totalChapters: number,
+  authoritativeNextChapter: number,
+): DirectoryChapterRange {
+  let startChapter = 1
+  let endChapter = totalChapters
+  if (params.mode === 'append') {
+    startChapter = params.startChapter || authoritativeNextChapter
+    if (params.count && params.count > 0) {
+      endChapter = Math.min(totalChapters, startChapter + params.count - 1)
+    }
+  } else if (params.count && params.count > 0) {
+    endChapter = Math.min(params.count, totalChapters)
+  }
+  if (
+    !Number.isInteger(startChapter)
+    || !Number.isInteger(endChapter)
+    || startChapter < 1
+    || startChapter > totalChapters
+    || endChapter < startChapter
+  ) {
+    throw new Error(`章节范围无效：第 ${startChapter}–${endChapter} 章`)
+  }
+  return { startChapter, endChapter }
+}
+
+function directoryArchitectSystemRole(
+  templateSystemRole: string | undefined,
+  writingLanguage: WritingLanguage,
+): string {
+  return templateSystemRole || internalPrompt('directory_fiction_architect_role', writingLanguage)
+}
+
 export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBlueprint[]> {
   private readonly createRuntime: CreateDirectoryGenerationRuntime
 
@@ -360,25 +437,11 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
       projectSession,
       writingLanguage,
     )
-    let startChapter = 1
-    let endChapter = totalChapters
-    if (this.params.mode === 'append') {
-      startChapter = this.params.startChapter || authoritativeNextChapter
-      if (this.params.count && this.params.count > 0) {
-        endChapter = Math.min(totalChapters, startChapter + this.params.count - 1)
-      }
-    } else if (this.params.count && this.params.count > 0) {
-      endChapter = Math.min(this.params.count, totalChapters)
-    }
-    if (
-      !Number.isInteger(startChapter)
-      || !Number.isInteger(endChapter)
-      || startChapter < 1
-      || startChapter > totalChapters
-      || endChapter < startChapter
-    ) {
-      throw new Error(`章节范围无效：第 ${startChapter}–${endChapter} 章`)
-    }
+    const { startChapter, endChapter } = resolveDirectoryChapterRange(
+      this.params,
+      totalChapters,
+      authoritativeNextChapter,
+    )
 
     this.assertNotCancelled(context)
     callbacks.log(workflowUiText(
@@ -398,26 +461,10 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
     const template = await resolvePromptTemplate('chapter_blueprint_chunk', projectSession, writingLanguage)
     if (!template) throw new Error('模板丢失')
 
-    let activeRange = { startChapter, endChapter }
-    const compactTaskFor = (
-      item: number,
-      validatedPrefix: readonly ChapterBlueprint[],
-      diagnostic?: { code: string; path: string; field: string },
-    ) => (
-      buildCompactBlueprintTask({
-        chapterNumber: item,
-        architecture,
-        previous: [...existingBlueprints, ...validatedPrefix],
-        totalChapters,
-        wordsPerChapter,
-        genre: modelFacts.genre,
-        globalGuidance: novelConfig.globalGuidance || '',
-        pacingGuidance: (context.data.pacingGuidance as string) || '',
-        systemRole: template.systemRole || internalPrompt('directory_fiction_architect_role', writingLanguage),
-        writingLanguage,
-        diagnostic,
-      })
-    )
+    let activeRange: DirectoryChapterRange = { startChapter, endChapter }
+    const architectSystemRole = directoryArchitectSystemRole(template.systemRole, writingLanguage)
+    const globalGuidance = novelConfig.globalGuidance || ''
+    const pacingGuidance = (context.data.pacingGuidance as string) || ''
     const contract: StructuredBatchContract<number, ChapterBlueprint> = {
       buildTask: ({ items, validatedPrefix }) => {
         const batchStart = items[0]
@@ -448,9 +495,9 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
           .withNumberOfChapters(totalChapters)
           .withN(batchStart)
           .withM(batchEnd)
-          .withGlobalGuidance(novelConfig.globalGuidance || '')
+          .withGlobalGuidance(globalGuidance)
           .withGenre(modelFacts.genre)
-          .withPacingGuidance((context.data.pacingGuidance as string) || '')
+          .withPacingGuidance(pacingGuidance)
           .build()
           + `\n\n${blueprintSemanticGenerationContract(writingLanguage)}`
           + `\n\n${blueprintCapacityGenerationContract(writingLanguage, wordsPerChapter)}`
@@ -463,16 +510,26 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
             {
               role: 'system',
               content: composePromptSystemRole({
-                systemRole: template.systemRole || internalPrompt('directory_fiction_architect_role', writingLanguage),
+                systemRole: architectSystemRole,
               }, writingLanguage),
             },
             { role: 'user', content: prompt },
           ],
         }
       },
-      buildCompactSingleTask: ({ item, validatedPrefix, diagnostic }) => (
-        compactTaskFor(item, validatedPrefix, diagnostic)
-      ),
+      buildCompactSingleTask: ({ item, validatedPrefix, diagnostic }) => buildCompactBlueprintTask({
+        chapterNumber: item,
+        architecture,
+        previous: [...existingBlueprints, ...validatedPrefix],
+        totalChapters,
+        wordsPerChapter,
+        genre: modelFacts.genre,
+        globalGuidance,
+        pacingGuidance,
+        systemRole: architectSystemRole,
+        writingLanguage,
+        diagnostic,
+      }),
       inputKey: chapterNumber => chapterNumber,
       outputKey: blueprint => blueprint.chapterNumber,
       decode: content => decodeGeneratedBlueprints(
@@ -498,17 +555,9 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
         budget: costPlan.runtimeBudget,
       })
       const batchResult = await runtime.execute(async ({ session }) => {
-        const planningSession = injectWritingSkillIntoSession(session, context, 'planning')
-        if (context.writingSkills?.planning) {
-          callbacks.log(workflowUiText(
-            context,
-            `本次 planning 阶段使用已冻结写作 Skill：${context.writingSkills.planning.name}`,
-            `Using the workflow-start-frozen writing skill for planning: ${context.writingSkills.planning.name}`,
-          ))
-        }
         const executor = createStructuredBatchExecutor({
           contract,
-          session: planningSession,
+          session,
           writingLanguage,
           onAttempt: receipt => this.reportGenerationPromptBudget(callbacks, receipt),
         })
@@ -535,9 +584,12 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
             context.uiLocale,
           )
         }
-        throw new Error(context.uiLocale === 'en-US'
-          ? `Blueprint generation failed: code=${batchResult.failure.code} reason=${batchResult.failure.reason ?? 'unknown'}; ${generationSummary}`
-          : `${batchResult.failure.message}；${generationSummary}`)
+        if (context.uiLocale === 'en-US') {
+          throw new Error(
+            `Blueprint generation failed: code=${batchResult.failure.code} reason=${batchResult.failure.reason ?? 'unknown'}; ${generationSummary}`,
+          )
+        }
+        throw new Error(`${batchResult.failure.message}；${generationSummary}`)
       }
 
       this.assertNotCancelled(context)

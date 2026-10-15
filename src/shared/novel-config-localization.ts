@@ -51,7 +51,9 @@ const NARRATIVE_POV_LABELS: Readonly<Record<string, LocalizedLabel>> = {
 function localize(value: string | undefined, labels: Readonly<Record<string, LocalizedLabel>>, language: WritingLanguage): string {
   if (!value) return ''
   const label = labels[value]
-  return label ? (language === 'en-US' ? label.enUS : label.zhCN) : value
+  if (!label) return value
+  if (language === 'en-US') return label.enUS
+  return label.zhCN
 }
 
 type ModelFactConfig = Partial<Record<'genre' | 'targetAudience' | 'plotStructure' | 'narrativePOV', string>>

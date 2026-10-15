@@ -3,7 +3,7 @@
  *
  * 系统提示词里只放「有哪些技能、各自适合什么任务」（Pi 的
  * `formatSkillsForSystemPrompt`），正文随目录一起送到主进程但不进提示词：
- * 助手需要时用 `load_writing_skill` 按名字取正文——这就是 Pi 的渐进式披露，
+ * 助手需要时用 `manage_skills`（action: "load"）按名字取正文——这就是 Pi 的渐进式披露，
  * 用户输入 `/技能名` 时仍照旧把正文注入那一轮。
  */
 
@@ -23,7 +23,7 @@ export interface AgentSkillCatalogEntry {
   disableModelInvocation?: boolean
   /**
    * 技能正文（按项目写作语言取好本地化文案）。只随 IPC 送到主进程，
-   * 等模型调用 `load_writing_skill` 才进入上下文。
+   * 等模型调用 `manage_skills`（action: "load"） 才进入上下文。
    */
   content?: string
 }
