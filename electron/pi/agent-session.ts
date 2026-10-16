@@ -86,6 +86,8 @@ export interface AgentSessionOptions {
   sampling?: ResolvedGenerationParameters
   /** harness 的思考等级；缺省 `off`，即 Pi 的默认行为。 */
   thinkingLevel?: AssistantThinkingLevel
+  /** 助手类型：通用写作助手（general）、架构助手（architect）或章节蓝图助手（blueprint）。 */
+  assistantType?: 'general' | 'architect' | 'blueprint'
   /**
    * 产品侧的思考预算补丁是否生效。用户在输入框里显式选了思考等级时为
    * false——那个等级由 harness 直接下发，不该被预算覆盖。
@@ -121,6 +123,7 @@ export class AgentSession {
   private readonly model: PiModelRuntime['model']
   private readonly session: Session<SessionMetadata>
   private readonly thinkingLevel: AssistantThinkingLevel
+  private readonly assistantType: 'general' | 'architect' | 'blueprint'
   /** 执行工具的提交态记录；没有执行环境时为 null。 */
   private readonly commitTracker: ConfinedExecutionEnv | null
   /** 挂 harness 执行工具的执行环境；`setTools` 每轮要用它把执行工具补回来。 */
@@ -162,6 +165,13 @@ export class AgentSession {
     this.model = options.model
     this.session = options.session
     this.thinkingLevel = options.thinkingLevel ?? 'off'
+    this.assistantType = options.assistantType ?? (
+      options.conversationId?.startsWith('blueprint-')
+        ? 'blueprint'
+        : options.conversationId?.startsWith('architect-')
+          ? 'architect'
+          : 'general'
+    )
     this.applySamplingThinking = options.applySamplingThinking ?? true
     this.executionEnv = options.executionEnv ?? null
     this.commitTracker = options.executionEnv instanceof ConfinedExecutionEnv
@@ -222,6 +232,7 @@ export class AgentSession {
         modelId: this.modelIdentity.modelId,
         modelName: this.modelIdentity.modelName,
         thinkingLevel: this.thinkingLevel,
+        assistantType: this.assistantType,
       }, BACKGROUND_CONTEXT)
     } catch (error) {
       logFailure('Agent', 'failed to reconcile lane configuration', error, {

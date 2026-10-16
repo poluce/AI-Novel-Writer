@@ -13,6 +13,8 @@ export interface PersistedAgentMessage {
   artifacts?: unknown
 }
 
+export type AssistantType = 'general' | 'architect' | 'blueprint'
+
 export interface PersistedAgentConversation {
   id: string
   title: string
@@ -23,6 +25,8 @@ export interface PersistedAgentConversation {
   modelId: string | null
   /** 会话级思考等级；缺省表示 Pi 默认（off）。 */
   thinkingLevel?: AssistantThinkingLevel | null
+  /** 助手类型：通用写作助手（general）、架构助手（architect）或章节蓝图助手（blueprint） */
+  assistantType?: AssistantType
 }
 
 export interface AgentConversationArchive {
@@ -88,6 +92,11 @@ function persistConversation(value: unknown): PersistedAgentConversation | null 
     thinkingLevel: isAssistantThinkingLevel(conversation.thinkingLevel)
       ? conversation.thinkingLevel
       : null,
+    assistantType: conversation.assistantType === 'blueprint' || conversation.id.startsWith('blueprint-')
+      ? 'blueprint'
+      : conversation.assistantType === 'architect' || conversation.id.startsWith('architect-')
+        ? 'architect'
+        : 'general',
   }
 }
 

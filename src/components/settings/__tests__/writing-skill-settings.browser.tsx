@@ -23,18 +23,6 @@ function ipcResult(channel: string) {
   if (channel === 'fs:read-file') return { success: false, content: '', error: 'missing' }
   if (channel === 'fs:write-file') return { success: true }
   if (channel === 'config:set') return { success: true }
-  if (channel === 'skills:inspect-github') return {
-    success: true,
-    inspection: {
-      sourceUrl: 'https://github.com/acme/scene-craft',
-      resolvedUrl: 'https://raw.githubusercontent.com/acme/scene-craft/main/SKILL.md',
-      metadata: { name: 'scene-craft', description: 'Concrete scene craft', language: 'en-US' },
-      compatible: true,
-      reasons: [],
-      suggestedStage: 'drafting',
-      utf8Bytes: 128,
-    },
-  }
   throw new Error(`Unexpected IPC channel ${channel}`)
 }
 
@@ -74,26 +62,9 @@ afterEach(async () => {
 })
 
 describe('writing skill settings', () => {
-  it('inspects a GitHub candidate before offering installation', async () => {
-    await act(async () => {
-      await page.getByLabelText('GitHub skill URL').fill('https://github.com/acme/scene-craft')
-      await page.getByRole('button', { name: 'Inspect' }).click()
-    })
-    await expect.element(page.getByText('scene-craft', { exact: true })).toBeVisible()
-    await expect.element(page.getByRole('button', { name: 'Confirm install' })).toBeEnabled()
-    expect(invoke).toHaveBeenCalledWith('skills:inspect-github', 'https://github.com/acme/scene-craft')
-  })
-
-  it('uses the application confirmation dialog before installation', async () => {
-    await act(async () => {
-      await page.getByLabelText('GitHub skill URL').fill('https://github.com/acme/scene-craft')
-      await page.getByRole('button', { name: 'Inspect' }).click()
-      await page.getByRole('button', { name: 'Confirm install' }).click()
-    })
-    await expect.element(page.getByRole('dialog')).toBeVisible()
-    expect(invoke).not.toHaveBeenCalledWith('skills:install-github', expect.anything())
-    await act(async () => page.getByRole('button', { name: 'Cancel' }).click())
-    await vi.waitFor(() => expect(page.getByRole('dialog').query()).toBeNull())
+  it('does not render github inspection or installation section', () => {
+    expect(container?.querySelector('section[aria-labelledby="writing-skill-source-title"]')).toBeNull()
+    expect(container?.textContent).not.toContain('GitHub')
   })
 
   it('localizes bundled skill metadata while preserving its Chinese copy', async () => {

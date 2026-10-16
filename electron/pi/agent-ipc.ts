@@ -23,7 +23,7 @@ import { getCurrentProjectPath } from '../database'
 import { logFailure } from '../../src/shared/fail-log'
 import { ProjectCoreRepository } from '../repositories/project-core-repository'
 import { loadAssistantWritingIdentity } from './assistant-identity-loader'
-import { buildMainProcessAgentSystemPrompt } from './agent-system-prompt'
+import { buildMainProcessAgentSystemPrompt, buildArchitectAgentSystemPrompt, buildBlueprintAgentSystemPrompt } from './agent-system-prompt'
 import type { GlobalConfig, ModelProfile } from '../../src/shared/ipc-channels'
 import {
   DEFAULT_WRITING_LANGUAGE,
@@ -62,11 +62,18 @@ function resolveLanguage(): WritingLanguage {
 
 function resolveSystemPrompt(
   skills?: readonly AgentSkillCatalogEntry[],
+  assistantType: 'general' | 'architect' | 'blueprint' = 'general',
 ): string {
   // 助手只在项目内工作：L0 项目事实与项目级身份覆盖都以当前书为准。
   const core = ProjectCoreRepository.get()
   const projectPath = getCurrentProjectPath()
   const language = core?.writingLanguage ?? DEFAULT_WRITING_LANGUAGE
+  if (assistantType === 'blueprint') {
+    return buildBlueprintAgentSystemPrompt(core)
+  }
+  if (assistantType === 'architect') {
+    return buildArchitectAgentSystemPrompt(core)
+  }
   return buildMainProcessAgentSystemPrompt(
     core,
     loadAssistantWritingIdentity(language, { projectPath }),
@@ -164,7 +171,7 @@ export function registerAgentController(): void {
   })
   const manager = new AgentSessionManager({
     resolveModel,
-    resolveSystemPrompt: (_conversationId, skills) => resolveSystemPrompt(skills),
+    resolveSystemPrompt: (_conversationId, skills, assistantType) => resolveSystemPrompt(skills, assistantType),
     resolveLanguage: () => resolveLanguage(),
     emit: (conversationId, event) => {
       mainWindow()?.webContents.send('agent:event', { conversationId, event })
@@ -205,8 +212,15 @@ export function registerAgentController(): void {
     skills?: unknown,
     thinkingLevel?: unknown,
     executionMode?: unknown,
+    assistantType?: unknown,
   ) => {
     const resolvedExecutionMode: 'plan' | 'writing' = executionMode === 'writing' ? 'writing' : 'plan'
+    const resolvedAssistantType: 'general' | 'architect' | 'blueprint' =
+      assistantType === 'blueprint' || conversationId.startsWith('blueprint-')
+        ? 'blueprint'
+        : assistantType === 'architect' || conversationId.startsWith('architect-')
+          ? 'architect'
+          : 'general'
     return manager.prompt(
       conversationId,
       input,
@@ -216,6 +230,7 @@ export function registerAgentController(): void {
       acceptedSkillCatalog(skills),
       acceptedAssistantThinkingLevel(thinkingLevel),
       resolvedExecutionMode,
+      resolvedAssistantType,
     )
   })
 
@@ -240,11 +255,13 @@ export function registerAgentController(): void {
     return { success: dispatcher.complete(requestId, result) }
   })
 
-  ipcMain.handle('agent:system-prompt', async (_event, skills?: unknown) => {
+  ipcMain.handle('agent:system-prompt', async (_event, skills?: unknown, assistantType?: unknown) => {
     try {
+      const resolvedType: 'general' | 'architect' | 'blueprint' =
+        assistantType === 'blueprint' ? 'blueprint' : assistantType === 'architect' ? 'architect' : 'general'
       return {
         success: true,
-        prompt: resolveSystemPrompt(acceptedSkillCatalog(skills)),
+        prompt: resolveSystemPrompt(acceptedSkillCatalog(skills), resolvedType),
       }
     } catch (error) {
       return {

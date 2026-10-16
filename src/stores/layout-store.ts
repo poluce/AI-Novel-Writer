@@ -7,7 +7,7 @@ export type SidebarView = 'home' | 'project' | 'knowledge' | 'characters' | 'set
 export type BottomTab = 'tasks' | 'log' | 'models'
 
 /** 右侧面板视图类型 */
-export type RightView = 'agent' | 'ai-output'
+export type RightView = 'agent' | 'architect' | 'blueprint' | 'ai-output'
 
 /** 左侧主导航当前视觉激活项 */
 export type LeftRailItem = SidebarView | 'blueprint' | 'world' | 'synopsis' | 'plot-tree' | BottomTab

@@ -85,6 +85,55 @@ export function buildAgentTools(
 }
 
 /**
+ * Build the tools dedicated to the Architecture Assistant.
+ *
+ * 架构助手专属工具集：聚焦于故事大纲、世界观设定、小说全局配置、人物体系与章节蓝图。
+ * 严禁挂载底层破坏性写工具（write/edit/bash）与正文草稿工具（manage_drafts）。
+ */
+export function buildArchitectAgentTools(
+  language: WritingLanguage,
+  rendererAction: RendererActionSink,
+): AnyAgentTool[] {
+  return [
+    createNovelConfigTool(language, rendererAction),
+    createStoryArchitectureTool(language, rendererAction),
+    createReadArchitectureTool(language),
+    createReadBlueprintTool(language),
+    createReadProjectStateTool(language),
+    createSearchKnowledgeTool(language),
+    createManageKnowledgeBaseTool(language),
+    createReadFileTool(language),
+    createOpenEditorTool(language, rendererAction),
+    createProposeChapterBlueprintTool(language),
+    createManageCharactersTool(language, rendererAction),
+    createWebFetchTool(language),
+  ].map(withExecutionMode)
+}
+
+/**
+ * Build the tools dedicated to the Chapter Blueprint Assistant.
+ *
+ * 章节蓝图助手专属工具集：专注章节蓝图推演与落盘、前文状态感知、人物与世界观读取。
+ * 严禁挂载底层写工具与正文草稿修改工具。
+ */
+export function buildBlueprintAgentTools(
+  language: WritingLanguage,
+  rendererAction: RendererActionSink,
+): AnyAgentTool[] {
+  return [
+    createProposeChapterBlueprintTool(language),
+    createReadBlueprintTool(language),
+    createReadProjectStateTool(language),
+    createReadArchitectureTool(language),
+    createManageCharactersTool(language, rendererAction),
+    createSearchKnowledgeTool(language),
+    createReadFileTool(language),
+    createOpenEditorTool(language, rendererAction),
+    createWebFetchTool(language),
+  ].map(withExecutionMode)
+}
+
+/**
  * Write tools that must be confirmed by the user before execution.
  *
  * `write` / `edit` / `bash` 是 Pi harness 自带的执行工具：它们能改文件、

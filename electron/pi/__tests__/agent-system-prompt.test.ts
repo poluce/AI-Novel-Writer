@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { getBuiltinPromptTemplate } from '../../../src/services/prompt-templates'
 import type { ProjectCoreData } from '../../repositories/project-core-repository'
-import { buildMainProcessAgentSystemPrompt } from '../agent-system-prompt'
+import { buildMainProcessAgentSystemPrompt, buildArchitectAgentSystemPrompt, buildBlueprintAgentSystemPrompt } from '../agent-system-prompt'
 
 function core(overrides: Partial<ProjectCoreData> = {}): ProjectCoreData {
   return {
@@ -150,5 +150,61 @@ describe('buildMainProcessAgentSystemPrompt', () => {
     ])
     expect(prompt).not.toContain('<available_skills>')
     expect(prompt).not.toContain('internal-only')
+  })
+})
+
+describe('buildArchitectAgentSystemPrompt', () => {
+  it('generates the Chief Story Architect identity with core responsibilities and strict boundaries', () => {
+    const prompt = buildArchitectAgentSystemPrompt(core())
+    expect(prompt).toContain('首席架构师、总编剧与世界观设计师')
+    expect(prompt).toContain('故事核心前提（Premise）')
+    expect(prompt).toContain('叙事结构规划（Synopsis）')
+    expect(prompt).toContain('世界观与规则体系（Worldbuilding）')
+    expect(prompt).toContain('人物关系网络（Characters）')
+    expect(prompt).toContain('章节蓝图拆解（Chapter Blueprint）')
+    expect(prompt).toContain('【不可变架构助手边界】')
+    expect(prompt).toContain('严禁撰写具体章节正文')
+    expect(prompt).toContain('当前项目上下文')
+    expect(prompt).toContain('项目名称: 潮门')
+  })
+
+  it('supports English when novel writing language is en-US', () => {
+    const prompt = buildArchitectAgentSystemPrompt(core({ writingLanguage: 'en-US' }))
+    expect(prompt).toContain('Chief Story Architect')
+    expect(prompt).toContain('Story Premise')
+    expect(prompt).toContain('Narrative Structure')
+    expect(prompt).toContain('Worldbuilding & Rules')
+    expect(prompt).toContain('[Immutable Architect Boundaries]')
+    expect(prompt).toContain('do not draft chapter body prose')
+    expect(prompt).toContain('Project name: 潮门')
+  })
+})
+
+describe('buildBlueprintAgentSystemPrompt', () => {
+  it('generates the Chapter Blueprint Designer identity with scene beat focus and persistence instructions', () => {
+    const prompt = buildBlueprintAgentSystemPrompt(core())
+    expect(prompt).toContain('长篇小说剧情分镜师与章节细纲策划')
+    expect(prompt).toContain('章节细纲蓝图')
+    expect(prompt).toContain('承上启下与连续性')
+    expect(prompt).toContain('戏剧冲突与情节点')
+    expect(prompt).toContain('角色登场与互动')
+    expect(prompt).toContain('伏笔与信息控制')
+    expect(prompt).toContain('章末钩子')
+    expect(prompt).toContain('【不可变蓝图助手边界】')
+    expect(prompt).toContain('严禁撰写具体正文段落')
+    expect(prompt).toContain('propose_chapter_blueprint')
+    expect(prompt).toContain('当前项目上下文')
+    expect(prompt).toContain('项目名称: 潮门')
+  })
+
+  it('supports English when novel writing language is en-US', () => {
+    const prompt = buildBlueprintAgentSystemPrompt(core({ writingLanguage: 'en-US' }))
+    expect(prompt).toContain('Chapter Blueprint Designer')
+    expect(prompt).toContain('Continuity & Progression')
+    expect(prompt).toContain('Dramatic Conflict & Beats')
+    expect(prompt).toContain('Chapter Cliffhanger')
+    expect(prompt).toContain('[Immutable Blueprint Boundaries]')
+    expect(prompt).toContain('do not draft chapter body prose')
+    expect(prompt).toContain('Project name: 潮门')
   })
 })

@@ -23,6 +23,7 @@ import MentionMenu from './MentionMenu'
 import type { SlashCommand, MentionTarget } from '../../../services/agent/intent-router'
 import { useLocaleStore } from '../../../stores/locale-store'
 import { cn } from '../../../lib/utils'
+import type { AssistantType } from '../../../shared/agent-conversation-archive'
 
 /** 输入框最大高度（px），超出后框内滚动 */
 const MAX_HEIGHT = 200
@@ -31,7 +32,7 @@ const MAX_HEIGHT = 200
  * Agent 输入框组件（参考 agent1.html 第 69-155 行）
  * 卡片式圆角容器，底部工具栏含模式/模型/发送
  */
-export default function AgentInputBox() {
+export default function AgentInputBox({ assistantType = 'general' }: { assistantType?: AssistantType }) {
   const text = useLocaleStore(s => s.text)
   const [inputText, setInputText] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -42,13 +43,15 @@ export default function AgentInputBox() {
   const executionMode = useAgentStore(s => s.executionMode)
   const generating = useAgentStore(selectIsGenerating)
   const models = useLLMStore(s => s.models)
-  const assistantConfiguredModelId = useLLMStore(s => s.resolveTaskModelId('assistant'))
+  const assistantConfiguredModelId = useLLMStore(s => s.resolveTaskModelId(
+    assistantType === 'architect' || assistantType === 'blueprint' ? 'planning' : 'assistant'
+  ))
   const currentModelId = useAgentStore(s => {
-    const active = s.conversations.find(c => c.id === s.activeConversationId)
+    const active = s.getActiveConversation(assistantType)
     return active?.modelId ?? assistantConfiguredModelId
   })
   const currentThinkingLevel = useAgentStore(s => {
-    const active = s.conversations.find(c => c.id === s.activeConversationId)
+    const active = s.getActiveConversation(assistantType)
     return active?.thinkingLevel ?? null
   })
 
@@ -199,8 +202,8 @@ export default function AgentInputBox() {
     if (!inputText.trim() && composerCitations.length === 0) return
     const text = inputText
     setInputText('')
-    await sendMessage(text)
-  }, [hasProject, composerCitations.length, generating, inputText, sendMessage, cancelGeneration])
+    await sendMessage(text, assistantType)
+  }, [hasProject, composerCitations.length, generating, inputText, sendMessage, cancelGeneration, assistantType])
 
   /** 键盘事件：Enter 发送，Shift+Enter 换行 */
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -477,7 +480,11 @@ export default function AgentInputBox() {
             disabled={!hasProject}
             placeholder={
               hasProject
-                ? text('输入消息，@ 提及，/ 使用工作流...', 'Type a message, @ mention, or / use a workflow...')
+                ? (assistantType === 'blueprint'
+                    ? text('推演章节细纲、核心事件、角色登场与章末悬念...（Enter 发送）', 'Deduce chapter blueprint, events, characters, and cliffhangers... (Enter to send)')
+                    : assistantType === 'architect'
+                      ? text('探讨世界观、大纲、设定与冲突推演...（Enter 发送）', 'Discuss worldbuilding, outline, setting, and plot beats... (Enter to send)')
+                      : text('输入消息，@ 提及，/ 使用工作流...', 'Type a message, @ mention, or / use a workflow...'))
                 : text('打开项目后可用', 'Open a project to chat')
             }
             title={hasProject ? undefined : text('打开项目后可用', 'Open a project to chat')}

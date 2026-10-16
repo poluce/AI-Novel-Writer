@@ -10,16 +10,19 @@ import { IconBtn } from '../../ui/IconBtn'
 import { MenuItem } from '../../ui/MenuItem'
 import { useOutsideClick } from '../../../hooks/useOutsideClick'
 import { useLocaleStore } from '../../../stores/locale-store'
+import type { AssistantType } from '../../../shared/agent-conversation-archive'
 
 /**
  * Agent 面板顶部工具栏
  */
-export default function AgentHeader() {
+export default function AgentHeader({ assistantType = 'general' }: { assistantType?: AssistantType }) {
   const text = useLocaleStore(s => s.text)
   const {
     createConversation,
     toggleHistory,
     showHistory,
+    showArchitectHistory,
+    showBlueprintHistory,
     getActiveConversation,
   } = useAgentStore()
   const toggleAIPanel = useLayoutStore(s => s.toggleAIPanel)
@@ -33,8 +36,13 @@ export default function AgentHeader() {
   const connectedCount = mcpServers.filter(s => s.status === 'connected').length
   const skills = skillRegistry.listAll()
 
-  const activeConv = getActiveConversation()
+  const activeConv = getActiveConversation(assistantType)
   const isCurrentEmpty = !activeConv || activeConv.messages.filter(m => m.role !== 'system').length === 0
+  const isHistoryActive = assistantType === 'blueprint'
+    ? showBlueprintHistory
+    : assistantType === 'architect'
+      ? showArchitectHistory
+      : showHistory
 
   return (
     <div
@@ -48,14 +56,18 @@ export default function AgentHeader() {
         className="min-w-0 truncate"
         style={{ color: 'var(--color-text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}
       >
-        {text('AI 写作助手', 'AI Writing Assistant')}
+        {assistantType === 'blueprint'
+          ? text('AI 蓝图助手', 'AI Blueprint Assistant')
+          : assistantType === 'architect'
+            ? text('AI 架构助手', 'AI Architecture Assistant')
+            : text('AI 写作助手', 'AI Writing Assistant')}
       </div>
 
       <div className="flex items-center gap-1.5 px-0.5 flex-shrink-0 ml-auto">
         <IconBtn
           title={isCurrentEmpty ? text('当前对话为空，请先发送消息', 'The current conversation is empty') : text('新建对话', 'New conversation')}
           disabled={isCurrentEmpty}
-          onClick={createConversation}
+          onClick={() => createConversation(assistantType)}
           size={18}
         >
           <Plus size={13} strokeWidth={1.5} />
@@ -63,8 +75,8 @@ export default function AgentHeader() {
 
         <IconBtn
           title={text('历史对话', 'Conversation history')}
-          onClick={toggleHistory}
-          active={showHistory}
+          onClick={() => toggleHistory(assistantType)}
+          active={isHistoryActive}
           size={18}
         >
           <History size={15} strokeWidth={1.5} />
@@ -115,7 +127,7 @@ export default function AgentHeader() {
                         title: text('清空对话记录', 'Clear conversation history'),
                         confirmText: text('确认清空', 'Clear all'),
                         danger: true})
-                      if (ok) useAgentStore.getState().clearAll()
+                      if (ok) useAgentStore.getState().clearAll(assistantType)
                     }}
                   />
                 </>
@@ -139,7 +151,17 @@ export default function AgentHeader() {
           )}
         </div>
 
-        <IconBtn title={text('关闭 Agent 面板', 'Close Agent panel')} onClick={toggleAIPanel} size={18}>
+        <IconBtn
+          title={
+            assistantType === 'blueprint'
+              ? text('关闭蓝图助手', 'Close Blueprint panel')
+              : assistantType === 'architect'
+                ? text('关闭架构助手', 'Close Architecture panel')
+                : text('关闭 Agent 面板', 'Close Agent panel')
+          }
+          onClick={toggleAIPanel}
+          size={18}
+        >
           <X size={15} strokeWidth={1.5} />
         </IconBtn>
       </div>

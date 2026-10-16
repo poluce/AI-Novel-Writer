@@ -1199,6 +1199,8 @@ export interface AgentChannels {
       thinkingLevel?: AssistantThinkingLevel,
       /** 执行模式：'plan'（审查/计划）| 'writing'（全自动写作） */
       executionMode?: 'plan' | 'writing',
+      /** 助手类型：'general'（通用写作助手）| 'architect'（架构助手）| 'blueprint'（章节蓝图助手） */
+      assistantType?: 'general' | 'architect' | 'blueprint',
     ]
     /** `code` 只在主进程主动拒绝这一轮时给出（见 shared/agent-turn-refusal）。 */
     return: { success: boolean; error?: string; code?: AgentTurnRefusalCode }
@@ -1231,7 +1233,7 @@ export interface AgentChannels {
     return: { success: boolean; error?: string }
   }
   'agent:system-prompt': {
-    args: [skills?: AgentSkillCatalogEntry[]]
+    args: [skills?: AgentSkillCatalogEntry[], assistantType?: 'general' | 'architect' | 'blueprint']
     return: { success: boolean; prompt?: string; error?: string }
   }
   'agent:renderer-action-result': {

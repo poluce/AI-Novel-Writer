@@ -16,6 +16,8 @@ import RightToolWindowBar from './components/layout/RightToolWindowBar'
 import Sidebar from './components/panels/Sidebar'
 import EditorArea from './components/panels/EditorArea'
 import AIPanel from './components/panels/AIPanel'
+import ArchitectPanel from './components/panels/ArchitectPanel'
+import BlueprintPanel from './components/panels/BlueprintPanel'
 import AIOutputPanel from './components/panels/AIOutputPanel'
 import BottomPanel from './components/panels/BottomPanel'
 import NewProjectDialog from './components/dialogs/NewProjectDialog'
@@ -302,13 +304,19 @@ export default function App() {
                 </ErrorBoundary>
               </Panel>
 
-              {/* 右侧面板（Agent 对话 / AI 输出） */}
+              {/* 右侧面板（Agent 对话 / 架构助手 / AI 输出） */}
               {aiPanelOpen && (
                 <>
                   <PanelResizeHandle />
                   <Panel id="ai-panel" defaultSize={20} minSize={10}>
                     <ErrorBoundary fallbackLabel={text('AI 面板渲染失败', 'AI panel failed to render')}>
-                      {rightView === 'ai-output' ? <AIOutputPanel /> : <AIPanel />}
+                      {rightView === 'ai-output'
+                        ? <AIOutputPanel />
+                        : rightView === 'blueprint'
+                          ? <BlueprintPanel />
+                          : rightView === 'architect'
+                            ? <ArchitectPanel />
+                            : <AIPanel />}
                     </ErrorBoundary>
                   </Panel>
                 </>

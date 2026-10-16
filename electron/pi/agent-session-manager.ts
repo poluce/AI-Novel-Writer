@@ -7,7 +7,7 @@ import { abortAllPiInFlight, registerPiInFlight } from './in-flight'
 import { createPiModels } from './pi-models'
 import { toPiModelSamplingParams } from './pi-stream-options'
 import { resolveGenerationParameters } from '../llm/generation-parameter-policy'
-import { buildAgentTools, confirmationToolNames } from './tool-builder'
+import { buildAgentTools, buildArchitectAgentTools, buildBlueprintAgentTools, confirmationToolNames } from './tool-builder'
 import type { AgentConversationStore } from './agent-conversation-store'
 
 import type { CreativeStrategy } from '../../src/shared/reasoning-types'
@@ -52,6 +52,7 @@ export interface AgentSessionManagerOptions {
   resolveSystemPrompt: (
     conversationId: string,
     skills?: readonly AgentSkillCatalogEntry[],
+    assistantType?: 'general' | 'architect' | 'blueprint',
   ) => string
   resolveLanguage: (conversationId: string) => WritingLanguage
   /** Forward a normalized agent event toward the renderer. */
@@ -93,6 +94,11 @@ export class AgentSessionManager {
     skills?: readonly AgentSkillCatalogEntry[],
     thinkingLevel?: AssistantThinkingLevel,
     executionMode?: 'plan' | 'writing',
+    assistantType: 'general' | 'architect' | 'blueprint' = conversationId.startsWith('blueprint-')
+      ? 'blueprint'
+      : conversationId.startsWith('architect-')
+        ? 'architect'
+        : 'general',
   ): Promise<{ success: boolean; error?: string; code?: AgentTurnRefusalCode }> {
     try {
       const profile = this.options.resolveModel(modelId)
@@ -104,21 +110,27 @@ export class AgentSessionManager {
         provider: profile?.provider,
         thinkingLevel: thinkingLevel ?? 'off',
         executionMode: executionMode ?? 'plan',
+        assistantType,
         chars: input.length,
       })
-      const session = await this.getOrCreate(conversationId, modelId, history, skills, thinkingLevel)
+      const session = await this.getOrCreate(conversationId, modelId, history, skills, thinkingLevel, assistantType)
       const language = this.options.resolveLanguage(conversationId)
       session.setEditorSnapshot(editorSnapshot)
       session.setExecutionMode(executionMode)
-      session.setSystemPrompt(this.options.resolveSystemPrompt(conversationId, skills))
-      await session.setTools(buildAgentTools(
-        language,
-        this.options.rendererAction,
-        skills,
-        this.options.resolveSkillRoots?.() ?? [],
-      ))
+      session.setSystemPrompt(this.options.resolveSystemPrompt(conversationId, skills, assistantType))
+      const tools = assistantType === 'blueprint'
+        ? buildBlueprintAgentTools(language, this.options.rendererAction)
+        : assistantType === 'architect'
+          ? buildArchitectAgentTools(language, this.options.rendererAction)
+          : buildAgentTools(
+              language,
+              this.options.rendererAction,
+              skills,
+              this.options.resolveSkillRoots?.() ?? [],
+            )
+      await session.setTools(tools)
       await session.prompt(input)
-      logInfo('Agent', 'prompt finished', { conversationId, modelId })
+      logInfo('Agent', 'prompt finished', { conversationId, modelId, assistantType })
       return { success: true }
     } catch (error) {
       logFailure('Agent', 'prompt failed', error, { conversationId, modelId })
@@ -217,6 +229,11 @@ export class AgentSessionManager {
     history?: readonly AgentPromptHistoryTurn[],
     skills?: readonly AgentSkillCatalogEntry[],
     requestedThinkingLevel?: AssistantThinkingLevel,
+    assistantType: 'general' | 'architect' | 'blueprint' = conversationId.startsWith('blueprint-')
+      ? 'blueprint'
+      : conversationId.startsWith('architect-')
+        ? 'architect'
+        : 'general',
   ): Promise<AgentSession> {
     const existing = this.sessions.get(conversationId)
     const profile = this.options.resolveModel(modelId)
@@ -239,10 +256,10 @@ export class AgentSessionManager {
       throw new AgentTurnRefusal('no-project', '打开项目后助手才可用')
     }
 
-    // 与工作流同一条生成参数策略：助手对话固定走 general 阶段。
+    // 与工作流同一条生成参数策略：架构助手与蓝图助手走 planning 阶段，通用助手走 general 阶段。
     const sampling = resolveGenerationParameters(profile, {
       creativeStrategy: this.options.resolveCreativeStrategy?.(),
-      reasoningStage: 'general',
+      reasoningStage: assistantType === 'architect' || assistantType === 'blueprint' ? 'planning' : 'general',
     })
     const { models, model } = createPiModels(profile, {
       modelSamplingParams: toPiModelSamplingParams(sampling),
@@ -253,7 +270,21 @@ export class AgentSessionManager {
       throw new AgentTurnRefusal('session-store-unavailable', '会话存档不可用')
     }
 
-    const executionEnv = this.options.resolveToolEnvironment?.() ?? null
+    // 架构助手与蓝图助手不挂载底层 bash/write/edit 沙箱工具
+    const executionEnv = assistantType === 'architect' || assistantType === 'blueprint'
+      ? null
+      : (this.options.resolveToolEnvironment?.() ?? null)
+    const tools = assistantType === 'blueprint'
+      ? buildBlueprintAgentTools(language, this.options.rendererAction)
+      : assistantType === 'architect'
+        ? buildArchitectAgentTools(language, this.options.rendererAction)
+        : buildAgentTools(
+            language,
+            this.options.rendererAction,
+            skills,
+            this.options.resolveSkillRoots?.() ?? [],
+          )
+
     const session = await AgentSession.create({
       models,
       model,
@@ -261,17 +292,13 @@ export class AgentSessionManager {
         modelId: profile.id,
         modelName: profile.modelName,
       },
-      systemPrompt: this.options.resolveSystemPrompt(conversationId, skills),
-      tools: buildAgentTools(
-        language,
-        this.options.rendererAction,
-        skills,
-        this.options.resolveSkillRoots?.() ?? [],
-      ),
+      systemPrompt: this.options.resolveSystemPrompt(conversationId, skills, assistantType),
+      tools,
       confirmationToolNames: confirmationToolNames(),
       ...(executionEnv ? { executionEnv } : {}),
       sampling,
       thinkingLevel,
+      assistantType,
       // 用户没显式选等级时，产品侧的思考预算补丁照旧生效。
       applySamplingThinking: requestedThinkingLevel === undefined,
       language,

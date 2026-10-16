@@ -322,12 +322,14 @@ export class AgentConversationStore {
 
     let thinkingLevel: AssistantThinkingLevel | null = null
     let modelId: string | null = null
+    let storedAssistantType: 'general' | 'architect' | 'blueprint' | undefined
     try {
       // 1. 优先读取 Vela 原生写入的权威配置快照（包含确切的 ModelProfile.id 与 thinkingLevel）
       const velaConfig = await session.getValue(VELA_SESSION_CONFIG, BACKGROUND_CONTEXT)
       const velaVal = velaConfig?.value as {
         modelId?: string
         thinkingLevel?: string
+        assistantType?: string
       } | undefined
 
       if (typeof velaVal?.modelId === 'string' && velaVal.modelId) {
@@ -335,6 +337,9 @@ export class AgentConversationStore {
       }
       if (velaVal?.thinkingLevel && isAssistantThinkingLevel(velaVal.thinkingLevel)) {
         thinkingLevel = velaVal.thinkingLevel
+      }
+      if (velaVal?.assistantType === 'architect' || velaVal?.assistantType === 'blueprint' || velaVal?.assistantType === 'general') {
+        storedAssistantType = velaVal.assistantType
       }
 
       // 2. 兼容老会话（未写入 VELA_SESSION_CONFIG 时，从 laneConfig 兼容提取）
@@ -360,6 +365,14 @@ export class AgentConversationStore {
       // session may not have config yet
     }
 
+    const assistantType = storedAssistantType ?? (
+      meta.id.startsWith('blueprint-')
+        ? 'blueprint'
+        : meta.id.startsWith('architect-')
+          ? 'architect'
+          : 'general'
+    )
+
     return {
       id: meta.id,
       title,
@@ -369,6 +382,7 @@ export class AgentConversationStore {
       mode: 'planning',
       modelId,
       thinkingLevel,
+      assistantType,
     }
   }
 

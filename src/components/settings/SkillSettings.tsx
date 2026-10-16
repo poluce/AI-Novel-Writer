@@ -1,12 +1,10 @@
 import { useEffect, useState } from 'react'
-import { AlertTriangle, Download, Eye, Link2, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react'
-import type { RemoteWritingSkillInspection } from '../../shared/writing-skills'
+import { AlertTriangle, Eye, Trash2 } from 'lucide-react'
 import { useLocaleStore } from '../../stores/locale-store'
 import { ipc } from '../../services/ipc-client'
 import { skillRegistry, type LoadedSkill } from '../../services/agent/skill-registry'
 import type { WritingSkillCatalogDiagnostic } from '../../shared/writing-skill-catalog'
 import { Button } from '../ui/Button'
-import { Input } from '../ui/Input'
 import { confirm as confirmAction } from '../ui/Confirm'
 import {
   Dialog,
@@ -23,15 +21,6 @@ const SOURCE_COPY = {
   user: ['用户', 'User'],
   project: ['项目', 'Project'],
 } as const
-
-const REASON_COPY: Record<string, readonly [string, string]> = {
-  'relative-reference': ['包含相对引用', 'Contains relative references'],
-  'script-dependency': ['依赖脚本', 'Requires scripts'],
-  'hook-dependency': ['依赖 hook', 'Requires hooks'],
-  'subagent-dependency': ['依赖子代理', 'Requires subagents'],
-  'tool-dependency': ['依赖工具调用', 'Requires tool calls'],
-  'content-too-large': ['内容超过 64 KiB', 'Content exceeds 64 KiB'],
-}
 
 const BUILTIN_SKILL_COPY_EN: Record<string, readonly [string, string]> = {
   'builtin:long-form-continuity': [
@@ -138,8 +127,6 @@ export default function SkillSettings() {
   const locale = useLocaleStore(state => state.locale)
   const [skills, setSkills] = useState<LoadedSkill[]>([])
   const [selectedSkill, setSelectedSkill] = useState<LoadedSkill | null>(null)
-  const [sourceUrl, setSourceUrl] = useState('')
-  const [inspection, setInspection] = useState<RemoteWritingSkillInspection | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [diagnostics, setDiagnostics] = useState<WritingSkillCatalogDiagnostic[]>([])
@@ -165,42 +152,6 @@ export default function SkillSettings() {
     return () => { disposed = true }
   }, [])
 
-  const inspectSource = async () => {
-    setBusy(true)
-    setError(null)
-    setInspection(null)
-    try {
-      const result = await ipc.invoke('skills:inspect-github', sourceUrl.trim())
-      if (!result.success || !result.inspection) throw new Error(result.error || text('Skill 检查失败', 'Skill inspection failed'))
-      setInspection(result.inspection)
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const installSource = async () => {
-    if (!inspection?.compatible) return
-    if (!await confirmAction(text(
-      `确认把“${inspection.metadata.name}”安装到全局写作 Skill 库？安装时会重新下载并验证。`,
-      `Install “${inspection.metadata.name}” in the global writing skill library? It will be downloaded and validated again.`,
-    ), { title: text('安装写作 Skill', 'Install writing skill') })) return
-    setBusy(true)
-    setError(null)
-    try {
-      const result = await ipc.invoke('skills:install-github', inspection.sourceUrl)
-      if (!result.success) throw new Error(result.error || text('Skill 安装失败', 'Skill installation failed'))
-      await reload()
-      setInspection(null)
-      setSourceUrl('')
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause))
-    } finally {
-      setBusy(false)
-    }
-  }
-
   const uninstall = async (skill: LoadedSkill) => {
     if (skill.source !== 'user') return
     if (!await confirmAction(text(
@@ -222,62 +173,7 @@ export default function SkillSettings() {
 
   return (
     <div className="space-y-5">
-      <section className="space-y-2" aria-labelledby="writing-skill-source-title">
-        <div>
-          <h3 id="writing-skill-source-title" className="text-sm font-semibold text-[var(--color-text)]">
-            {text('从 GitHub 检查写作 Skill', 'Inspect a writing skill from GitHub')}
-          </h3>
-          <p className="mt-1 text-xs leading-5 text-[var(--color-text-muted)]">
-            {text('仅支持自包含的提示词型 SKILL.md。脚本、hook、相对引用、子代理和工具执行要求不会被安装。', 'Only self-contained prompt SKILL.md files are supported. Scripts, hooks, relative references, subagents, and tool requirements are not installed.')}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Link2 size={14} className="absolute left-2.5 top-2 text-[var(--color-text-muted)]" />
-            <Input
-              value={sourceUrl}
-              onChange={event => setSourceUrl(event.target.value)}
-              placeholder="https://github.com/owner/repository"
-              aria-label={text('GitHub Skill 地址', 'GitHub skill URL')}
-              className="pl-8"
-            />
-          </div>
-          <Button variant="outline" onClick={inspectSource} disabled={busy || !sourceUrl.trim()}>
-            <RefreshCw size={13} className={busy ? 'animate-spin' : ''} />
-            {text('只读检查', 'Inspect')}
-          </Button>
-        </div>
-        {inspection && (
-          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-panel)] px-4 py-3">
-            <div className="flex items-start gap-3">
-              {inspection.compatible
-                ? <ShieldCheck size={17} className="mt-0.5 shrink-0 text-[var(--color-success-text)]" />
-                : <AlertTriangle size={17} className="mt-0.5 shrink-0 text-[var(--color-warning-text)]" />}
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium text-[var(--color-text)]">{inspection.metadata.name}</div>
-                <p className="mt-0.5 text-xs leading-5 text-[var(--color-text-muted)]">{inspection.metadata.description}</p>
-                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--color-text-secondary)]">
-                  <span>{text('语言', 'Language')}: {inspection.metadata.language}</span>
-                  <span>{text('大小', 'Size')}: {formatBytes(inspection.utf8Bytes)}</span>
-                </div>
-                {!inspection.compatible && (
-                  <p role="alert" className="mt-2 text-xs text-[var(--color-warning-text)]">
-                    {inspection.reasons.map((reason) => {
-                      const copy = REASON_COPY[reason]
-                      return copy ? text(copy[0], copy[1]) : reason
-                    }).join('；')}
-                  </p>
-                )}
-              </div>
-              <Button onClick={installSource} disabled={busy || !inspection.compatible}>
-                <Download size={13} />
-                {text('确认安装', 'Confirm install')}
-              </Button>
-            </div>
-          </div>
-        )}
-        {error && <p role="alert" className="text-xs text-[var(--color-error-text)]">{error}</p>}
-      </section>
+      {error && <p role="alert" className="text-xs text-[var(--color-error-text)]">{error}</p>}
 
       {diagnostics.length > 0 && (
         <section className="space-y-2" aria-labelledby="writing-skill-diagnostics-title">

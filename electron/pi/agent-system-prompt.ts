@@ -4,6 +4,8 @@ import type { PromptTemplate } from '../../src/prompts/types'
 import {
   ASSISTANT_WRITING_IDENTITY_KEY,
   appShellModeInstruction,
+  defaultArchitectIdentity,
+  defaultBlueprintIdentity,
   renderAssistantIdentity,
 } from '../../src/services/agent/assistant-identity'
 import { getBuiltinPromptTemplate } from '../../src/services/prompt-templates'
@@ -42,6 +44,58 @@ export function buildMainProcessAgentSystemPrompt(
   const l0 = buildL0ProjectContext(core, language)
   const skillCatalog = buildSkillCatalogBlock(skills, language)
   return [identity, l0, skillCatalog].filter((part): part is string => Boolean(part)).join('\n\n')
+}
+
+/**
+ * Main-process system prompt for the Architecture Assistant.
+ *
+ * Specializes in high-level narrative design, worldbuilding, characters, and plot outlines.
+ */
+export function buildArchitectAgentSystemPrompt(
+  core: ProjectCoreData | null,
+): string {
+  const language: WritingLanguage = core?.writingLanguage ?? 'zh-CN'
+  const identity = defaultArchitectIdentity(language)
+  const modeInstruction = appShellModeInstruction(language)
+  const l0 = buildL0ProjectContext(core, language)
+  const boundary = writingLanguageText(
+    language,
+    `【不可变架构助手边界】
+- 你专注于长篇小说宏观架构、世界观、人物体系与大纲的推演与设计，严禁撰写具体章节正文。
+- 讨论确定大纲或设定后，主动使用 story_architecture、novel_config、manage_characters、propose_chapter_blueprint 等工具持久化写入项目。
+- 写入项目前应简要说明变更内容。不得虚构工具调用结果。`,
+    `[Immutable Architect Boundaries]
+- Focus strictly on macro story architecture, worldbuilding, characters, and outlines; do not draft chapter body prose.
+- Once outlines or settings are decided, actively persist them using story_architecture, novel_config, manage_characters, propose_chapter_blueprint, etc.
+- Briefly summarize modifications before writing. Never invent tool results.`,
+  )
+  return [identity, modeInstruction, l0, boundary].filter((part): part is string => Boolean(part)).join('\n\n')
+}
+
+/**
+ * Main-process system prompt for the Chapter Blueprint Assistant.
+ *
+ * Specializes in scene beat planning, chapter outline deduction, continuity, and cliffhangers.
+ */
+export function buildBlueprintAgentSystemPrompt(
+  core: ProjectCoreData | null,
+): string {
+  const language: WritingLanguage = core?.writingLanguage ?? 'zh-CN'
+  const identity = defaultBlueprintIdentity(language)
+  const modeInstruction = appShellModeInstruction(language)
+  const l0 = buildL0ProjectContext(core, language)
+  const boundary = writingLanguageText(
+    language,
+    `【不可变蓝图助手边界】
+- 你专注于单章及连章的剧情细纲推演、场景节拍设计与前文承接，严禁撰写具体正文段落。
+- 讨论确定章节细纲后，主动使用 propose_chapter_blueprint 工具将细纲持久化写入工程。
+- 规划前充分利用 read_project_state、read_blueprint、read_architecture 理解已知事实，严禁违背既定设定。`,
+    `[Immutable Blueprint Boundaries]
+- Focus strictly on chapter blueprints, scene beats, and continuity; do not draft chapter body prose.
+- Once chapter blueprints are agreed upon, actively persist them using the propose_chapter_blueprint tool.
+- Always consult read_project_state, read_blueprint, and read_architecture before planning; never contradict established facts.`,
+  )
+  return [identity, modeInstruction, l0, boundary].filter((part): part is string => Boolean(part)).join('\n\n')
 }
 
 /**

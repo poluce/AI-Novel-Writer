@@ -57,6 +57,7 @@ describe('Agent IPC bridge', () => {
       // 没选思考等级就不传，主进程按 Pi 默认的 off 处理。
       undefined,
       'plan',
+      'general',
     )
   })
 
@@ -123,6 +124,53 @@ describe('Agent IPC bridge', () => {
       expect.any(Array),
       undefined,
       'plan',
+      'general',
+    )
+  })
+
+  it('sends architect prompts with assistantType architect and isolated conversation id', async () => {
+    ipcInvoke.mockResolvedValue({ success: true })
+
+    const architectConv = useAgentStore.getState().createConversation('architect')
+    expect(architectConv.id).toMatch(/^architect-/)
+    expect(architectConv.assistantType).toBe('architect')
+
+    await useAgentStore.getState().sendMessage('推演世界观升级体系', 'architect')
+
+    expect(ipcInvoke).toHaveBeenCalledWith(
+      'agent:prompt',
+      architectConv.id,
+      '推演世界观升级体系',
+      undefined,
+      expect.any(Object),
+      [],
+      expect.any(Array),
+      undefined,
+      'plan',
+      'architect',
+    )
+  })
+
+  it('sends blueprint prompts with assistantType blueprint and isolated conversation id', async () => {
+    ipcInvoke.mockResolvedValue({ success: true })
+
+    const blueprintConv = useAgentStore.getState().createConversation('blueprint')
+    expect(blueprintConv.id).toMatch(/^blueprint-/)
+    expect(blueprintConv.assistantType).toBe('blueprint')
+
+    await useAgentStore.getState().sendMessage('推演下一章细纲与章末悬念', 'blueprint')
+
+    expect(ipcInvoke).toHaveBeenCalledWith(
+      'agent:prompt',
+      blueprintConv.id,
+      '推演下一章细纲与章末悬念',
+      undefined,
+      expect.any(Object),
+      [],
+      expect.any(Array),
+      undefined,
+      'plan',
+      'blueprint',
     )
   })
 
